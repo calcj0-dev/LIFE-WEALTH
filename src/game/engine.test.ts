@@ -95,6 +95,14 @@ describe('借金と支払い', () => {
     const opts = Object.fromEntries(getOptions(s).map((o) => [o.id, o.enabled]));
     expect(opts).toEqual({ travelAbroad: false, travelDomestic: false, skip: true });
   });
+  it('現金が足りなくても銀行預金と合わせて払えれば選べ、足りない分は預金から出す', () => {
+    let s = started();
+    s = { ...s, phase: 'decision', decision: { kind: 'life', eventId: 'travel' }, decisionFrom: 'yearStart', player: { ...s.player, cash: 10, holdings: { ...s.player.holdings, deposit: 100 } } };
+    expect(getOptions(s).find((o) => o.id === 'travelAbroad')!.enabled).toBe(true);
+    const r = choose(s, 'travelAbroad');
+    expect(r.player.cash).toBeCloseTo(0, 6);
+    expect(r.player.holdings.deposit).toBeCloseTo(60, 6);
+  });
   it('どれも払えない避けられない出来事は、払えなくても選べる', () => {
     let s = started();
     s = { ...s, phase: 'decision', decision: { kind: 'life', eventId: 'care' }, decisionFrom: 'square', player: { ...s.player, cash: 0 } };

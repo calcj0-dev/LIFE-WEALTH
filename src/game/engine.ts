@@ -67,6 +67,11 @@ function addHappiness(s: GameState, amount: number, key: string) {
 
 function addCash(s: GameState, amount: number, key: string) {
   if (amount === 0) return;
+  // 払うお金が現金で足りなければ、足りない分を銀行預金から自動で引き出す
+  if (amount < 0 && s.player.cash < -amount) {
+    const need = -amount - Math.max(0, s.player.cash);
+    sellAsset(s, 'deposit', Math.min(need, s.player.holdings.deposit));
+  }
   s.player.cash += amount;
   log(s, key, { cash: amount });
 }
@@ -296,8 +301,9 @@ function eventDecision(s: GameState, kind: 'life' | 'good' | 'bad', events: Even
 
 // ---------------------------------------------------------------- 選択肢
 
+/** 現金と銀行預金の合計で払えるか */
 function canAfford(s: GameState, amount: number) {
-  return s.player.cash >= amount;
+  return s.player.cash + s.player.holdings.deposit * s.market.prices.deposit >= amount;
 }
 
 /** 選んだときにすぐ払うお金 */
