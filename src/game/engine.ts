@@ -7,9 +7,6 @@ import { ALL_EVENTS, BAD_EVENTS, CARE, GOOD_EVENTS, LIFE_EVENTS, SICKNESS, SIDE_
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, GAMBLE_JACKPOT_HAPPINESS, type GambleId } from '../data/gamble';
 import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, salaryAtAge } from '../data/jobs';
 import {
-  CARD_LOAN_LIMIT,
-  CARD_LOAN_RATE,
-  DEBT_RELIEF_HAPPINESS,
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
   DEBT_HAPPINESS,
@@ -677,8 +674,6 @@ function settleYear(s: GameState) {
   expense.loan = p.properties.reduce((sum, x) => sum + (x.loan ? payLoanYear(x.loan).paid : 0), 0);
   expense.insurance =
     (p.medicalPremium ?? 0) + p.properties.filter((x) => x.fireInsured).length * INSURANCE.firePremiumPerProperty;
-  expense.cardLoanInterest = p.cardLoan * CARD_LOAN_RATE;
-
   for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
 
   const totalIncome = Object.values(income).reduce((a, b) => a + b, 0);
@@ -697,44 +692,29 @@ function settleYear(s: GameState) {
   let invested = 0;
   if (net > 0 && p.cash > 0) invested = investByPolicy(s, Math.min(net, p.cash) * p.policy.investRatio);
 
-  s.lastSettlement = { age: p.age, income, expense, net, invested } satisfies Settlement;
+  const shortfall = coverShortfall(s);
 
-  if (p.cash < 0) {
-    s.phase = 'shortfall';
-  } else {
-    finalizeYear(s);
-  }
-}
-
-/** お金が足りないときの選択。sell = 資産を売る（足りなければ借りる）、loan = カードローンで借りる */
-export function resolveShortfall(state: GameState, how: 'sell' | 'loan'): GameState {
-  assertPhase(state, 'shortfall');
-  const s = clone(state);
-  const p = s.player;
-  if (how === 'sell') {
-    for (const id of ASSET_IDS) {
-      if (p.cash >= 0) break;
-      sellAsset(s, id, -p.cash);
-    }
-  }
-  if (p.cash < 0) {
-    p.cardLoan += -p.cash;
-    log(s, 'shortfall.loan', { params: { amount: Math.round(-p.cash) } });
-    p.cash = 0;
-  }
-  if (p.cardLoan > CARD_LOAN_LIMIT) debtRelief(s);
+  s.lastSettlement = { age: p.age, income, expense, net, invested, ...shortfall } satisfies Settlement;
   finalizeYear(s);
-  return s;
 }
 
-/** 債務整理。金融資産をすべて売って返し、残りのカードローンはなくなる */
-function debtRelief(s: GameState) {
+/** お金が足りないときは、先に資産を売り、それでも足りない分だけカードローンで借りる（利息なし） */
+function coverShortfall(s: GameState): { sold: number; borrowed: number } {
   const p = s.player;
-  for (const id of ASSET_IDS) sellAsset(s, id, Infinity);
-  const repay = Math.min(p.cash, p.cardLoan);
-  p.cash -= repay;
-  p.cardLoan = 0;
-  addHappiness(s, DEBT_RELIEF_HAPPINESS, 'debtRelief');
+  let sold = 0;
+  for (const id of ASSET_IDS) {
+    if (p.cash >= 0) break;
+    sold += sellAsset(s, id, -p.cash);
+  }
+  if (sold > 0) log(s, 'shortfall.sell', { params: { amount: Math.round(sold) } });
+  let borrowed = 0;
+  if (p.cash < 0) {
+    borrowed = -p.cash;
+    p.cardLoan += borrowed;
+    p.cash = 0;
+    log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) } });
+  }
+  return { sold, borrowed };
 }
 
 function finalizeYear(s: GameState) {

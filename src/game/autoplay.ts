@@ -1,7 +1,7 @@
 // コンピューターが自動で遊ぶ仕組み。釣り合いの確認とテストに使う。
 
 import { POLICY_PRESETS, type PolicyPresetId } from '../data/assets';
-import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, resolveShortfall, roll, setPolicy } from './engine';
+import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from './engine';
 import type { DecisionOption, GameState, JobId } from './types';
 
 export interface Strategy {
@@ -75,9 +75,6 @@ export function playGame(
         break;
       case 'decision':
         s = choose(s, pickOption(s, getOptions(s), strategy, rand));
-        break;
-      case 'shortfall':
-        s = resolveShortfall(s, 'sell');
         break;
       case 'yearEnd':
         s = nextYear(s);

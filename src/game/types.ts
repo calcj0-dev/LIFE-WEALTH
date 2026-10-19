@@ -122,6 +122,10 @@ export interface Settlement {
   expense: Record<string, number>;
   net: number;
   invested: number;
+  /** お金が足りず、売った資産の額 */
+  sold: number;
+  /** それでも足りず、借りた額 */
+  borrowed: number;
 }
 
 export interface YearRecord {
@@ -182,7 +186,6 @@ export type Phase =
   | 'decision'
   | 'roll'
   | 'yearEnd'
-  | 'shortfall'
   | 'finished';
 
 export interface Score {

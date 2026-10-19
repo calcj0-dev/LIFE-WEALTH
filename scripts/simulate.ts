@@ -27,7 +27,6 @@ interface Row {
   crisisYears: number;
   gambleSpent: number;
   gambleReturned: number;
-  debtRelief: boolean;
   prices: Record<string, number>;
 }
 
@@ -47,7 +46,6 @@ function toRow(s: GameState, job: JobId, policy: PolicyPresetId, marriage: Strat
     crisisYears: s.history.filter((h) => h.newsId === 'crisis').length,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
-    debtRelief: s.log.some((l) => l.key === 'debtRelief'),
     prices: { ...s.market.prices, realEstate: s.market.realEstateIndex, living: s.market.livingIndex },
   };
 }
@@ -158,7 +156,6 @@ ${rankLines}
 - カードローンを使ったことがある割合: ${Math.round((rows.filter((r) => r.hadDebt).length / rows.length) * 100)}%
 - 金融危機が1回以上あった割合: ${Math.round((rows.filter((r) => r.crisisYears > 0).length / rows.length) * 100)}%
 - ギャンブルの還元率（実際の結果）: ${Math.round((returned / Math.max(1, spent)) * 100)}%
-- 債務整理になった割合: ${Math.round((rows.filter((r) => r.debtRelief).length / rows.length) * 100)}%
 
 ## 資産ごとの実際の値上がり率（44年間の年平均、中央値）
 

@@ -5,7 +5,7 @@ import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOB_IDS } from '../data/jobs';
 import { END_AGE, START_AGE } from '../data/rules';
 import { playGame } from './autoplay';
-import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, resolveShortfall, roll, setPolicy, trade } from './engine';
+import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy, trade } from './engine';
 import { createLoan, netWorth, payLoanYear } from './finance';
 import { securityPoints } from './score';
 import type { GameState } from './types';
@@ -68,24 +68,26 @@ describe('お金の計算', () => {
     const s = trade(started(), 'gold', 10000);
     expect(s.player.cash).toBeGreaterThanOrEqual(0);
   });
-  it('お金が足りないときに資産を売ると、現金はマイナスにならない', () => {
-    let s = started();
-    s = { ...s, phase: 'shortfall', player: { ...s.player, cash: -100, holdings: { ...s.player.holdings, deposit: 40 } } };
-    const r = resolveShortfall(s, 'sell');
-    expect(r.player.cash).toBeGreaterThanOrEqual(0);
-    expect(r.player.holdings.deposit).toBe(0);
-    expect(r.player.cardLoan).toBeCloseTo(60, 6);
-  });
 });
 
 describe('借金と支払い', () => {
-  it('カードローンが上限を超えると債務整理になり、借金がなくなる', () => {
+  it('お金が足りないときは、先に資産を売り、足りない分だけ利息なしで借りる', () => {
     let s = started();
-    s = { ...s, phase: 'shortfall', player: { ...s.player, cash: -600, happiness: 0 } };
-    const r = resolveShortfall(s, 'loan');
-    expect(r.player.cardLoan).toBe(0);
-    expect(r.player.happiness).toBe(-30);
-    expect(r.log.some((l) => l.key === 'debtRelief')).toBe(true);
+    s = { ...s, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...s.player, cash: -2000, holdings: { ...s.player.holdings, deposit: 40 } } };
+    const r = choose(s, 'ok');
+    expect(r.player.holdings.deposit).toBe(0);
+    expect(r.player.cash).toBe(0);
+    expect(r.player.cardLoan).toBeGreaterThan(0);
+    expect(r.lastSettlement!.sold).toBeCloseTo(40, 6);
+    expect(r.lastSettlement!.borrowed).toBeCloseTo(r.player.cardLoan, 6);
+    expect(Object.keys(r.lastSettlement!.expense)).not.toContain('cardLoanInterest');
+  });
+  it('借金がある年は、生活費が半分になる', () => {
+    const base = started();
+    const settle = (cardLoan: number) =>
+      choose({ ...base, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...base.player, cardLoan } }, 'ok')
+        .lastSettlement!.expense.living;
+    expect(settle(100)).toBeCloseTo(settle(0) / 2, 6);
   });
   it('現金で払えない選択肢は選べない', () => {
     let s = started();
