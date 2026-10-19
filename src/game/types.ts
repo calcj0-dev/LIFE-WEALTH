@@ -1,7 +1,8 @@
 // 金額の単位はすべて「万円」。
 
 export type JobId = 'employee' | 'civil' | 'engineer' | 'athlete' | 'youtuber' | 'freeter';
-export type AssetId = 'deposit' | 'bond' | 'gold' | 'fund' | 'stock';
+/** 運用する資産。お金はすべて銀行預金（Player.cash）として持つ */
+export type AssetId = 'bond' | 'gold' | 'fund' | 'stock';
 export type Economy = 'boom' | 'normal' | 'recession';
 export type SquareType =
   | 'start'
@@ -63,7 +64,7 @@ export interface Spouse {
 }
 
 export interface Policy {
-  /** 余ったお金のうち投資に回す割合（0〜1） */
+  /** 余ったお金のうち投資に回す割合（0〜1）。残りは銀行預金に残る */
   investRatio: number;
   /** 投資に回すお金の配分（合計1） */
   allocation: Record<AssetId, number>;
@@ -79,6 +80,7 @@ export interface Player {
   careAtHomeThisYear: boolean;
   /** スポーツ選手が引退する年齢 */
   athleteRetireAge: number | null;
+  /** 銀行預金。お金はすべてここに入り、利息がつく */
   cash: number;
   /** 資産ごとの保有口数。価格は market.prices */
   holdings: Record<AssetId, number>;

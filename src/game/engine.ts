@@ -67,11 +67,6 @@ function addHappiness(s: GameState, amount: number, key: string) {
 
 function addCash(s: GameState, amount: number, key: string) {
   if (amount === 0) return;
-  // 払うお金が現金で足りなければ、足りない分を銀行預金から自動で引き出す
-  if (amount < 0 && s.player.cash < -amount) {
-    const need = -amount - Math.max(0, s.player.cash);
-    sellAsset(s, 'deposit', Math.min(need, s.player.holdings.deposit));
-  }
   s.player.cash += amount;
   log(s, key, { cash: amount });
 }
@@ -79,7 +74,7 @@ function addCash(s: GameState, amount: number, key: string) {
 // ---------------------------------------------------------------- 開始
 
 export function createGame(seed: number): GameState {
-  const zero = { deposit: 0, bond: 0, gold: 0, fund: 0, stock: 0 };
+  const zero = { bond: 0, gold: 0, fund: 0, stock: 0 };
   return {
     saveVersion: 1,
     seed,
@@ -105,7 +100,7 @@ export function createGame(seed: number): GameState {
       hobby: false,
       petYears: null,
       sideBusinessIncome: 0,
-      policy: { investRatio: 0.5, allocation: { deposit: 1, bond: 0, gold: 0, fund: 0, stock: 0 } },
+      policy: { investRatio: 0, allocation: { bond: 0, gold: 0, fund: 1, stock: 0 } },
       happiness: 0,
       position: 0,
       lap: 0,
@@ -301,9 +296,9 @@ function eventDecision(s: GameState, kind: 'life' | 'good' | 'bad', events: Even
 
 // ---------------------------------------------------------------- 選択肢
 
-/** 現金と銀行預金の合計で払えるか */
+/** 銀行預金で払えるか */
 function canAfford(s: GameState, amount: number) {
-  return s.player.cash + s.player.holdings.deposit * s.market.prices.deposit >= amount;
+  return s.player.cash >= amount;
 }
 
 /** 選んだときにすぐ払うお金 */
@@ -664,7 +659,7 @@ function settleYear(s: GameState) {
   income.salary = p.noIncomeThisYear ? 0 : p.salary * (p.careAtHomeThisYear ? CARE.homeSalaryRate : 1);
   income.spouse = p.spouse ? p.spouse.income * (p.spouse.halfThisYear ? 0.5 : 1) : 0;
   income.sideBusiness = p.sideBusinessIncome;
-  income.interest = p.holdings.deposit * s.market.depositRate;
+  income.interest = Math.max(0, p.cash) * s.market.depositRate;
   income.bond = assetValue(s, 'bond') * ASSETS.bond.incomeYield;
   income.dividend = assetValue(s, 'stock') * ASSETS.stock.incomeYield;
   income.rent = p.properties

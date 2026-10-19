@@ -64,21 +64,21 @@ describe('お金の計算', () => {
     expect(s1.player.cash).toBeCloseTo(before, 6);
     expect(s1.player.holdings.fund).toBe(0);
   });
-  it('現金より多くは買えない', () => {
+  it('預金より多くは買えない', () => {
     const s = trade(started(), 'gold', 10000);
     expect(s.player.cash).toBeGreaterThanOrEqual(0);
   });
 });
 
 describe('借金と支払い', () => {
-  it('お金が足りないときは、先に資産を売り、足りない分だけ利息なしで借りる', () => {
+  it('預金が足りないときは、先に資産を売り、足りない分だけ利息なしで借りる', () => {
     let s = started();
-    s = { ...s, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...s.player, cash: -2000, holdings: { ...s.player.holdings, deposit: 40 } } };
+    s = { ...s, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...s.player, cash: -2000, holdings: { ...s.player.holdings, bond: 40 } } };
     const r = choose(s, 'ok');
-    expect(r.player.holdings.deposit).toBe(0);
+    expect(r.player.holdings.bond).toBe(0);
     expect(r.player.cash).toBe(0);
     expect(r.player.cardLoan).toBeGreaterThan(0);
-    expect(r.lastSettlement!.sold).toBeCloseTo(40, 6);
+    expect(r.lastSettlement!.sold).toBeCloseTo(40 * s.market.prices.bond, 6);
     expect(r.lastSettlement!.borrowed).toBeCloseTo(r.player.cardLoan, 6);
     expect(Object.keys(r.lastSettlement!.expense)).not.toContain('cardLoanInterest');
   });
@@ -89,19 +89,18 @@ describe('借金と支払い', () => {
         .lastSettlement!.expense.living;
     expect(settle(100)).toBeCloseTo(settle(0), 6);
   });
-  it('現金で払えない選択肢は選べない', () => {
+  it('預金で払えない選択肢は選べない', () => {
     let s = started();
     s = { ...s, phase: 'decision', decision: { kind: 'life', eventId: 'travel' }, decisionFrom: 'square', player: { ...s.player, cash: 10 } };
     const opts = Object.fromEntries(getOptions(s).map((o) => [o.id, o.enabled]));
     expect(opts).toEqual({ travelAbroad: false, travelDomestic: false, skip: true });
   });
-  it('現金が足りなくても銀行預金と合わせて払えれば選べ、足りない分は預金から出す', () => {
+  it('銀行預金で払えれば選べ、預金から払われる', () => {
     let s = started();
-    s = { ...s, phase: 'decision', decision: { kind: 'life', eventId: 'travel' }, decisionFrom: 'yearStart', player: { ...s.player, cash: 10, holdings: { ...s.player.holdings, deposit: 100 } } };
+    s = { ...s, phase: 'decision', decision: { kind: 'life', eventId: 'travel' }, decisionFrom: 'yearStart', player: { ...s.player, cash: 100 } };
     expect(getOptions(s).find((o) => o.id === 'travelAbroad')!.enabled).toBe(true);
     const r = choose(s, 'travelAbroad');
-    expect(r.player.cash).toBeCloseTo(0, 6);
-    expect(r.player.holdings.deposit).toBeCloseTo(60, 6);
+    expect(r.player.cash).toBeCloseTo(50, 6);
   });
   it('どれも払えない避けられない出来事は、払えなくても選べる', () => {
     let s = started();
