@@ -118,6 +118,18 @@ describe('ゲームの進行', () => {
     expect(s.history.at(-1)!.age).toBe(END_AGE);
     expect(s.score).not.toBeNull();
   });
+  it('純資産が増えた・減った理由の合計は、その年の純資産の増減と一致する', () => {
+    const s = playGame(21, 'employee', 'aggressive');
+    let prev = 50;
+    for (const h of s.history) {
+      const b = h.breakdown;
+      expect(b.work + b.investment + b.revaluation + b.other).toBeCloseTo(h.netWorth - prev, 6);
+      prev = h.netWorth;
+    }
+    // 出来事などは、働いた分や値上がりに比べて小さいはず（計算の取りこぼしがないことの目安）
+    const others = s.history.map((h) => Math.abs(h.breakdown.other));
+    expect(Math.max(...others)).toBeLessThan(2000);
+  });
   it('同じシード値なら、同じ結果になる', () => {
     const a = playGame(42, 'engineer', 'aggressive');
     const b = playGame(42, 'engineer', 'aggressive');

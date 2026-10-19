@@ -76,6 +76,10 @@ export function newsById(id: string): NewsDef {
 export function updateMarket(s: GameState): NewsDef {
   const news = pickWeighted(s, NEWS, (n) => n.weight)!;
   const m = s.market;
+  const prevEconomy = m.economy;
+  const oldPrices = { ...m.prices };
+  const oldIndex = m.realEstateIndex;
+  const oldPropertyValue = s.player.properties.reduce((sum, p) => sum + p.value, 0);
 
   if (news.economy) {
     m.economy = news.economy;
@@ -113,6 +117,16 @@ export function updateMarket(s: GameState): NewsDef {
     m.depositRate = Math.min(DEPOSIT_RATE_MAX, Math.max(DEPOSIT_RATE_MIN, m.depositRate + news.depositRateChange));
   }
   m.livingIndex *= 1 + BASE_INFLATION + (news.inflation ?? 0);
+
+  const rates = {} as Record<Key, number>;
+  const amounts = {} as Record<Key, number>;
+  for (const id of ASSET_IDS) {
+    rates[id] = m.prices[id] / oldPrices[id] - 1;
+    amounts[id] = s.player.holdings[id] * (m.prices[id] - oldPrices[id]);
+  }
+  rates.realEstate = m.realEstateIndex / oldIndex - 1;
+  amounts.realEstate = s.player.properties.reduce((sum, p) => sum + p.value, 0) - oldPropertyValue;
+  s.marketChange = { prevEconomy, rates, amounts };
 
   s.newsId = news.id;
   return news;

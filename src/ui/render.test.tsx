@@ -8,7 +8,7 @@ import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll
 import type { GameState } from '../game/types';
 import { App } from '../App';
 import { Hud, SidePanel } from './GameScreen';
-import { DecisionModal, NewsModal, YearEndModal } from './Modals';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
 import { Result } from './Result';
 import { JobSelect, PolicySetup } from './Setup';
 
@@ -34,7 +34,8 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       }
       s = roll(s);
-      renderToString(<Board position={s.player.position} />);
+      renderToString(<Board position={s.player.position} overview={false} />);
+      renderToString(<Board position={s.player.position} overview />);
       renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
       while (s.phase === 'decision') {
         const html = renderToString(<DecisionModal s={s} onChoose={noop} />);
@@ -42,8 +43,10 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       }
       renderToString(<Hud s={s} />);
-      renderToString(<SidePanel s={s} />);
-      renderToString(<YearEndModal s={s} last={false} onNext={noop} />);
+      renderToString(<SidePanel s={s} onOpenHistory={noop} />);
+      renderToString(<HistoryModal s={s} onClose={noop} />);
+      const yearEnd = renderToString(<YearEndModal s={s} last={false} onNext={noop} />);
+      expect(yearEnd).not.toMatch(/>(event|auto|marriage|gamble|realEstate|insurance|shortfall|loan|job|school|university|debt)(\.[a-zA-Z]+)*</);
       s = nextYear(s);
     }
     expect(s.phase).toBe('finished');

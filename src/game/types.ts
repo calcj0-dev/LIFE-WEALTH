@@ -17,7 +17,7 @@ export type SquareType =
 export interface Square {
   id: number;
   type: SquareType;
-  /** 地図上の位置（0〜1000） */
+  /** 盤面上の位置 */
   x: number;
   y: number;
   /** 次のマス。将来の分かれ道に備えて複数持てる */
@@ -124,6 +124,8 @@ export interface Settlement {
   expense: Record<string, number>;
   net: number;
   invested: number;
+  /** ローン返済のうち、元本（借金が減った分） */
+  loanPrincipal: number;
   /** お金が足りず、売った資産の額 */
   sold: number;
   /** それでも足りず、借りた額 */
@@ -139,6 +141,28 @@ export interface YearRecord {
   happiness: number;
   economy: Economy;
   newsId: string;
+  /** 純資産が増えた・減った理由 */
+  breakdown: NetWorthBreakdown;
+}
+
+export interface NetWorthBreakdown {
+  /** 働いて残したお金（給料など − 生活費などの支出。ローンは利息だけを支出に数える） */
+  work: number;
+  /** 投資の収入（利息・配当・家賃） */
+  investment: number;
+  /** 資産の値上がり・値下がり */
+  revaluation: number;
+  /** 出来事など（マスの出来事、ギャンブル、不動産の売り買いの費用など） */
+  other: number;
+}
+
+/** 年初の値動き。ニュースの画面で、自分の資産がいくら動いたかを見せる */
+export interface MarketChange {
+  prevEconomy: Economy;
+  /** 値動きの割合 */
+  rates: Record<AssetId | 'realEstate', number>;
+  /** 自分の資産が動いた金額 */
+  amounts: Record<AssetId | 'realEstate', number>;
 }
 
 export interface Stats {
@@ -179,6 +203,10 @@ export interface DecisionOption {
   key: string;
   params?: Record<string, number | string>;
   enabled: boolean;
+  /** 選んだときにすぐ動くお金（分かるときだけ） */
+  cash?: number;
+  /** 選んだときに動く幸福ポイント（分かるときだけ） */
+  happiness?: number;
 }
 
 export type Phase =
@@ -222,4 +250,6 @@ export interface GameState {
   log: LogEntry[];
   stats: Stats;
   score: Score | null;
+  /** その年の年初の値動き */
+  marketChange?: MarketChange;
 }

@@ -43,7 +43,7 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-export function SidePanel({ s }: { s: GameState }) {
+export function SidePanel({ s, onOpenHistory }: { s: GameState; onOpenHistory: () => void }) {
   const p = s.player;
   const rentals = p.properties.filter((x) => x.use === 'rental').length;
   const home = p.properties.some((x) => x.use === 'home');
@@ -65,6 +65,9 @@ export function SidePanel({ s }: { s: GameState }) {
           <Row key={id} k={t(`asset.${id}`)} v={formatMoney(assetValue(s, id))} />
         ))}
         <Row k={t('asset.realEstate')} v={formatMoney(realEstateValue(s))} />
+        <button className="secondary history-button" style={{ marginTop: 8 }} onClick={onOpenHistory}>
+          {t('history.open')}
+        </button>
       </div>
       <div className="card">
         <h4>{t('panel.family')}</h4>

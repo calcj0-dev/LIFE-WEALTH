@@ -204,41 +204,6 @@ button.secondary {
   height: 100%;
   display: block;
 }
-.board-controls {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-.roulette-number {
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 6px solid var(--yellow);
-  display: grid;
-  place-items: center;
-  font-size: 44px;
-  font-weight: 900;
-  color: var(--primary);
-  box-shadow: var(--shadow);
-}
-.roulette-number.spinning {
-  animation: wobble 0.15s infinite alternate;
-}
-@keyframes wobble {
-  from {
-    transform: rotate(-8deg);
-  }
-  to {
-    transform: rotate(8deg);
-  }
-}
-
 .side-panel {
   display: flex;
   flex-direction: column;
@@ -376,5 +341,191 @@ button.secondary {
   }
   .modal {
     padding: 12px 14px;
+  }
+}
+
+/* ---------------- 改善（増減の表示、決算、推移） */
+
+.modal.wide {
+  width: min(820px, 100%);
+}
+.delta {
+  font-weight: 800;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+.delta.big {
+  font-size: 20px;
+}
+.delta.happy.plus {
+  color: #e0559a;
+}
+.delta.happy.minus {
+  color: #8a6fb0;
+}
+.summary-line {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+.options button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.option-deltas {
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.option-deltas .delta:first-child {
+  margin-left: 0;
+}
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.two-col h4 {
+  margin: 8px 0 4px;
+  font-size: 14px;
+}
+.table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 600;
+}
+.table th:last-child {
+  text-align: right;
+}
+.flows {
+  margin: 12px 0 6px;
+  display: grid;
+  gap: 6px;
+}
+.flow-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 110px;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.flow-row span {
+  text-align: right;
+  font-weight: 700;
+}
+.flow-bar {
+  display: flex;
+  height: 18px;
+  background: #f4efe6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+details summary {
+  cursor: pointer;
+  color: var(--text-sub);
+  font-size: 13px;
+  margin: 6px 0;
+}
+.toasts {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 20;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  padding: 6px 16px;
+  font-weight: 700;
+  animation: toast-in 0.35s ease-out, toast-out 0.5s ease-in 2.7s forwards;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.9);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+.side-panel .history-button {
+  width: 100%;
+}
+
+/* ---------------- 盤面とルーレット */
+
+.board-area svg {
+  width: 100%;
+  height: 100%;
+}
+.roulette {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
+  padding: 8px 12px 12px;
+  box-shadow: var(--shadow);
+}
+.roulette svg {
+  display: block;
+  width: 150px;
+  height: 158px;
+}
+.roll-result {
+  font-weight: 800;
+  color: var(--primary);
+}
+.board-toolbar {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: flex;
+  gap: 8px;
+}
+.board-toolbar button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+@media (max-height: 520px) {
+  .roulette svg {
+    width: 110px;
+    height: 116px;
   }
 }

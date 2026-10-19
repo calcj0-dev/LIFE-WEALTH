@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
-import { Roulette } from './board/Roulette';
+import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { END_AGE } from './data/rules';
 import { choose, chooseJob, continueYear, createGame, nextYear, roll, setPolicy } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { Hud, SidePanel } from './ui/GameScreen';
-import { DecisionModal, NewsModal, YearEndModal } from './ui/Modals';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
+import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
 import { JobSelect, PolicySetup } from './ui/Setup';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
-const SPIN_MS = 800;
-const STEP_MS = 260;
+const SPIN_MS = SPIN_DURATION_MS + 300;
+const STEP_MS = 280;
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -22,6 +23,10 @@ export function App() {
   const [spinning, setSpinning] = useState(false);
   /** 駒の移動中に表示するマス（移動していないときは null） */
   const [movingPos, setMovingPos] = useState<number | null>(null);
+  /** 出たばかりの出目（ルーレットが回っている間も表示する） */
+  const [spinValue, setSpinValue] = useState<number | null>(null);
+  const [overview, setOverview] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const timers = useRef<number[]>([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -39,7 +44,9 @@ export function App() {
   const spin = () => {
     if (!game || game.phase !== 'roll' || spinning) return;
     const next = roll(game);
+    setSpinValue(next.lastRoll);
     setSpinning(true);
+    setOverview(false);
     later(() => {
       setSpinning(false);
       next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
@@ -77,22 +84,28 @@ export function App() {
   } else if (game.phase === 'finished') {
     screen = <Result s={game} onAgain={() => setGame(null)} />;
   } else {
-    const showRollValue = busy || game.phase === 'decision' ? game.lastRoll ?? null : null;
     screen = (
       <div className="game">
         <Hud s={game} />
         <div className="game-body">
           <div className="board-area">
-            <Board position={movingPos ?? game.player.position} />
+            <Board position={movingPos ?? game.player.position} overview={overview} />
+            <div className="board-toolbar">
+              <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
+                {t(overview ? 'board.follow' : 'board.overview')}
+              </button>
+            </div>
             <Roulette
-              value={spinning ? null : showRollValue}
+              value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
               canSpin={game.phase === 'roll' && !busy}
               onSpin={spin}
             />
           </div>
-          <SidePanel s={game} />
+          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} />
         </div>
+        <Toasts log={game.log} />
+        {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {!busy && game.phase === 'yearStart' && <NewsModal s={game} onNext={() => setGame(continueYear(game))} />}
         {!busy && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
         {!busy && game.phase === 'yearEnd' && (
