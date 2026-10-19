@@ -24,6 +24,7 @@ interface Row {
   total: number;
   rank: string;
   hadDebt: boolean;
+  finalDebt: number;
   crisisYears: number;
   gambleSpent: number;
   gambleReturned: number;
@@ -43,6 +44,7 @@ function toRow(s: GameState, job: JobId, policy: PolicyPresetId, marriage: Strat
     total: s.score!.total,
     rank: s.score!.rank,
     hadDebt: s.log.some((l) => l.key === 'shortfall.loan'),
+    finalDebt: s.player.cardLoan,
     crisisYears: s.history.filter((h) => h.newsId === 'crisis').length,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
@@ -154,6 +156,7 @@ ${rankLines}
 ## そのほか
 
 - カードローンを使ったことがある割合: ${Math.round((rows.filter((r) => r.hadDebt).length / rows.length) * 100)}%
+- 65歳でカードローンが残っていた割合: ${Math.round((rows.filter((r) => r.finalDebt > 0).length / rows.length) * 100)}%（残っていた人の中央値 ${man(pct(rows.filter((r) => r.finalDebt > 0).map((r) => r.finalDebt), 0.5) ?? 0)}、上位10% ${man(pct(rows.filter((r) => r.finalDebt > 0).map((r) => r.finalDebt), 0.9) ?? 0)}）
 - 金融危機が1回以上あった割合: ${Math.round((rows.filter((r) => r.crisisYears > 0).length / rows.length) * 100)}%
 - ギャンブルの還元率（実際の結果）: ${Math.round((returned / Math.max(1, spent)) * 100)}%
 
