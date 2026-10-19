@@ -764,6 +764,12 @@ function finalizeYear(s: GameState) {
     economy: s.market.economy,
     newsId: s.newsId ?? '',
     breakdown: breakdownOf(s, worth),
+    market: {
+      prices: { ...s.market.prices },
+      realEstateIndex: s.market.realEstateIndex,
+      livingIndex: s.market.livingIndex,
+      depositRate: s.market.depositRate,
+    },
   });
   s.phase = 'yearEnd';
 }

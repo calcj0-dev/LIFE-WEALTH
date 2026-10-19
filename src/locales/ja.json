@@ -324,5 +324,16 @@
   "history.debt": "借金",
   "history.empty": "1年目が終わると、ここにグラフが表示されます。",
   "board.overview": "全体図",
-  "board.follow": "駒を追う"
+  "board.follow": "駒を追う",
+  "history.tab.mine": "わたしの資産",
+  "history.tab.prices": "値動きのチャート",
+  "history.tab.returns": "年利の実績",
+  "prices.title": "値動きのチャート",
+  "prices.start": "開始",
+  "prices.living": "物価",
+  "prices.note": "ゲーム開始時を0%として、値上がり・値下がりだけを表示しています（配当や利息は含みません）。点線は物価です。物価より下の資産は、実際の価値が目減りしています。",
+  "prices.year": "年",
+  "prices.average": "これまでの年平均（{years}年）",
+  "prices.depositRate": "預金金利",
+  "prices.incomeNote": "この表は値上がり率だけです。このほかに毎年、株式は配当{dividend}%、債券は利息{coupon}%が入ります。銀行預金の金利は、はじめ{deposit}%で、ニュースによって変わります。"
 }

@@ -1,6 +1,6 @@
 import type { GameState } from '../game/types';
 import { formatMoney, has, t } from '../i18n';
-import { AssetChart } from './AssetChart';
+import { HistoryTabs } from './HistoryTabs';
 
 export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
   const score = s.score!;
@@ -22,7 +22,7 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
         </div>
         <div className="card">
           <h4 style={{ margin: '0 0 6px' }}>{t('result.chart')}</h4>
-          <AssetChart history={s.history} />
+          <HistoryTabs history={s.history} />
         </div>
         <div className="card">
           <h4 style={{ margin: '0 0 6px' }}>{t('result.timeline')}</h4>

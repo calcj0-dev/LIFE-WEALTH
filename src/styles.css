@@ -529,3 +529,41 @@ details summary {
     height: 116px;
   }
 }
+
+/* ---------------- 値動きのチャートと年利の表 */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tabs button {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.return-table {
+  max-height: 300px;
+  overflow: auto;
+}
+.return-table .table td,
+.return-table .table th {
+  text-align: right;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+.return-table .table td:first-child,
+.return-table .table th:first-child,
+.return-table .table td:nth-child(2),
+.return-table .table th:nth-child(2) {
+  text-align: left;
+}
+.return-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+.average-row td {
+  font-weight: 800;
+  border-bottom: 2px solid var(--line);
+}

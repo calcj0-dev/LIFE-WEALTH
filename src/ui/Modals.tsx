@@ -7,7 +7,7 @@ import { SQUARE_COLORS } from '../board/Board';
 import { describeDecision } from './decisionText';
 import { HappinessDelta, MoneyDelta } from './Delta';
 import { logLabel, movingEntries } from './logLabel';
-import { AssetChart } from './AssetChart';
+import { HistoryTabs } from './HistoryTabs';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -302,7 +302,7 @@ export function HistoryModal({ s, onClose }: { s: GameState; onClose: () => void
   return (
     <Overlay wide>
       <h2>{t('history.title')}</h2>
-      <AssetChart history={s.history} />
+      <HistoryTabs history={s.history} />
       <div className="options">
         <button className="secondary" onClick={onClose}>
           {t('history.close')}

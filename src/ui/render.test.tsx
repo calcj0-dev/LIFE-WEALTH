@@ -10,6 +10,7 @@ import { App } from '../App';
 import { Hud, SidePanel } from './GameScreen';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
 import { Result } from './Result';
+import { PriceChart, ReturnTable } from './PriceCharts';
 import { JobSelect, PolicySetup } from './Setup';
 
 const noop = () => {};
@@ -50,6 +51,16 @@ describe('画面', () => {
       s = nextYear(s);
     }
     expect(s.phase).toBe('finished');
+  });
+  it('値動きのチャートと年利の表が描ける', () => {
+    const s = playGame(12, 'employee', 'balanced');
+    const chart = renderToString(<PriceChart history={s.history} />);
+    expect(chart).toContain('<path');
+    expect(chart).toContain('物価');
+    const table = renderToString(<ReturnTable history={s.history} />);
+    expect(table).toContain('これまでの年平均（44年）');
+    expect(table.match(/<tr/g)!.length).toBe(1 + 1 + 44);
+    expect(renderToString(<PriceChart history={[]} />)).toContain('1年目');
   });
   it('結果画面が描ける', () => {
     const s = playGame(11, 'engineer', 'aggressive');
