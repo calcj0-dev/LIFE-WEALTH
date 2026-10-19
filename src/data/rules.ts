@@ -50,9 +50,6 @@ export const PET = { startCost: 20, yearlyCost: 15, years: 15 };
 /** 物価は毎年少しずつ上がる（生活費に反映） */
 export const BASE_INFLATION = 0.01;
 
-/** 借金（カードローン、利息なし）がある年は、生活を切り詰めて生活費が減る */
-export const DEBT_LIVING_CUT = 0.5;
-
 export const INSURANCE = {
   medicalBasePremium: 3,
   /** 加入する年齢が1歳上がるごとに増える保険料 */

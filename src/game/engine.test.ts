@@ -82,12 +82,12 @@ describe('借金と支払い', () => {
     expect(r.lastSettlement!.borrowed).toBeCloseTo(r.player.cardLoan, 6);
     expect(Object.keys(r.lastSettlement!.expense)).not.toContain('cardLoanInterest');
   });
-  it('借金がある年は、生活費が半分になる', () => {
+  it('借金があっても、生活費は変わらない', () => {
     const base = started();
     const settle = (cardLoan: number) =>
       choose({ ...base, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...base.player, cardLoan } }, 'ok')
         .lastSettlement!.expense.living;
-    expect(settle(100)).toBeCloseTo(settle(0) / 2, 6);
+    expect(settle(100)).toBeCloseTo(settle(0), 6);
   });
   it('現金で払えない選択肢は選べない', () => {
     let s = started();

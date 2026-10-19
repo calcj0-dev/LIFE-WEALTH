@@ -10,7 +10,6 @@ import {
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
   DEBT_HAPPINESS,
-  DEBT_LIVING_CUT,
   EDUCATION_COST,
   END_AGE,
   HOBBY,
@@ -633,7 +632,6 @@ function livingCost(s: GameState): number {
   const kids = p.children.filter((c) => !c.independent).length;
   let base = (p.married ? LIVING_COST.couple : LIVING_COST.single) + kids * LIVING_COST.perChild;
   if (hasHome(s)) base -= LIVING_COST.homeOwnerDiscount;
-  if (p.cardLoan > 0) base *= 1 - DEBT_LIVING_CUT;
   return base * s.market.livingIndex;
 }
 
