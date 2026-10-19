@@ -1,0 +1,57 @@
+import { renderToString } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { Board } from '../board/Board';
+import { Roulette } from '../board/Roulette';
+import { POLICY_PRESETS } from '../data/assets';
+import { playGame } from '../game/autoplay';
+import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from '../game/engine';
+import type { GameState } from '../game/types';
+import { App } from '../App';
+import { Hud, SidePanel } from './GameScreen';
+import { DecisionModal, NewsModal, YearEndModal } from './Modals';
+import { Result } from './Result';
+import { JobSelect, PolicySetup } from './Setup';
+
+const noop = () => {};
+
+describe('画面', () => {
+  it('タイトル画面にバージョンが出る', () => {
+    const html = renderToString(<App />);
+    expect(html).toContain('LIFE');
+    expect(html).toMatch(/v\d+\.\d+\.\d+/);
+  });
+  it('職業選択と投資方針の画面が描ける', () => {
+    expect(renderToString(<JobSelect onChoose={noop} />)).toContain('会社員');
+    expect(renderToString(<PolicySetup doneLabel="始める" onDone={noop} />)).toContain('バランス型');
+  });
+  it('1年の流れのどの場面も、エラーなく描ける', () => {
+    let s: GameState = setPolicy(chooseJob(createGame(5), 'employee'), POLICY_PRESETS.balanced);
+    for (let year = 0; year < 44; year++) {
+      expect(renderToString(<NewsModal s={s} onNext={noop} />)).toContain('ニュース');
+      s = continueYear(s);
+      while (s.phase === 'decision') {
+        renderToString(<DecisionModal s={s} onChoose={noop} />);
+        s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+      }
+      s = roll(s);
+      renderToString(<Board position={s.player.position} />);
+      renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
+      while (s.phase === 'decision') {
+        const html = renderToString(<DecisionModal s={s} onChoose={noop} />);
+        expect(html).not.toMatch(/(event|option|square|marriage)\.[a-zA-Z]+\.?[a-zA-Z]*</);
+        s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+      }
+      renderToString(<Hud s={s} />);
+      renderToString(<SidePanel s={s} />);
+      renderToString(<YearEndModal s={s} last={false} onNext={noop} />);
+      s = nextYear(s);
+    }
+    expect(s.phase).toBe('finished');
+  });
+  it('結果画面が描ける', () => {
+    const s = playGame(11, 'engineer', 'aggressive');
+    const html = renderToString(<Result s={s} onAgain={noop} />);
+    expect(html).toContain('ランク');
+    expect(html).toContain('<path');
+  });
+});
