@@ -63,7 +63,11 @@ export interface Spouse {
   halfThisYear: boolean;
 }
 
+/** 投資方針の種類。safe・balanced・aggressive は自動投資の型 */
+export type PolicyKind = 'safe' | 'balanced' | 'aggressive' | 'manual' | 'none';
+
 export interface Policy {
+  kind?: PolicyKind;
   /** 余ったお金のうち投資に回す割合（0〜1）。残りは銀行預金に残る */
   investRatio: number;
   /** 投資に回すお金の配分（合計1） */
@@ -73,6 +77,8 @@ export interface Policy {
 export interface Player {
   age: number;
   jobId: JobId;
+  /** ゲームの始めにルーレットで決まった職業（ランクの基準に使う） */
+  startJobId?: JobId;
   salary: number;
   /** その年は給料が入らない（失業、重い病気） */
   noIncomeThisYear: boolean;
@@ -221,6 +227,8 @@ export type Phase =
   | 'finished';
 
 export interface Score {
+  /** ランクの基準にした職業 */
+  jobId?: JobId;
   happinessPoints: number;
   securityPoints: number;
   total: number;

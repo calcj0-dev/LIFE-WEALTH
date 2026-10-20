@@ -11,7 +11,8 @@ import { Hud, SidePanel } from './GameScreen';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
 import { Result } from './Result';
 import { PriceChart, ReturnTable } from './PriceCharts';
-import { JobSelect, PolicySetup } from './Setup';
+import { BudgetCard, JobRoulette, PolicySetup } from './Setup';
+import { AssetManager } from './AssetManager';
 
 const noop = () => {};
 
@@ -22,8 +23,13 @@ describe('画面', () => {
     expect(html).toMatch(/v\d+\.\d+\.\d+/);
   });
   it('職業選択と投資方針の画面が描ける', () => {
-    expect(renderToString(<JobSelect onChoose={noop} />)).toContain('会社員');
-    expect(renderToString(<PolicySetup doneLabel="始める" onDone={noop} />)).toContain('バランス型');
+    const g = createGame(1);
+    expect(renderToString(<JobRoulette s={g} onDone={noop} />)).toContain('会社員');
+    expect(renderToString(<BudgetCard s={chooseJob(g, 'athlete')} title="家計" />)).toContain('職業の固定費');
+    const policy = renderToString(<PolicySetup doneLabel="始める" onDone={noop} />);
+    expect(policy).toContain('自動投資');
+    expect(policy).toContain('投資しない');
+    expect(policy).toContain('バランス型');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
     let s: GameState = setPolicy(chooseJob(createGame(5), 'employee'), POLICY_PRESETS.balanced);
@@ -44,7 +50,8 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       }
       renderToString(<Hud s={s} />);
-      renderToString(<SidePanel s={s} onOpenHistory={noop} />);
+      renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} />);
+      renderToString(<AssetManager s={s} onChange={noop} onClose={noop} />);
       renderToString(<HistoryModal s={s} onClose={noop} />);
       const yearEnd = renderToString(<YearEndModal s={s} last={false} onNext={noop} />);
       expect(yearEnd).not.toMatch(/>(event|auto|marriage|gamble|realEstate|insurance|shortfall|loan|job|school|university|debt)(\.[a-zA-Z]+)*</);

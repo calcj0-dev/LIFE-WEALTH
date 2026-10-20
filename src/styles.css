@@ -567,3 +567,120 @@ details summary {
   font-weight: 800;
   border-bottom: 2px solid var(--line);
 }
+.roulette.large {
+  position: static;
+  background: var(--surface);
+}
+.roulette.large svg {
+  width: 280px;
+  height: 294px;
+}
+.roulette.large .roll-result {
+  font-size: 20px;
+}
+
+/* ---------------- ゲージと資産運用 */
+
+.hud-gauges {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 12px;
+  align-items: center;
+  margin-left: auto;
+}
+.gauge {
+  display: grid;
+  grid-template-columns: 64px 120px 34px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.gauge .label {
+  color: var(--text-sub);
+}
+.gauge .value {
+  font-weight: 800;
+  text-align: right;
+}
+.gauge-bar {
+  height: 10px;
+  background: #f1e9db;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gauge-bar div {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+.hud-total {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  font-weight: 900;
+  font-size: 18px;
+}
+.manage-button {
+  width: 100%;
+  font-size: 16px;
+}
+.manage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.manage-grid h4 {
+  margin: 0 0 4px;
+}
+.manage-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.manage-buttons button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.property-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.policy-compact {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+.budget {
+  width: min(640px, 100%);
+  text-align: left;
+}
+.budget h4 {
+  margin: 0 0 6px;
+}
+.modal .card {
+  margin-bottom: 10px;
+}
+.hud-gauges .gauge {
+  grid-column: 1;
+}
+.banner {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface);
+  border: 4px solid var(--yellow);
+  border-radius: 18px;
+  padding: 14px 28px;
+  font-size: 22px;
+  font-weight: 900;
+  box-shadow: var(--shadow);
+  z-index: 15;
+  animation: toast-in 0.3s ease-out;
+}

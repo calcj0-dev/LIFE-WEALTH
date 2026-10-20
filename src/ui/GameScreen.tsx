@@ -2,6 +2,23 @@ import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import { ASSET_IDS } from '../data/assets';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
+import { securityPoints } from '../game/score';
+
+/** ゲージの満タンの点数（見た目の目安） */
+const GAUGE_FULL = 250;
+
+function Gauge({ label, value, color }: { label: string; value: number; color: string }) {
+  const width = Math.max(0, Math.min(100, (value / GAUGE_FULL) * 100));
+  return (
+    <div className="gauge">
+      <span className="label">{label}</span>
+      <div className="gauge-bar">
+        <div style={{ width: `${width}%`, background: color }} />
+      </div>
+      <span className="value">{Math.round(value)}</span>
+    </div>
+  );
+}
 
 export function Hud({ s }: { s: GameState }) {
   const p = s.player;
@@ -16,9 +33,10 @@ export function Hud({ s }: { s: GameState }) {
         <span className="label">{t('hud.netWorth')}</span>
         <span className="value">{formatMoney(netWorth(s))}</span>
       </div>
-      <div className="hud-item">
-        <span className="label">{t('hud.happiness')}</span>
-        <span className="value">{Math.round(p.happiness)}</span>
+      <div className="hud-gauges">
+        <Gauge label={t('hud.security')} value={securityPoints(netWorth(s))} color="var(--blue)" />
+        <Gauge label={t('hud.happyGauge')} value={p.happiness} color="var(--pink)" />
+        <span className="hud-total">{t('hud.total', { v: Math.round(securityPoints(netWorth(s)) + p.happiness) })}</span>
       </div>
       <div className="hud-item">
         <span className="label">{t('hud.economy')}</span>
@@ -43,7 +61,15 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
-export function SidePanel({ s, onOpenHistory }: { s: GameState; onOpenHistory: () => void }) {
+export function SidePanel({
+  s,
+  onOpenHistory,
+  onOpenManager,
+}: {
+  s: GameState;
+  onOpenHistory: () => void;
+  onOpenManager: () => void;
+}) {
   const p = s.player;
   const rentals = p.properties.filter((x) => x.use === 'rental').length;
   const home = p.properties.some((x) => x.use === 'home');
@@ -54,6 +80,9 @@ export function SidePanel({ s, onOpenHistory }: { s: GameState; onOpenHistory: (
   ].filter(Boolean);
   return (
     <div className="side-panel">
+      <button className="manage-button" onClick={onOpenManager}>
+        {t('manage.open')}
+      </button>
       <div className="card">
         <h4>{t('panel.job')}</h4>
         <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />

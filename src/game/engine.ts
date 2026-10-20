@@ -5,7 +5,7 @@ import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE } from '../data/assets';
 import { BOARD } from '../data/board';
 import { ALL_EVENTS, BAD_EVENTS, CARE, GOOD_EVENTS, LIFE_EVENTS, SICKNESS, SIDE_BUSINESS, type Effect, type EventDef } from '../data/events';
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, GAMBLE_JACKPOT_HAPPINESS, type GambleId } from '../data/gamble';
-import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, salaryAtAge } from '../data/jobs';
+import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, JOB_IDS, salaryAtAge } from '../data/jobs';
 import {
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
@@ -130,10 +130,19 @@ export function chooseJob(state: GameState, jobId: JobId): GameState {
   assertPhase(state, 'setupJob');
   const s = clone(state);
   s.player.jobId = jobId;
+  s.player.startJobId = jobId;
   s.player.salary = JOBS[jobId].startSalary;
   s.player.athleteRetireAge = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_AGE.min, ATHLETE_RETIRE_AGE.max) : null;
   s.phase = 'setupPolicy';
   return s;
+}
+
+/** ルーレットで職業を決める（6つの職業を同じ確率で） */
+export function rollJob(state: GameState): GameState {
+  assertPhase(state, 'setupJob');
+  const probe = clone(state);
+  const jobId = JOB_IDS[randomInt(probe, 0, JOB_IDS.length - 1)];
+  return chooseJob({ ...state, rngState: probe.rngState }, jobId);
 }
 
 export function validatePolicy(policy: Policy): boolean {
@@ -534,6 +543,11 @@ function applyEffect(s: GameState, e: Effect, key: string) {
     case 'bonus':
       addCash(s, p.salary * e.rate, key);
       return;
+    case 'investBonus': {
+      const spent = investByPolicy(s, p.salary * e.rate);
+      log(s, `${key}.invest`, { params: { amount: Math.round(spent) } });
+      return;
+    }
     case 'noIncome':
       p.noIncomeThisYear = true;
       return;
@@ -676,7 +690,11 @@ function educationCost(s: GameState): number {
   return total;
 }
 
-function settleYear(s: GameState) {
+/**
+ * 1年分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（年初の「今年の予定」に使う）。
+ * 予定では、その年の出来事（失業、病気など）はまだ起きていないものとして計算する。
+ */
+function computeFlows(s: GameState, dryRun: boolean) {
   const p = s.player;
   const income: Record<string, number> = {};
   const expense: Record<string, number> = {};
@@ -691,6 +709,7 @@ function settleYear(s: GameState) {
     .filter((x) => x.use === 'rental' && !x.vacant)
     .reduce((sum, x) => sum + x.value * REAL_ESTATE.rentYield * (1 - REAL_ESTATE.rentCostRate), 0);
 
+  expense.jobCost = JOBS[p.jobId].fixedCost;
   expense.living = livingCost(s);
   expense.hobby = p.hobby ? HOBBY.yearlyCost : 0;
   expense.pet = p.petYears !== null ? PET.yearlyCost : 0;
@@ -698,13 +717,27 @@ function settleYear(s: GameState) {
   let loanInterest = 0;
   expense.loan = p.properties.reduce((sum, x) => {
     if (!x.loan) return sum;
+    if (dryRun) return sum + Math.min(x.loan.payment, x.loan.balance * (1 + x.loan.rate));
     const r = payLoanYear(x.loan);
     loanInterest += r.interest;
     return sum + r.paid;
   }, 0);
   expense.insurance =
     (p.medicalPremium ?? 0) + p.properties.filter((x) => x.fireInsured).length * INSURANCE.firePremiumPerProperty;
-  for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
+  if (!dryRun) for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
+  return { income, expense, loanInterest };
+}
+
+/** その年の収入と支出の予定（年初とゲーム開始時に知らせる） */
+export function estimateYear(s: GameState): { income: Record<string, number>; expense: Record<string, number>; net: number } {
+  const { income, expense } = computeFlows(s, true);
+  const net = Object.values(income).reduce((a, b) => a + b, 0) - Object.values(expense).reduce((a, b) => a + b, 0);
+  return { income, expense, net };
+}
+
+function settleYear(s: GameState) {
+  const p = s.player;
+  const { income, expense, loanInterest } = computeFlows(s, false);
 
   const totalIncome = Object.values(income).reduce((a, b) => a + b, 0);
   const totalExpense = Object.values(expense).reduce((a, b) => a + b, 0);

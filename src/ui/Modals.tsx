@@ -8,6 +8,8 @@ import { describeDecision } from './decisionText';
 import { HappinessDelta, MoneyDelta } from './Delta';
 import { logLabel, movingEntries } from './logLabel';
 import { HistoryTabs } from './HistoryTabs';
+import { BudgetCard } from './Setup';
+import { useState } from 'react';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -19,7 +21,7 @@ function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean
 
 // ---------------------------------------------------------------- 年初のニュース
 
-export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
+export function NewsModal({ s, onNext, onOpenManager }: { s: GameState; onNext: () => void; onOpenManager?: () => void }) {
   const news = newsById(s.newsId!);
   const change = s.marketChange;
   const keys = [...ASSET_IDS, 'realEstate' as const];
@@ -70,7 +72,13 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
           <strong>{t('news.important')}</strong>
         </p>
       )}
+      <BudgetCard s={s} title={t('budget.yearTitle')} />
       <div className="options">
+        {onOpenManager && (
+          <button className="secondary" onClick={onOpenManager}>
+            {t('news.openManage')}
+          </button>
+        )}
         <button onClick={onNext}>{t('news.next')}</button>
       </div>
     </Overlay>
@@ -128,6 +136,7 @@ const INCOME_GROUPS: Record<string, string[]> = {
   investment: ['interest', 'bond', 'dividend', 'rent'],
 };
 const EXPENSE_GROUPS: Record<string, string[]> = {
+  job: ['jobCost'],
   living: ['living', 'hobby', 'pet'],
   children: ['education'],
   home: ['loan'],
@@ -149,6 +158,7 @@ function FlowBars({ st }: { st: Settlement }) {
   const colors: Record<string, string> = {
     work: 'var(--good)',
     investment: 'var(--blue)',
+    job: '#8d99ae',
     living: 'var(--bad)',
     children: 'var(--pink)',
     home: 'var(--orange)',
@@ -204,7 +214,18 @@ function DetailRows({ items }: { items: Record<string, number> }) {
   );
 }
 
+/** 借金をした年や、純資産が大きく動いた年は、はじめから詳しく見せる（design.md 2.2） */
+function isNotableYear(s: GameState): boolean {
+  const st = s.lastSettlement!;
+  const rec = s.history[s.history.length - 1];
+  const b = rec.breakdown;
+  const change = b.work + b.investment + b.revaluation + b.other;
+  const prev = rec.netWorth - change;
+  return st.borrowed > 0 || st.sold > 0 || Math.abs(change) > Math.max(300, Math.abs(prev) * 0.2);
+}
+
 export function YearEndModal({ s, onNext, last }: { s: GameState; onNext: () => void; last: boolean }) {
+  const [open, setOpen] = useState(() => last || isNotableYear(s));
   const st = s.lastSettlement!;
   const rec = s.history[s.history.length - 1];
   const prevWorth = rec.netWorth - (rec.breakdown.work + rec.breakdown.investment + rec.breakdown.revaluation + rec.breakdown.other);
@@ -218,6 +239,14 @@ export function YearEndModal({ s, onNext, last }: { s: GameState; onNext: () => 
         {t('yearEnd.netWorth', { prev: formatMoney(prevWorth), now: formatMoney(rec.netWorth) })}{' '}
         <MoneyDelta v={rec.netWorth - prevWorth} big />
       </p>
+      {happinessChange !== 0 && (
+        <p className="summary-line">
+          {t('yearEnd.happiness', { v: '' })}
+          <HappinessDelta v={happinessChange} big />
+        </p>
+      )}
+      {open && (
+      <>
       <div className="two-col">
         <div>
           <h4>{t('yearEnd.why')}</h4>
@@ -289,7 +318,12 @@ export function YearEndModal({ s, onNext, last }: { s: GameState; onNext: () => 
           </tbody>
         </table>
       </details>
+      </>
+      )}
       <div className="options">
+        <button className="secondary" onClick={() => setOpen((v) => !v)}>
+          {t(open ? 'yearEnd.less' : 'yearEnd.more')}
+        </button>
         <button onClick={onNext}>{t(last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
       </div>
     </Overlay>

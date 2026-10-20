@@ -4,7 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import { POLICY_PRESETS, type PolicyPresetId } from '../src/data/assets';
 import { JOB_IDS } from '../src/data/jobs';
-import { RANKS } from '../src/data/rules';
+import { RANKS_BY_JOB } from '../src/data/rules';
 import { playGame, type Strategy } from '../src/game/autoplay';
 import type { GameState, JobId } from '../src/game/types';
 
@@ -95,9 +95,19 @@ const jobNames: Record<JobId, string> = {
 const policyNames: Record<PolicyPresetId, string> = { safe: '安全型', balanced: 'バランス型', aggressive: '積極型' };
 
 const totals = rows.map((r) => r.total);
-const rankLines = RANKS.map((r) => {
-  const n = rows.filter((x) => x.rank === r.rank).length;
-  return `| ${r.rank} | ${r.min === -Infinity ? '—' : r.min} | ${Math.round((n / rows.length) * 100)}% |`;
+const RANK_NAMES = ['S', 'A', 'B', 'C', 'D'];
+const rankLines = RANK_NAMES.map((rank) => {
+  const n = rows.filter((x) => x.rank === rank).length;
+  return `| ${rank} | ${Math.round((n / rows.length) * 100)}% |`;
+}).join('\n');
+
+/** 職業ごとに、S が約5%、A までで約20%、B までで約50%、D が約20%になる基準点（10点単位） */
+const round10 = (v: number) => Math.round(v / 10) * 10;
+const thresholdLines = JOB_IDS.map((job) => {
+  const jobTotals = rows.filter((r) => r.job === job).map((r) => r.total);
+  const suggestion = [0.95, 0.8, 0.5, 0.2].map((q) => round10(pct(jobTotals, q))).join(' / ');
+  const current = RANKS_BY_JOB[job].slice(0, 4).map((r) => r.min).join(' / ');
+  return `| ${jobNames[job]} | ${suggestion} | ${current} |`;
 }).join('\n');
 
 const spent = rows.reduce((a, r) => a + r.gambleSpent, 0);
@@ -149,9 +159,17 @@ ${summary('結婚して子どもがいる', rows.filter((r) => r.married && r.ch
 
 ## ランクの分布
 
-| ランク | 基準点 | 割合 |
-| --- | --- | --- |
+| ランク | 割合 |
+| --- | --- |
 ${rankLines}
+
+## 職業ごとのランクの基準
+
+S が約5%、A までで約20%、B までで約50%、D が約20%になる基準点（S / A / B / C の下限）。
+
+| 職業 | シミュレーションからの提案 | 今の基準（src/data/rules.ts） |
+| --- | --- | --- |
+${thresholdLines}
 
 ## そのほか
 

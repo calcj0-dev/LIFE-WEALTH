@@ -10,6 +10,7 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
     <div className="result">
       <h2 style={{ margin: 0 }}>{t('result.title')}</h2>
       <div className="rank">{t('result.rank', { rank: score.rank })}</div>
+      {score.jobId && <div className="muted">{t('result.jobRank', { job: score.jobId, rank: score.rank })}</div>}
       <div style={{ fontSize: 22, fontWeight: 800 }}>{t('result.total', { total: Math.round(score.total) })}</div>
       <div className="result-grid">
         <div className="card">

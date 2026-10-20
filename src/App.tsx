@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { END_AGE } from './data/rules';
-import { choose, chooseJob, continueYear, createGame, nextYear, roll, setPolicy } from './game/engine';
+import { choose, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -10,12 +10,23 @@ import { Hud, SidePanel } from './ui/GameScreen';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
 import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
-import { JobSelect, PolicySetup } from './ui/Setup';
+import { AssetManager } from './ui/AssetManager';
+import { describeDecision } from './ui/decisionText';
+import { BudgetCard, JobRoulette, PolicySetup } from './ui/Setup';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
+/** 「OK」だけの出来事を、自動で進めるまでの時間（ミリ秒） */
+const AUTO_OK_MS = 1600;
+
+/** 選択肢のない出来事（「OK」だけ）は、画面を止めずに進める（design.md 2.2） */
+function isAutoDecision(s: GameState): boolean {
+  if (s.phase !== 'decision' || s.decisionFrom !== 'square') return false;
+  const options = getOptions(s);
+  return options.length === 1 && options[0].id === 'ok';
+}
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -27,9 +38,23 @@ export function App() {
   const [spinValue, setSpinValue] = useState<number | null>(null);
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showManager, setShowManager] = useState(false);
+  /** 自動で進めた出来事の見出し（少しのあいだ画面に出す） */
+  const [banner, setBanner] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const busyNow = spinning || movingPos !== null;
+  useEffect(() => {
+    if (!game || busyNow || !isAutoDecision(game)) return;
+    setBanner(describeDecision(game).title);
+    const id = window.setTimeout(() => {
+      setBanner(null);
+      setGame(choose(game, 'ok'));
+    }, AUTO_OK_MS);
+    return () => clearTimeout(id);
+  }, [game, busyNow]);
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
@@ -78,9 +103,15 @@ export function App() {
       </div>
     );
   } else if (game.phase === 'setupJob') {
-    screen = <JobSelect onChoose={(job) => setGame(chooseJob(game, job))} />;
+    screen = <JobRoulette s={game} onDone={setGame} />;
   } else if (game.phase === 'setupPolicy') {
-    screen = <PolicySetup doneLabel={t('setup.policy.start')} onDone={(p) => setGame(setPolicy(game, p))} />;
+    screen = (
+      <PolicySetup
+        header={<BudgetCard s={game} title={t('budget.title')} />}
+        doneLabel={t('setup.policy.start')}
+        onDone={(p) => setGame(setPolicy(game, p))}
+      />
+    );
   } else if (game.phase === 'finished') {
     screen = <Result s={game} onAgain={() => setGame(null)} />;
   } else {
@@ -102,13 +133,19 @@ export function App() {
               onSpin={spin}
             />
           </div>
-          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} />
+          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenManager={() => setShowManager(true)} />
         </div>
         <Toasts log={game.log} />
+        {banner && <div className="banner">{banner}</div>}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
-        {!busy && game.phase === 'yearStart' && <NewsModal s={game} onNext={() => setGame(continueYear(game))} />}
-        {!busy && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
-        {!busy && game.phase === 'yearEnd' && (
+        {showManager && <AssetManager s={game} onChange={setGame} onClose={() => setShowManager(false)} />}
+        {!busy && !showManager && game.phase === 'yearStart' && (
+          <NewsModal s={game} onNext={() => setGame(continueYear(game))} onOpenManager={() => setShowManager(true)} />
+        )}
+        {!busy && !showManager && game.phase === 'decision' && !isAutoDecision(game) && (
+          <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />
+        )}
+        {!busy && !showManager && game.phase === 'yearEnd' && (
           <YearEndModal s={game} last={game.player.age >= END_AGE} onNext={() => setGame(nextYear(game))} />
         )}
       </div>

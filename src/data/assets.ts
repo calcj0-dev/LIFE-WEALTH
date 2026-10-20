@@ -46,7 +46,10 @@ export const ECONOMY_TRANSITION: Record<Economy, Record<Economy, number>> = {
 export type PolicyPresetId = 'safe' | 'balanced' | 'aggressive';
 
 export const POLICY_PRESETS: Record<PolicyPresetId, Policy> = {
-  safe: { investRatio: 0.3, allocation: { bond: 0.7, gold: 0.3, fund: 0, stock: 0 } },
-  balanced: { investRatio: 0.5, allocation: { bond: 0.2, gold: 0.1, fund: 0.7, stock: 0 } },
-  aggressive: { investRatio: 0.7, allocation: { bond: 0, gold: 0, fund: 0.6, stock: 0.4 } },
+  safe: { kind: 'safe', investRatio: 0.3, allocation: { bond: 0.7, gold: 0.3, fund: 0, stock: 0 } },
+  balanced: { kind: 'balanced', investRatio: 0.5, allocation: { bond: 0.2, gold: 0.1, fund: 0.7, stock: 0 } },
+  aggressive: { kind: 'aggressive', investRatio: 0.7, allocation: { bond: 0, gold: 0, fund: 0.6, stock: 0.4 } },
 };
+
+/** 投資しない方針。自動では何も買わない */
+export const NO_INVEST_POLICY: Policy = { kind: 'none', investRatio: 0, allocation: { bond: 0, gold: 0, fund: 1, stock: 0 } };
