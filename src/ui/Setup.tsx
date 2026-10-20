@@ -4,8 +4,8 @@ import { ASSET_IDS, NO_INVEST_POLICY, POLICY_PRESETS, policyFromShares, sharesOf
 import { JOB_IDS } from '../data/jobs';
 import { estimateYear, rollJob } from '../game/engine';
 import type { GameState, Policy } from '../game/types';
-import { formatMoney, t } from '../i18n';
-import { MoneyDelta } from './Delta';
+import { t } from '../i18n';
+import { Details, LedgerTable, MoneySummary } from './Ledger';
 
 // ---------------------------------------------------------------- 職業のルーレット
 
@@ -50,41 +50,16 @@ export function JobRoulette({ s, onDone }: { s: GameState; onDone: (next: GameSt
 // ---------------------------------------------------------------- 家計の予定
 
 export function BudgetCard({ s, title }: { s: GameState; title: string }) {
-  const { income, expense, net } = estimateYear(s);
-  const rows = (items: Record<string, number>) =>
-    Object.entries(items)
-      .filter(([, v]) => Math.round(v) !== 0)
-      .map(([k, v]) => (
-        <div key={k} className="kv">
-          <span>{t(`settle.${k}`)}</span>
-          <span className="v">{formatMoney(v)}</span>
-        </div>
-      ));
+  const { income, expense } = estimateYear(s);
   const sum = (items: Record<string, number>) => Object.values(items).reduce((a, b) => a + b, 0);
   return (
     <div className="card budget">
       <h4>{title}</h4>
-      <div className="two-col">
-        <div>
-          <div className="kv">
-            <strong className="plus">{t('budget.income')}</strong>
-            <strong>{formatMoney(sum(income))}</strong>
-          </div>
-          {rows(income)}
-        </div>
-        <div>
-          <div className="kv">
-            <strong className="minus">{t('budget.expense')}</strong>
-            <strong>{formatMoney(sum(expense))}</strong>
-          </div>
-          {rows(expense)}
-        </div>
-      </div>
-      <p className="summary-line">
-        {t('budget.net')}: <MoneyDelta v={net} big />
-        {Math.round(net) === 0 && formatMoney(0)}
-      </p>
-      <p className="muted">{t('budget.note')}</p>
+      <MoneySummary income={sum(income)} expense={sum(expense)} plan />
+      <Details>
+        <LedgerTable income={income} expense={expense} />
+        <p className="muted">{t('budget.note')}</p>
+      </Details>
     </div>
   );
 }

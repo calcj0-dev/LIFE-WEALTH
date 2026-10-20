@@ -699,3 +699,145 @@ details summary {
   padding-left: 20px;
   font-weight: 700;
 }
+
+/* ---------------- 家計と年末決算 */
+
+.money-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+.money-card {
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #f7f4ee;
+  border-top: 5px solid var(--line);
+}
+.money-card span {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.money-card strong {
+  font-size: 20px;
+  font-weight: 900;
+}
+.money-card.income {
+  border-top-color: var(--good);
+}
+.money-card.income strong {
+  color: #12907f;
+}
+.money-card.expense {
+  border-top-color: var(--bad);
+}
+.money-card.expense strong {
+  color: #d64545;
+}
+.money-card.net {
+  border-top-color: var(--text);
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+.money-card.net.plus strong {
+  color: #12907f;
+}
+.money-card.net.minus strong {
+  color: #d64545;
+}
+.summary-rows {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 700;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--line);
+}
+.warning {
+  background: #fff1f1;
+  color: #c03a3a;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.details {
+  margin-top: 6px;
+}
+.details-toggle {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+.details-body {
+  margin-top: 8px;
+}
+.section-title {
+  margin: 14px 0 4px;
+  font-size: 14px;
+  border-left: 4px solid var(--primary);
+  padding-left: 8px;
+}
+.ledger,
+.worth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ledger th {
+  color: #fff;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 13px;
+}
+.ledger th.income {
+  background: var(--good);
+  border-radius: 8px 0 0 0;
+}
+.ledger th.expense {
+  background: var(--bad);
+  border-radius: 0 8px 0 0;
+}
+.ledger td,
+.worth-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.ledger td:nth-child(2) {
+  border-right: 2px solid var(--line);
+}
+.ledger tfoot td,
+.worth-table tfoot td {
+  border-top: 3px double var(--text);
+  border-bottom: none;
+  font-weight: 900;
+}
+.ledger-icon {
+  display: inline-block;
+  width: 22px;
+}
+.ledger-money {
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.worth-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.budget .money-summary {
+  margin-top: 4px;
+}
