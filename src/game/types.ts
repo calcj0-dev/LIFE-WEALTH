@@ -114,6 +114,8 @@ export interface Market {
   realEstateIndex: number;
   /** 物価（生活費にかかる、はじめは1） */
   livingIndex: number;
+  /** 給料の水準（毎年の物価の上昇に合わせて上がる、はじめは1）。古いセーブにはない */
+  wageIndex?: number;
 }
 
 export interface LogEntry {
