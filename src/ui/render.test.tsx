@@ -54,7 +54,8 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       }
       renderToString(<Hud s={s} />);
-      renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} />);
+      expect(renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} onOpenNews={noop} onOpenYearEnd={noop} />)).toContain('今年の家計の予定');
+      renderToString(<YearEndModal s={s} last={false} closeOnly onNext={noop} />);
       renderToString(<AssetManager s={s} onChange={noop} onClose={noop} />);
       renderToString(<HistoryModal s={s} onClose={noop} />);
       const yearEnd = renderToString(<YearEndModal s={s} last={false} onNext={noop} />) + renderToString(<NetWorthTable s={s} />) + renderToString(<HappinessList s={s} />);

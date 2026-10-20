@@ -8,7 +8,6 @@ import { describeDecision } from './decisionText';
 import { HappinessDelta, MoneyDelta } from './Delta';
 import { movingEntries } from './logLabel';
 import { HistoryTabs } from './HistoryTabs';
-import { BudgetCard } from './Setup';
 import { Details, HappinessList, LedgerTable, MoneySummary, NetWorthTable } from './Ledger';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
@@ -21,7 +20,39 @@ function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean
 
 // ---------------------------------------------------------------- 年初のニュース
 
-export function NewsModal({ s, onNext, onOpenManager }: { s: GameState; onNext: () => void; onOpenManager?: () => void }) {
+/** 大事なニュースの年か（金融危機、技術革新ブームなど）。大事な年だけポップアップで出す（design.md 2.2） */
+export function isImportantNews(s: GameState): boolean {
+  return !!s.newsId && !!newsById(s.newsId).important;
+}
+
+/** 大事な決算の年か。大事な年だけポップアップで出す（design.md 2.2） */
+export function isNotableYearEnd(s: GameState, last: boolean): boolean {
+  const st = s.lastSettlement!;
+  const rec = s.history[s.history.length - 1];
+  const b = rec.breakdown;
+  const change = b.work + b.investment + b.revaluation + b.other;
+  const prev = rec.netWorth - change;
+  // 借金や資産の売却は、始まった年だけ（続いている年は、お知らせだけにする）
+  const lastYear = (key: string) => s.log.some((l) => l.age === st.age - 1 && l.key === key);
+  const newBorrow = st.borrowed > 0 && !lastYear('shortfall.loan');
+  const newSell = st.sold > 0 && !lastYear('shortfall.sell') && !lastYear('shortfall.loan');
+  // 貯金の増え方ではなく、値動きやマスの出来事で大きく動いた年
+  const unusual = Math.abs(b.revaluation + b.other) > Math.max(500, Math.abs(prev) * 0.3);
+  return last || newBorrow || newSell || unusual || [30, 40, 50, 60].includes(st.age);
+}
+
+export function NewsModal({
+  s,
+  onNext,
+  onOpenManager,
+  closeOnly,
+}: {
+  s: GameState;
+  onNext: () => void;
+  onOpenManager?: () => void;
+  /** 見返すとき（「閉じる」だけを出す） */
+  closeOnly?: boolean;
+}) {
   const news = newsById(s.newsId!);
   const change = s.marketChange;
   const keys = [...ASSET_IDS, 'realEstate' as const];
@@ -72,14 +103,13 @@ export function NewsModal({ s, onNext, onOpenManager }: { s: GameState; onNext: 
           <strong>{t('news.important')}</strong>
         </p>
       )}
-      <BudgetCard s={s} title={t('budget.yearTitle')} />
       <div className="options">
         {onOpenManager && (
           <button className="secondary" onClick={onOpenManager}>
             {t('news.openManage')}
           </button>
         )}
-        <button onClick={onNext}>{t('news.next')}</button>
+        <button onClick={onNext}>{t(closeOnly ? 'news.close' : 'news.next')}</button>
       </div>
     </Overlay>
   );
@@ -131,7 +161,7 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
 
 // ---------------------------------------------------------------- 年末決算
 
-export function YearEndModal({ s, onNext, last }: { s: GameState; onNext: () => void; last: boolean }) {
+export function YearEndModal({ s, onNext, last, closeOnly }: { s: GameState; onNext: () => void; last: boolean; closeOnly?: boolean }) {
   const st = s.lastSettlement!;
   const rec = s.history[s.history.length - 1];
   const b = rec.breakdown;
@@ -165,7 +195,7 @@ export function YearEndModal({ s, onNext, last }: { s: GameState; onNext: () => 
         <HappinessList s={s} />
       </Details>
       <div className="options">
-        <button onClick={onNext}>{t(last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
+        <button onClick={onNext}>{t(closeOnly ? 'news.close' : last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
       </div>
     </Overlay>
   );

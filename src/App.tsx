@@ -7,7 +7,9 @@ import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { Hud, SidePanel } from './ui/GameScreen';
-import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, isNotableYearEnd } from './ui/Modals';
+import { newsById } from './game/market';
+import { MoneyDelta } from './ui/Delta';
 import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
 import { AssetManager } from './ui/AssetManager';
@@ -20,6 +22,16 @@ const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
 /** 「OK」だけの出来事を、自動で進めるまでの時間（ミリ秒） */
 const AUTO_OK_MS = 1600;
+/** ふつうの年のニュースと決算を、自動で進めるまでの時間（ミリ秒） */
+const AUTO_YEAR_MS = 1200;
+/** 画面の上のお知らせを出しておく時間（ミリ秒） */
+const NOTE_MS = 2800;
+
+interface Note {
+  id: number;
+  text: string;
+  money?: number;
+}
 
 /** 選択肢のない出来事（「OK」だけ）は、画面を止めずに進める（design.md 2.2） */
 function isAutoDecision(s: GameState): boolean {
@@ -41,11 +53,50 @@ export function App() {
   const [showManager, setShowManager] = useState(false);
   /** 自動で進めた出来事の見出し（少しのあいだ画面に出す） */
   const [banner, setBanner] = useState<string | null>(null);
+  /** 画面の上のお知らせ（ふつうの年のニュースと決算） */
+  const [notes, setNotes] = useState<Note[]>([]);
+  /** 見返し用: 今年のニュース、去年の決算 */
+  const [viewNews, setViewNews] = useState(false);
+  const [viewYearEnd, setViewYearEnd] = useState(false);
+  const [lastYearEnd, setLastYearEnd] = useState<GameState | null>(null);
+  const noteId = useRef(1);
   const timers = useRef<number[]>([]);
+
+  const pushNote = (note: Omit<Note, 'id'>) => {
+    const id = noteId.current++;
+    setNotes((ns) => [...ns, { ...note, id }].slice(-3));
+    timers.current.push(window.setTimeout(() => setNotes((ns) => ns.filter((n) => n.id !== id)), NOTE_MS));
+  };
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const busyNow = spinning || movingPos !== null;
+  const paused = showManager || showHistory || viewNews || viewYearEnd;
+
+  // 年末決算を見返せるように、その年の決算の状態を残しておく
+  useEffect(() => {
+    if (game?.phase === 'yearEnd') setLastYearEnd(game);
+  }, [game]);
+
+  // ふつうの年のニュースと決算は、ポップアップを出さずに、お知らせだけ出して自動で進む（design.md 2.2）
+  useEffect(() => {
+    if (!game || busyNow || paused) return;
+    if (game.phase === 'yearStart' && !isImportantNews(game)) {
+      const id = window.setTimeout(() => {
+        pushNote({ text: t('note.news', { age: game.player.age, title: t(`news.${newsById(game.newsId!).id}.title`) }) });
+        setGame(continueYear(game));
+      }, AUTO_YEAR_MS);
+      return () => clearTimeout(id);
+    }
+    if (game.phase === 'yearEnd' && !isNotableYearEnd(game, game.player.age >= END_AGE)) {
+      const id = window.setTimeout(() => {
+        pushNote({ text: t('note.yearEnd', { age: game.player.age }), money: game.lastSettlement!.net });
+        setGame(nextYear(game));
+      }, AUTO_YEAR_MS);
+      return () => clearTimeout(id);
+    }
+  }, [game, busyNow, paused]);
+
   useEffect(() => {
     if (!game || busyNow || !isAutoDecision(game)) return;
     setBanner(describeDecision(game).title);
@@ -57,6 +108,7 @@ export function App() {
   }, [game, busyNow]);
 
   const setGame = (s: GameState | null) => {
+    if (!s || s.phase === 'setupJob') setLastYearEnd(null);
     setGameState(s);
     saveGame(s && s.phase !== 'finished' ? s : null);
     if (!s || s.phase === 'finished') setSaved(null);
@@ -133,19 +185,39 @@ export function App() {
               onSpin={spin}
             />
           </div>
-          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenManager={() => setShowManager(true)} />
+          <SidePanel
+            s={game}
+            onOpenHistory={() => setShowHistory(true)}
+            onOpenManager={() => setShowManager(true)}
+            onOpenNews={game.newsId ? () => setViewNews(true) : undefined}
+            onOpenYearEnd={lastYearEnd ? () => setViewYearEnd(true) : undefined}
+          />
         </div>
         <Toasts log={game.log} />
         {banner && <div className="banner">{banner}</div>}
+        {notes.length > 0 && (
+          <div className="notes" aria-live="polite">
+            {notes.map((n) => (
+              <div key={n.id} className="note">
+                {n.text}
+                {n.money !== undefined && <MoneyDelta v={n.money} />}
+              </div>
+            ))}
+          </div>
+        )}
+        {viewNews && <NewsModal s={game} closeOnly onNext={() => setViewNews(false)} />}
+        {viewYearEnd && lastYearEnd && (
+          <YearEndModal s={lastYearEnd} last={false} closeOnly onNext={() => setViewYearEnd(false)} />
+        )}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {showManager && <AssetManager s={game} onChange={setGame} onClose={() => setShowManager(false)} />}
-        {!busy && !showManager && game.phase === 'yearStart' && (
+        {!busy && !paused && game.phase === 'yearStart' && isImportantNews(game) && (
           <NewsModal s={game} onNext={() => setGame(continueYear(game))} onOpenManager={() => setShowManager(true)} />
         )}
-        {!busy && !showManager && game.phase === 'decision' && !isAutoDecision(game) && (
+        {!busy && !paused && game.phase === 'decision' && !isAutoDecision(game) && (
           <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
-        {!busy && !showManager && game.phase === 'yearEnd' && (
+        {!busy && !paused && game.phase === 'yearEnd' && isNotableYearEnd(game, game.player.age >= END_AGE) && (
           <YearEndModal s={game} last={game.player.age >= END_AGE} onNext={() => setGame(nextYear(game))} />
         )}
       </div>

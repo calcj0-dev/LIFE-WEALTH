@@ -400,5 +400,11 @@
   "happiness.title": "幸福ポイントが動いた出来事",
   "happiness.line": "幸福ポイント",
   "details.open": "詳しく見る",
-  "details.close": "閉じる"
+  "details.close": "閉じる",
+  "note.news": "{age}歳の年のニュース: {title}",
+  "note.yearEnd": "{age}歳の決算",
+  "panel.budget": "今年の家計の予定",
+  "panel.openNews": "今年のニュースを見る",
+  "panel.openYearEnd": "去年の決算を見る",
+  "news.close": "閉じる"
 }

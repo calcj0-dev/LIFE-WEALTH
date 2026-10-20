@@ -3,6 +3,7 @@ import { ASSET_IDS } from '../data/assets';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { securityPoints } from '../game/score';
+import { BudgetCard } from './Setup';
 
 /** ゲージの満タンの点数（見た目の目安） */
 const GAUGE_FULL = 250;
@@ -65,10 +66,14 @@ export function SidePanel({
   s,
   onOpenHistory,
   onOpenManager,
+  onOpenNews,
+  onOpenYearEnd,
 }: {
   s: GameState;
   onOpenHistory: () => void;
   onOpenManager: () => void;
+  onOpenNews?: () => void;
+  onOpenYearEnd?: () => void;
 }) {
   const p = s.player;
   const rentals = p.properties.filter((x) => x.use === 'rental').length;
@@ -83,6 +88,15 @@ export function SidePanel({
       <button className="manage-button" onClick={onOpenManager}>
         {t('manage.open')}
       </button>
+      <BudgetCard s={s} title={t('panel.budget')} />
+      <div className="panel-buttons">
+        <button className="secondary" disabled={!onOpenNews} onClick={onOpenNews}>
+          {t('panel.openNews')}
+        </button>
+        <button className="secondary" disabled={!onOpenYearEnd} onClick={onOpenYearEnd}>
+          {t('panel.openYearEnd')}
+        </button>
+      </div>
       <div className="card">
         <h4>{t('panel.job')}</h4>
         <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />
