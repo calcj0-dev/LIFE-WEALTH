@@ -66,14 +66,12 @@ export function SidePanel({
   s,
   onOpenHistory,
   onOpenManager,
-  onOpenNews,
-  onOpenYearEnd,
+  onOpenFeed,
 }: {
   s: GameState;
   onOpenHistory: () => void;
   onOpenManager: () => void;
-  onOpenNews?: () => void;
-  onOpenYearEnd?: () => void;
+  onOpenFeed?: () => void;
 }) {
   const p = s.player;
   const rentals = p.properties.filter((x) => x.use === 'rental').length;
@@ -90,11 +88,8 @@ export function SidePanel({
       </button>
       <BudgetCard s={s} title={t('panel.budget')} />
       <div className="panel-buttons">
-        <button className="secondary" disabled={!onOpenNews} onClick={onOpenNews}>
-          {t('panel.openNews')}
-        </button>
-        <button className="secondary" disabled={!onOpenYearEnd} onClick={onOpenYearEnd}>
-          {t('panel.openYearEnd')}
+        <button className="secondary feed-button" disabled={!onOpenFeed} onClick={onOpenFeed}>
+          {t('feed.open')}
         </button>
       </div>
       <div className="card">

@@ -834,6 +834,8 @@ function finalizeYear(s: GameState) {
     economy: s.market.economy,
     newsId: s.newsId ?? '',
     breakdown: breakdownOf(s, worth),
+    incomeTotal: s.lastSettlement ? Object.values(s.lastSettlement.income).reduce((a, b) => a + b, 0) : 0,
+    expenseTotal: s.lastSettlement ? Object.values(s.lastSettlement.expense).reduce((a, b) => a + b, 0) : 0,
     market: {
       prices: { ...s.market.prices },
       realEstateIndex: s.market.realEstateIndex,

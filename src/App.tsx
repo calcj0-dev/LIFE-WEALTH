@@ -8,8 +8,7 @@ import { t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { Hud, SidePanel } from './ui/GameScreen';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, isNotableYearEnd } from './ui/Modals';
-import { newsById } from './game/market';
-import { MoneyDelta } from './ui/Delta';
+import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './ui/Feed';
 import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
 import { AssetManager } from './ui/AssetManager';
@@ -19,16 +18,6 @@ import { APP_VERSION } from './version';
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
-/** ふつうの年のニュースと決算を、自動で進めるまでの時間（ミリ秒） */
-const AUTO_YEAR_MS = 1200;
-/** 画面の上のお知らせを出しておく時間（ミリ秒） */
-const NOTE_MS = 2800;
-
-interface Note {
-  id: number;
-  text: string;
-  money?: number;
-}
 
 
 export function App() {
@@ -42,53 +31,31 @@ export function App() {
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showManager, setShowManager] = useState(false);
-  /** 画面の上のお知らせ（ふつうの年のニュースと決算） */
-  const [notes, setNotes] = useState<Note[]>([]);
-  /** 見返し用: 今年のニュース、去年の決算 */
-  const [viewNews, setViewNews] = useState(false);
-  const [viewYearEnd, setViewYearEnd] = useState(false);
-  const [lastYearEnd, setLastYearEnd] = useState<GameState | null>(null);
-  const noteId = useRef(1);
+  /** ふつうの年のニュースと決算を、自動で閉じるポップアップで見せている間 */
+  const [autoView, setAutoView] = useState<'news' | 'yearEnd' | null>(null);
+  const [showFeed, setShowFeed] = useState(false);
   const timers = useRef<number[]>([]);
-
-  const pushNote = (note: Omit<Note, 'id'>) => {
-    const id = noteId.current++;
-    setNotes((ns) => [...ns, { ...note, id }].slice(-3));
-    timers.current.push(window.setTimeout(() => setNotes((ns) => ns.filter((n) => n.id !== id)), NOTE_MS));
-  };
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const busyNow = spinning || movingPos !== null;
-  const paused = showManager || showHistory || viewNews || viewYearEnd;
+  const paused = showManager || showHistory || showFeed;
 
-  // 年末決算を見返せるように、その年の決算の状態を残しておく
+  // ふつうの年のニュースと決算は、約3秒で自動で閉じるポップアップで見せてから進む（design.md 2.2）
   useEffect(() => {
-    if (game?.phase === 'yearEnd') setLastYearEnd(game);
-  }, [game]);
+    if (!game || busyNow || paused || autoView) return;
+    if (game.phase === 'yearStart' && !isImportantNews(game)) setAutoView('news');
+    else if (game.phase === 'yearEnd' && !isNotableYearEnd(game, game.player.age >= END_AGE)) setAutoView('yearEnd');
+  }, [game, busyNow, paused, autoView]);
 
-  // ふつうの年のニュースと決算は、ポップアップを出さずに、お知らせだけ出して自動で進む（design.md 2.2）
-  useEffect(() => {
-    if (!game || busyNow || paused) return;
-    if (game.phase === 'yearStart' && !isImportantNews(game)) {
-      const id = window.setTimeout(() => {
-        pushNote({ text: t('note.news', { age: game.player.age, title: t(`news.${newsById(game.newsId!).id}.title`) }) });
-        setGame(continueYear(game));
-      }, AUTO_YEAR_MS);
-      return () => clearTimeout(id);
-    }
-    if (game.phase === 'yearEnd' && !isNotableYearEnd(game, game.player.age >= END_AGE)) {
-      const id = window.setTimeout(() => {
-        pushNote({ text: t('note.yearEnd', { age: game.player.age }), money: game.lastSettlement!.net });
-        setGame(nextYear(game));
-      }, AUTO_YEAR_MS);
-      return () => clearTimeout(id);
-    }
-  }, [game, busyNow, paused]);
-
+  const closeAuto = () => {
+    if (!game) return;
+    if (autoView === 'news' && game.phase === 'yearStart') setGame(continueYear(game));
+    if (autoView === 'yearEnd' && game.phase === 'yearEnd') setGame(nextYear(game));
+    setAutoView(null);
+  };
 
   const setGame = (s: GameState | null) => {
-    if (!s || s.phase === 'setupJob') setLastYearEnd(null);
     setGameState(s);
     saveGame(s && s.phase !== 'finished' ? s : null);
     if (!s || s.phase === 'finished') setSaved(null);
@@ -169,25 +136,21 @@ export function App() {
             s={game}
             onOpenHistory={() => setShowHistory(true)}
             onOpenManager={() => setShowManager(true)}
-            onOpenNews={game.newsId ? () => setViewNews(true) : undefined}
-            onOpenYearEnd={lastYearEnd ? () => setViewYearEnd(true) : undefined}
+            onOpenFeed={() => setShowFeed(true)}
           />
         </div>
         <Toasts log={game.log} />
-        {notes.length > 0 && (
-          <div className="notes" aria-live="polite">
-            {notes.map((n) => (
-              <div key={n.id} className="note">
-                {n.text}
-                {n.money !== undefined && <MoneyDelta v={n.money} />}
-              </div>
-            ))}
-          </div>
+        {autoView === 'news' && game.phase === 'yearStart' && (
+          <AutoPopup onClose={closeAuto}>
+            <NewsBrief s={game} />
+          </AutoPopup>
         )}
-        {viewNews && <NewsModal s={game} closeOnly onNext={() => setViewNews(false)} />}
-        {viewYearEnd && lastYearEnd && (
-          <YearEndModal s={lastYearEnd} last={false} closeOnly onNext={() => setViewYearEnd(false)} />
+        {autoView === 'yearEnd' && game.phase === 'yearEnd' && (
+          <AutoPopup onClose={closeAuto}>
+            <YearEndBrief s={game} />
+          </AutoPopup>
         )}
+        {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {showManager && <AssetManager s={game} onChange={setGame} onClose={() => setShowManager(false)} />}
         {!busy && !paused && game.phase === 'yearStart' && isImportantNews(game) && (

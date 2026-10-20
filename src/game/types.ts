@@ -151,6 +151,9 @@ export interface YearRecord {
   newsId: string;
   /** 純資産が増えた・減った理由 */
   breakdown: NetWorthBreakdown;
+  /** その年の収入と支出の合計（履歴に使う。古いセーブにはない） */
+  incomeTotal?: number;
+  expenseTotal?: number;
   /** その年の価格（値動きのチャートと年利の表に使う。古いセーブにはない） */
   market?: { prices: Record<AssetId, number>; realEstateIndex: number; livingIndex: number; depositRate: number };
 }
