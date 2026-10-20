@@ -5,7 +5,7 @@ import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE } from '../data/assets';
 import { BOARD } from '../data/board';
 import { ALL_EVENTS, BAD_EVENTS, CARE, GOOD_EVENTS, LIFE_EVENTS, SICKNESS, SIDE_BUSINESS, type Effect, type EventDef } from '../data/events';
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, GAMBLE_JACKPOT_HAPPINESS, type GambleId } from '../data/gamble';
-import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, salaryAtAge } from '../data/jobs';
+import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, JOB_IDS, salaryAtAge } from '../data/jobs';
 import {
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
@@ -130,10 +130,19 @@ export function chooseJob(state: GameState, jobId: JobId): GameState {
   assertPhase(state, 'setupJob');
   const s = clone(state);
   s.player.jobId = jobId;
+  s.player.startJobId = jobId;
   s.player.salary = JOBS[jobId].startSalary;
   s.player.athleteRetireAge = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_AGE.min, ATHLETE_RETIRE_AGE.max) : null;
   s.phase = 'setupPolicy';
   return s;
+}
+
+/** ルーレットで職業を決める（6つの職業を同じ確率で） */
+export function rollJob(state: GameState): GameState {
+  assertPhase(state, 'setupJob');
+  const probe = clone(state);
+  const jobId = JOB_IDS[randomInt(probe, 0, JOB_IDS.length - 1)];
+  return chooseJob({ ...state, rngState: probe.rngState }, jobId);
 }
 
 export function validatePolicy(policy: Policy): boolean {
@@ -151,8 +160,28 @@ export function setPolicy(state: GameState, policy: Policy): GameState {
   if (!validatePolicy(policy)) throw new Error('invalid policy');
   const s = clone(state);
   s.player.policy = structuredClone(policy);
+  rebalance(s);
   startYear(s);
   return s;
+}
+
+/** 銀行預金と資産（不動産を除く）の合計を、方針の割合に分けたときの、資産ごとの売り買いの額（＋買う、−売る） */
+export function rebalancePlan(s: GameState, policy: Policy): Record<AssetId, number> {
+  const total = Math.max(0, s.player.cash) + financialAssets(s);
+  const plan = {} as Record<AssetId, number>;
+  for (const id of ASSET_IDS) {
+    plan[id] = total * policy.investRatio * policy.allocation[id] - assetValue(s, id);
+  }
+  return plan;
+}
+
+/** 方針の割合に合うように、資産を売り買いする（先に売ってから買う） */
+function rebalance(s: GameState) {
+  const plan = rebalancePlan(s, s.player.policy);
+  for (const id of ASSET_IDS) if (plan[id] < 0) sellAsset(s, id, -plan[id]);
+  for (const id of ASSET_IDS) if (plan[id] > 0) buyAsset(s, id, plan[id]);
+  const moved = ASSET_IDS.reduce((a, id) => a + Math.abs(plan[id]), 0);
+  if (moved >= 1) log(s, 'policy.rebalance', { params: { amount: Math.round(moved) } });
 }
 
 // ---------------------------------------------------------------- 年初
@@ -301,6 +330,23 @@ function canAfford(s: GameState, amount: number) {
   return s.player.cash >= amount;
 }
 
+const MARRIAGE_HAPPINESS = 15;
+const LARGE_WEDDING_HAPPINESS = 5;
+const HOME_HAPPINESS = 10;
+
+/** 選んだときにすぐ動くお金と幸福ポイント。結果が運で決まるもの（病気、副業の成否）は分かる分だけ */
+function previewOf(s: GameState, effects: Effect[]): { cash?: number; happiness?: number } {
+  let cash = 0;
+  let happiness = 0;
+  for (const e of effects) {
+    if (e.t === 'cash') cash += e.amount;
+    else if (e.t === 'bonus') cash += s.player.salary * e.rate;
+    else if (e.t === 'sideBusiness') cash -= SIDE_BUSINESS.cost;
+    else if (e.t === 'happiness') happiness += e.amount;
+  }
+  return { ...(cash ? { cash } : {}), ...(happiness ? { happiness } : {}) };
+}
+
 /** 選んだときにすぐ払うお金 */
 function upfrontCost(effects: Effect[]): number {
   return effects.reduce((sum, e) => {
@@ -325,7 +371,14 @@ export function getOptions(s: GameState): DecisionOption[] {
       const opts: DecisionOption[] = [];
       for (const work of ['full', 'none'] as SpouseWork[]) {
         for (const size of ['small', 'large'] as const) {
-          opts.push({ id: `marry:${work}:${size}`, key: `option.marry.${work}.${size}`, params: { cost: WEDDING_COST[size] }, enabled: canAfford(s, WEDDING_COST[size]) });
+          opts.push({
+            id: `marry:${work}:${size}`,
+            key: `option.marry.${work}.${size}`,
+            params: { cost: WEDDING_COST[size] },
+            enabled: canAfford(s, WEDDING_COST[size]),
+            cash: -WEDDING_COST[size],
+            happiness: MARRIAGE_HAPPINESS + (size === 'large' ? LARGE_WEDDING_HAPPINESS : 0),
+          });
         }
       }
       opts.push({ id: 'decline', key: 'option.marry.decline', enabled: true });
@@ -345,6 +398,7 @@ export function getOptions(s: GameState): DecisionOption[] {
         key: o.id === 'ok' || o.id === 'skip' ? `option.${o.id}` : `option.${o.id.split(':')[0]}`,
         params: o.params?.(s) ?? (o.id.startsWith('job:') ? { job: o.id.slice(4) } : undefined),
         enabled: useAffordable ? affordable[i] : allowed[i],
+        ...previewOf(s, o.effects),
       }));
     }
     case 'gamble': {
@@ -373,10 +427,10 @@ export function getOptions(s: GameState): DecisionOption[] {
       const fullCash = price * (1 + REAL_ESTATE.buyCostRate);
       const params = { price };
       return [
-        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: !hasHome(s) && canAfford(s, loanCash) },
-        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: !hasHome(s) && canAfford(s, fullCash) },
-        { id: 'rentalLoan', key: 'option.realEstate.rentalLoan', params, enabled: canAfford(s, loanCash) },
-        { id: 'rentalCash', key: 'option.realEstate.rentalCash', params, enabled: canAfford(s, fullCash) },
+        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: !hasHome(s) && canAfford(s, loanCash), cash: -loanCash, happiness: HOME_HAPPINESS },
+        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: !hasHome(s) && canAfford(s, fullCash), cash: -fullCash, happiness: HOME_HAPPINESS },
+        { id: 'rentalLoan', key: 'option.realEstate.rentalLoan', params, enabled: canAfford(s, loanCash), cash: -loanCash },
+        { id: 'rentalCash', key: 'option.realEstate.rentalCash', params, enabled: canAfford(s, fullCash), cash: -fullCash },
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
@@ -440,8 +494,8 @@ function applyDecision(s: GameState, d: Decision, optionId: string) {
       p.married = true;
       p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome : 0, halfThisYear: false };
       addCash(s, -WEDDING_COST[size], `marriage.wedding.${size}`);
-      addHappiness(s, 15, 'marriage.marry');
-      if (size === 'large') addHappiness(s, 5, 'marriage.largeWedding');
+      addHappiness(s, MARRIAGE_HAPPINESS, 'marriage.marry');
+      if (size === 'large') addHappiness(s, LARGE_WEDDING_HAPPINESS, 'marriage.largeWedding');
       return;
     }
     case 'life':
@@ -509,6 +563,11 @@ function applyEffect(s: GameState, e: Effect, key: string) {
     case 'bonus':
       addCash(s, p.salary * e.rate, key);
       return;
+    case 'investBonus': {
+      const spent = investByPolicy(s, p.salary * e.rate);
+      log(s, `${key}.invest`, { params: { amount: Math.round(spent) } });
+      return;
+    }
     case 'noIncome':
       p.noIncomeThisYear = true;
       return;
@@ -623,7 +682,7 @@ function buyProperty(s: GameState, price: number, optionId: string) {
     fireInsured: withLoan,
     vacant: false,
   });
-  if (use === 'home') addHappiness(s, 10, 'realEstate.home');
+  if (use === 'home') addHappiness(s, HOME_HAPPINESS, 'realEstate.home');
 }
 
 // ---------------------------------------------------------------- 年末決算
@@ -651,7 +710,11 @@ function educationCost(s: GameState): number {
   return total;
 }
 
-function settleYear(s: GameState) {
+/**
+ * 1年分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（年初の「今年の予定」に使う）。
+ * 予定では、その年の出来事（失業、病気など）はまだ起きていないものとして計算する。
+ */
+function computeFlows(s: GameState, dryRun: boolean) {
   const p = s.player;
   const income: Record<string, number> = {};
   const expense: Record<string, number> = {};
@@ -666,14 +729,35 @@ function settleYear(s: GameState) {
     .filter((x) => x.use === 'rental' && !x.vacant)
     .reduce((sum, x) => sum + x.value * REAL_ESTATE.rentYield * (1 - REAL_ESTATE.rentCostRate), 0);
 
+  expense.jobCost = JOBS[p.jobId].fixedCost;
   expense.living = livingCost(s);
   expense.hobby = p.hobby ? HOBBY.yearlyCost : 0;
   expense.pet = p.petYears !== null ? PET.yearlyCost : 0;
   expense.education = educationCost(s);
-  expense.loan = p.properties.reduce((sum, x) => sum + (x.loan ? payLoanYear(x.loan).paid : 0), 0);
+  let loanInterest = 0;
+  expense.loan = p.properties.reduce((sum, x) => {
+    if (!x.loan) return sum;
+    if (dryRun) return sum + Math.min(x.loan.payment, x.loan.balance * (1 + x.loan.rate));
+    const r = payLoanYear(x.loan);
+    loanInterest += r.interest;
+    return sum + r.paid;
+  }, 0);
   expense.insurance =
     (p.medicalPremium ?? 0) + p.properties.filter((x) => x.fireInsured).length * INSURANCE.firePremiumPerProperty;
-  for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
+  if (!dryRun) for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
+  return { income, expense, loanInterest };
+}
+
+/** その年の収入と支出の予定（年初とゲーム開始時に知らせる） */
+export function estimateYear(s: GameState): { income: Record<string, number>; expense: Record<string, number>; net: number } {
+  const { income, expense } = computeFlows(s, true);
+  const net = Object.values(income).reduce((a, b) => a + b, 0) - Object.values(expense).reduce((a, b) => a + b, 0);
+  return { income, expense, net };
+}
+
+function settleYear(s: GameState) {
+  const p = s.player;
+  const { income, expense, loanInterest } = computeFlows(s, false);
 
   const totalIncome = Object.values(income).reduce((a, b) => a + b, 0);
   const totalExpense = Object.values(expense).reduce((a, b) => a + b, 0);
@@ -693,7 +777,8 @@ function settleYear(s: GameState) {
 
   const shortfall = coverShortfall(s);
 
-  s.lastSettlement = { age: p.age, income, expense, net, invested, ...shortfall } satisfies Settlement;
+  const loanPrincipal = expense.loan - loanInterest;
+  s.lastSettlement = { age: p.age, income, expense, net, invested, loanPrincipal, ...shortfall } satisfies Settlement;
   finalizeYear(s);
 }
 
@@ -718,9 +803,10 @@ function coverShortfall(s: GameState): { sold: number; borrowed: number } {
 
 function finalizeYear(s: GameState) {
   if (s.player.cardLoan > 0) addHappiness(s, DEBT_HAPPINESS, 'debt');
+  const worth = netWorth(s);
   s.history.push({
     age: s.player.age,
-    netWorth: netWorth(s),
+    netWorth: worth,
     cash: s.player.cash,
     assets: {
       ...(Object.fromEntries(ASSET_IDS.map((id) => [id, assetValue(s, id)])) as Record<AssetId, number>),
@@ -730,8 +816,29 @@ function finalizeYear(s: GameState) {
     happiness: s.player.happiness,
     economy: s.market.economy,
     newsId: s.newsId ?? '',
+    breakdown: breakdownOf(s, worth),
+    market: {
+      prices: { ...s.market.prices },
+      realEstateIndex: s.market.realEstateIndex,
+      livingIndex: s.market.livingIndex,
+      depositRate: s.market.depositRate,
+    },
   });
   s.phase = 'yearEnd';
+}
+
+/** 純資産が増えた・減った理由。合計がその年の純資産の増減と一致するよう、残りは「出来事など」に入れる */
+function breakdownOf(s: GameState, worth: number) {
+  const st = s.lastSettlement!;
+  const prev = s.history.length ? s.history[s.history.length - 1].netWorth : START_CASH;
+  const investment = st.income.interest + st.income.bond + st.income.dividend + st.income.rent;
+  const otherIncome = Object.values(st.income).reduce((a, b) => a + b, 0) - investment;
+  const spending = Object.values(st.expense).reduce((a, b) => a + b, 0) - st.loanPrincipal;
+  const work = otherIncome - spending;
+  const revaluation = s.marketChange
+    ? Object.values(s.marketChange.amounts).reduce((a, b) => a + b, 0)
+    : 0;
+  return { work, investment, revaluation, other: worth - prev - work - investment - revaluation };
 }
 
 /** 年末決算を見たあと、次の年へ。65歳なら終了 */
@@ -770,6 +877,7 @@ export function changePolicy(state: GameState, policy: Policy): GameState {
   if (!validatePolicy(policy)) throw new Error('invalid policy');
   const s = clone(state);
   s.player.policy = structuredClone(policy);
+  rebalance(s);
   return s;
 }
 

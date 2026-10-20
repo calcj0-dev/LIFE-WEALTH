@@ -1,0 +1,26 @@
+import { useState } from 'react';
+import type { YearRecord } from '../game/types';
+import { t } from '../i18n';
+import { AssetChart } from './AssetChart';
+import { PriceChart, ReturnTable } from './PriceCharts';
+
+const TABS = ['mine', 'prices', 'returns'] as const;
+
+/** 「わたしの資産」「値動きのチャート」「年利の実績」を切り替えて見る */
+export function HistoryTabs({ history }: { history: YearRecord[] }) {
+  const [tab, setTab] = useState<(typeof TABS)[number]>('mine');
+  return (
+    <div>
+      <div className="tabs" role="tablist">
+        {TABS.map((id) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? undefined : 'secondary'} onClick={() => setTab(id)}>
+            {t(`history.tab.${id}`)}
+          </button>
+        ))}
+      </div>
+      {tab === 'mine' && <AssetChart history={history} />}
+      {tab === 'prices' && <PriceChart history={history} />}
+      {tab === 'returns' && <ReturnTable history={history} />}
+    </div>
+  );
+}

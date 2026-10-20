@@ -20,6 +20,8 @@ export interface JobDef {
   canBePromoted: boolean;
   /** 転職先に選べるか */
   canTransferTo: boolean;
+  /** 職業の固定費（年、万円）。通勤、機材、トレーニングなど */
+  fixedCost: number;
 }
 
 export const JOBS: Record<JobId, JobDef> = {
@@ -36,6 +38,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    fixedCost: 10,
   },
   civil: {
     id: 'civil',
@@ -50,6 +53,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    fixedCost: 10,
   },
   engineer: {
     id: 'engineer',
@@ -64,6 +68,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    fixedCost: 20,
   },
   athlete: {
     id: 'athlete',
@@ -78,6 +83,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 2,
     canBePromoted: false,
     canTransferTo: false,
+    fixedCost: 100,
   },
   youtuber: {
     id: 'youtuber',
@@ -92,6 +98,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: false,
     canTransferTo: true,
+    fixedCost: 30,
   },
   freeter: {
     id: 'freeter',
@@ -106,6 +113,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: false,
     canTransferTo: true,
+    fixedCost: 0,
   },
 };
 

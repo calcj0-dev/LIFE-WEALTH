@@ -1,10 +1,213 @@
+import { useEffect, useRef, useState } from 'react';
+import { Board } from './board/Board';
+import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
+import { END_AGE } from './data/rules';
+import { choose, continueYear, createGame, nextYear, roll, setPolicy } from './game/engine';
+import type { GameState } from './game/types';
+import { t } from './i18n';
+import { loadGame, saveGame } from './save';
+import { Hud, SidePanel } from './ui/GameScreen';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, isNotableYearEnd } from './ui/Modals';
+import { newsById } from './game/market';
+import { MoneyDelta } from './ui/Delta';
+import { Toasts } from './ui/Toasts';
+import { Result } from './ui/Result';
+import { AssetManager } from './ui/AssetManager';
+import { BudgetCard, JobRoulette, PolicySetup } from './ui/Setup';
 import { APP_VERSION } from './version';
 
+/** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
+const SPIN_MS = SPIN_DURATION_MS + 300;
+const STEP_MS = 280;
+/** ふつうの年のニュースと決算を、自動で進めるまでの時間（ミリ秒） */
+const AUTO_YEAR_MS = 1200;
+/** 画面の上のお知らせを出しておく時間（ミリ秒） */
+const NOTE_MS = 2800;
+
+interface Note {
+  id: number;
+  text: string;
+  money?: number;
+}
+
+
 export function App() {
+  const [game, setGameState] = useState<GameState | null>(null);
+  const [saved, setSaved] = useState<GameState | null>(() => loadGame());
+  const [spinning, setSpinning] = useState(false);
+  /** 駒の移動中に表示するマス（移動していないときは null） */
+  const [movingPos, setMovingPos] = useState<number | null>(null);
+  /** 出たばかりの出目（ルーレットが回っている間も表示する） */
+  const [spinValue, setSpinValue] = useState<number | null>(null);
+  const [overview, setOverview] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showManager, setShowManager] = useState(false);
+  /** 画面の上のお知らせ（ふつうの年のニュースと決算） */
+  const [notes, setNotes] = useState<Note[]>([]);
+  /** 見返し用: 今年のニュース、去年の決算 */
+  const [viewNews, setViewNews] = useState(false);
+  const [viewYearEnd, setViewYearEnd] = useState(false);
+  const [lastYearEnd, setLastYearEnd] = useState<GameState | null>(null);
+  const noteId = useRef(1);
+  const timers = useRef<number[]>([]);
+
+  const pushNote = (note: Omit<Note, 'id'>) => {
+    const id = noteId.current++;
+    setNotes((ns) => [...ns, { ...note, id }].slice(-3));
+    timers.current.push(window.setTimeout(() => setNotes((ns) => ns.filter((n) => n.id !== id)), NOTE_MS));
+  };
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const busyNow = spinning || movingPos !== null;
+  const paused = showManager || showHistory || viewNews || viewYearEnd;
+
+  // 年末決算を見返せるように、その年の決算の状態を残しておく
+  useEffect(() => {
+    if (game?.phase === 'yearEnd') setLastYearEnd(game);
+  }, [game]);
+
+  // ふつうの年のニュースと決算は、ポップアップを出さずに、お知らせだけ出して自動で進む（design.md 2.2）
+  useEffect(() => {
+    if (!game || busyNow || paused) return;
+    if (game.phase === 'yearStart' && !isImportantNews(game)) {
+      const id = window.setTimeout(() => {
+        pushNote({ text: t('note.news', { age: game.player.age, title: t(`news.${newsById(game.newsId!).id}.title`) }) });
+        setGame(continueYear(game));
+      }, AUTO_YEAR_MS);
+      return () => clearTimeout(id);
+    }
+    if (game.phase === 'yearEnd' && !isNotableYearEnd(game, game.player.age >= END_AGE)) {
+      const id = window.setTimeout(() => {
+        pushNote({ text: t('note.yearEnd', { age: game.player.age }), money: game.lastSettlement!.net });
+        setGame(nextYear(game));
+      }, AUTO_YEAR_MS);
+      return () => clearTimeout(id);
+    }
+  }, [game, busyNow, paused]);
+
+
+  const setGame = (s: GameState | null) => {
+    if (!s || s.phase === 'setupJob') setLastYearEnd(null);
+    setGameState(s);
+    saveGame(s && s.phase !== 'finished' ? s : null);
+    if (!s || s.phase === 'finished') setSaved(null);
+  };
+
+  const later = (fn: () => void, ms: number) => {
+    timers.current.push(window.setTimeout(fn, ms));
+  };
+
+  const spin = () => {
+    if (!game || game.phase !== 'roll' || spinning) return;
+    const next = roll(game);
+    setSpinValue(next.lastRoll);
+    setSpinning(true);
+    setOverview(false);
+    later(() => {
+      setSpinning(false);
+      next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
+      later(() => {
+        setMovingPos(null);
+        setGame(next);
+      }, STEP_MS * (next.lastPath.length + 1));
+    }, SPIN_MS);
+  };
+
+  const busy = spinning || movingPos !== null;
+
+  let screen: React.ReactNode;
+  if (!game) {
+    screen = (
+      <div className="center-screen">
+        <h1 className="logo">
+          LIFE <span>&amp;</span> WEALTH
+        </h1>
+        <p className="subtitle">{t('app.subtitle')}</p>
+        <div className="button-row">
+          <button onClick={() => setGame(createGame(Math.floor(Math.random() * 2 ** 31)))}>{t('title.new')}</button>
+          {saved && (
+            <button className="secondary" onClick={() => setGame(saved)}>
+              {t('title.continue')}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  } else if (game.phase === 'setupJob') {
+    screen = <JobRoulette s={game} onDone={setGame} />;
+  } else if (game.phase === 'setupPolicy') {
+    screen = (
+      <PolicySetup
+        header={<BudgetCard s={game} title={t('budget.title')} />}
+        doneLabel={t('setup.policy.start')}
+        onDone={(p) => setGame(setPolicy(game, p))}
+      />
+    );
+  } else if (game.phase === 'finished') {
+    screen = <Result s={game} onAgain={() => setGame(null)} />;
+  } else {
+    screen = (
+      <div className="game">
+        <Hud s={game} />
+        <div className="game-body">
+          <div className="board-area">
+            <Board position={movingPos ?? game.player.position} overview={overview} />
+            <div className="board-toolbar">
+              <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
+                {t(overview ? 'board.follow' : 'board.overview')}
+              </button>
+            </div>
+            <Roulette
+              value={busy || game.phase === 'decision' ? spinValue : null}
+              spinning={spinning}
+              canSpin={game.phase === 'roll' && !busy}
+              onSpin={spin}
+            />
+          </div>
+          <SidePanel
+            s={game}
+            onOpenHistory={() => setShowHistory(true)}
+            onOpenManager={() => setShowManager(true)}
+            onOpenNews={game.newsId ? () => setViewNews(true) : undefined}
+            onOpenYearEnd={lastYearEnd ? () => setViewYearEnd(true) : undefined}
+          />
+        </div>
+        <Toasts log={game.log} />
+        {notes.length > 0 && (
+          <div className="notes" aria-live="polite">
+            {notes.map((n) => (
+              <div key={n.id} className="note">
+                {n.text}
+                {n.money !== undefined && <MoneyDelta v={n.money} />}
+              </div>
+            ))}
+          </div>
+        )}
+        {viewNews && <NewsModal s={game} closeOnly onNext={() => setViewNews(false)} />}
+        {viewYearEnd && lastYearEnd && (
+          <YearEndModal s={lastYearEnd} last={false} closeOnly onNext={() => setViewYearEnd(false)} />
+        )}
+        {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
+        {showManager && <AssetManager s={game} onChange={setGame} onClose={() => setShowManager(false)} />}
+        {!busy && !paused && game.phase === 'yearStart' && isImportantNews(game) && (
+          <NewsModal s={game} onNext={() => setGame(continueYear(game))} onOpenManager={() => setShowManager(true)} />
+        )}
+        {!busy && !paused && game.phase === 'decision' && (
+          <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />
+        )}
+        {!busy && !paused && game.phase === 'yearEnd' && isNotableYearEnd(game, game.player.age >= END_AGE) && (
+          <YearEndModal s={game} last={game.player.age >= END_AGE} onNext={() => setGame(nextYear(game))} />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: 24 }}>
-      <div style={{ position: 'absolute', top: 12, right: 16, fontSize: 12, color: '#666' }}>v{APP_VERSION}</div>
-      <h1>LIFE &amp; WEALTH</h1>
-    </main>
+    <>
+      {screen}
+      {!game && <div className="version">{`v${APP_VERSION}`}</div>}
+      <div className="rotate-notice">{t('app.rotate')}</div>
+    </>
   );
 }

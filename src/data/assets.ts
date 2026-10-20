@@ -45,8 +45,31 @@ export const ECONOMY_TRANSITION: Record<Economy, Record<Economy, number>> = {
 
 export type PolicyPresetId = 'safe' | 'balanced' | 'aggressive';
 
+/** 銀行預金も含めた割合（合計100%）。投資方針の画面に見せる形 */
+export type Shares = Record<'deposit' | AssetId, number>;
+
+/** 割合（%）から投資方針を作る */
+export function policyFromShares(kind: Policy['kind'], shares: Shares): Policy {
+  const invested = 100 - shares.deposit;
+  const allocation = { bond: 0, gold: 0, fund: 0, stock: 0 };
+  if (invested > 0) for (const id of ASSET_IDS) allocation[id] = shares[id] / invested;
+  else allocation.fund = 1;
+  return { kind, investRatio: invested / 100, allocation };
+}
+
+/** 投資方針を、銀行預金も含めた割合（%）にする */
+export function sharesOf(policy: Policy): Shares {
+  const shares: Shares = { deposit: Math.round((1 - policy.investRatio) * 100), bond: 0, gold: 0, fund: 0, stock: 0 };
+  for (const id of ASSET_IDS) shares[id] = Math.round(policy.investRatio * policy.allocation[id] * 100);
+  return shares;
+}
+
+/** 自動投資の型（design.md 6.3） */
 export const POLICY_PRESETS: Record<PolicyPresetId, Policy> = {
-  safe: { investRatio: 0.3, allocation: { bond: 0.7, gold: 0.3, fund: 0, stock: 0 } },
-  balanced: { investRatio: 0.5, allocation: { bond: 0.2, gold: 0.1, fund: 0.7, stock: 0 } },
-  aggressive: { investRatio: 0.7, allocation: { bond: 0, gold: 0, fund: 0.6, stock: 0.4 } },
+  safe: policyFromShares('safe', { deposit: 70, bond: 20, gold: 10, fund: 0, stock: 0 }),
+  balanced: policyFromShares('balanced', { deposit: 50, bond: 10, gold: 5, fund: 35, stock: 0 }),
+  aggressive: policyFromShares('aggressive', { deposit: 30, bond: 0, gold: 0, fund: 40, stock: 30 }),
 };
+
+/** 預金だけ（初期投資なし）。銀行預金100% */
+export const NO_INVEST_POLICY: Policy = policyFromShares('none', { deposit: 100, bond: 0, gold: 0, fund: 0, stock: 0 });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { POLICY_PRESETS } from '../data/assets';
+import { NO_INVEST_POLICY, POLICY_PRESETS, sharesOf } from '../data/assets';
 import { BOARD, MARRIAGE_STOP_INDEX, SQUARE_COUNTS } from '../data/board';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOB_IDS } from '../data/jobs';
 import { END_AGE, START_AGE } from '../data/rules';
 import { playGame } from './autoplay';
-import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy, trade } from './engine';
-import { createLoan, netWorth, payLoanYear } from './finance';
+import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy, trade, changePolicy } from './engine';
+import { assetValue, createLoan, financialAssets, netWorth, payLoanYear } from './finance';
 import { securityPoints } from './score';
 import type { GameState } from './types';
 
@@ -60,9 +60,10 @@ describe('お金の計算', () => {
   it('同じ年に買ってすぐ売ると、金額は元に戻る', () => {
     const s0 = started();
     const before = s0.player.cash;
-    const s1 = trade(trade(s0, 'fund', 30), 'fund', -1000);
+    const fundBefore = s0.player.holdings.fund;
+    const s1 = trade(trade(s0, 'fund', 10), 'fund', -10);
     expect(s1.player.cash).toBeCloseTo(before, 6);
-    expect(s1.player.holdings.fund).toBe(0);
+    expect(s1.player.holdings.fund).toBeCloseTo(fundBefore, 6);
   });
   it('預金より多くは買えない', () => {
     const s = trade(started(), 'gold', 10000);
@@ -70,10 +71,31 @@ describe('お金の計算', () => {
   });
 });
 
+describe('投資方針', () => {
+  it('方針を変えると、今のお金と資産がその割合になるように売り買いする', () => {
+    let s = continueYear(started(9));
+    s = { ...s, player: { ...s.player, cash: 1000, holdings: { bond: 0, gold: 0, fund: 0, stock: 0 } } };
+    const total = s.player.cash;
+    const r = changePolicy(s, POLICY_PRESETS.aggressive);
+    const shares = sharesOf(POLICY_PRESETS.aggressive);
+    expect(assetValue(r, 'fund')).toBeCloseTo((total * shares.fund) / 100, 0);
+    expect(r.player.cash).toBeGreaterThan((total * shares.deposit) / 100 - 1);
+    const back = changePolicy(r, NO_INVEST_POLICY);
+    expect(financialAssets(back)).toBeCloseTo(0, 6);
+    expect(back.player.cash).toBeCloseTo(netWorth(r), 6);
+  });
+  it('型の割合は、銀行預金を含めて合計100%', () => {
+    for (const p of [...Object.values(POLICY_PRESETS), NO_INVEST_POLICY]) {
+      const sh = sharesOf(p);
+      expect(sh.deposit + sh.bond + sh.gold + sh.fund + sh.stock).toBe(100);
+    }
+  });
+});
+
 describe('借金と支払い', () => {
   it('預金が足りないときは、先に資産を売り、足りない分だけ利息なしで借りる', () => {
     let s = started();
-    s = { ...s, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...s.player, cash: -2000, holdings: { ...s.player.holdings, bond: 40 } } };
+    s = { ...s, phase: 'decision', decision: { kind: 'notice' }, decisionFrom: 'square', player: { ...s.player, cash: -2000, holdings: { bond: 40, gold: 0, fund: 0, stock: 0 } } };
     const r = choose(s, 'ok');
     expect(r.player.holdings.bond).toBe(0);
     expect(r.player.cash).toBe(0);
@@ -117,6 +139,18 @@ describe('ゲームの進行', () => {
     expect(s.history[0].age).toBe(START_AGE);
     expect(s.history.at(-1)!.age).toBe(END_AGE);
     expect(s.score).not.toBeNull();
+  });
+  it('純資産が増えた・減った理由の合計は、その年の純資産の増減と一致する', () => {
+    const s = playGame(21, 'employee', 'aggressive');
+    let prev = 50;
+    for (const h of s.history) {
+      const b = h.breakdown;
+      expect(b.work + b.investment + b.revaluation + b.other).toBeCloseTo(h.netWorth - prev, 6);
+      prev = h.netWorth;
+    }
+    // 出来事などは、働いた分や値上がりに比べて小さいはず（計算の取りこぼしがないことの目安）
+    const others = s.history.map((h) => Math.abs(h.breakdown.other));
+    expect(Math.max(...others)).toBeLessThan(2000);
   });
   it('同じシード値なら、同じ結果になる', () => {
     const a = playGame(42, 'engineer', 'aggressive');

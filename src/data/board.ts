@@ -56,21 +56,62 @@ function buildOrder(): SquareType[] {
   return result;
 }
 
-/** 仮の地図上の位置（段階4で地図に合わせて置き直す） */
-function positionOf(i: number, total: number): { x: number; y: number } {
-  const t = (i / total) * Math.PI * 2;
-  return {
-    x: Math.round(500 + 420 * Math.cos(t) + 40 * Math.cos(3 * t)),
-    y: Math.round(500 + 300 * Math.sin(t) + 40 * Math.sin(2 * t)),
-  };
+/**
+ * 盤面の道。1マス分の長さを1とした座標で、曲がりくねった1本の道を折れ線で表す。
+ * マスはこの道の上に等間隔に並べるので、マスの数を変えても形は崩れない。
+ */
+const ROUTE: [number, number][] = [
+  [1, 0], [14, 0], [14, 2], [1, 2], [1, 4], [14, 4], [14, 6], [-1, 6], [-1, 0], [1, 0],
+];
+
+/** 1マス分の長さ（画面上の大きさ） */
+const UNIT = 130;
+const MARGIN = 150;
+
+/** 盤面全体の大きさ */
+export const BOARD_WORLD = {
+  width: (14 - -1) * UNIT + MARGIN * 2,
+  height: 6 * UNIT + MARGIN * 2,
+};
+
+/** 座標を画面上の位置にする */
+export function toWorld(x: number, y: number): { x: number; y: number } {
+  return { x: (x + 1) * UNIT + MARGIN, y: y * UNIT + MARGIN };
 }
+
+/** 道に沿って、マスを等間隔に置く */
+function positionsAlongRoute(count: number): { x: number; y: number }[] {
+  const segs = ROUTE.slice(1).map((p, i) => {
+    const a = ROUTE[i];
+    return { a, b: p, len: Math.hypot(p[0] - a[0], p[1] - a[1]) };
+  });
+  const total = segs.reduce((s, x) => s + x.len, 0);
+  const result: { x: number; y: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    let d = (i / count) * total;
+    for (const seg of segs) {
+      if (d <= seg.len) {
+        const r = d / seg.len;
+        const pos = toWorld(seg.a[0] + (seg.b[0] - seg.a[0]) * r, seg.a[1] + (seg.b[1] - seg.a[1]) * r);
+        result.push({ x: Math.round(pos.x), y: Math.round(pos.y) });
+        break;
+      }
+      d -= seg.len;
+    }
+  }
+  return result;
+}
+
+/** 道の折れ線（画面上の位置） */
+export const ROUTE_POINTS = ROUTE.map(([x, y]) => toWorld(x, y));
 
 export function buildBoard(): Square[] {
   const types = buildOrder();
+  const positions = positionsAlongRoute(types.length);
   return types.map((type, i) => ({
     id: i,
     type,
-    ...positionOf(i, types.length),
+    ...positions[i],
     next: [(i + 1) % types.length],
   }));
 }

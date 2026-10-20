@@ -1,3 +1,5 @@
+import type { JobId } from '../game/types';
+
 // ゲーム全体のルールの数値（仮）。金額は万円。
 // 数値は区切りのよい値にする（CLAUDE.md「数値の決め方」）。
 
@@ -79,11 +81,26 @@ export const DEBT_HAPPINESS = -3;
 /** 老後の安心ポイント = SCALE × log10(1 + 純資産 ÷ UNIT) */
 export const SECURITY = { scale: 100, unit: 100 };
 
-/** ランクの基準点（段階1のシミュレーションで調整） */
-export const RANKS: { rank: string; min: number }[] = [
-  { rank: 'S', min: 350 },
-  { rank: 'A', min: 300 },
-  { rank: 'B', min: 250 },
-  { rank: 'C', min: 150 },
+export type RankTable = { rank: string; min: number }[];
+
+/** ランクの基準点を、S・A・B・C の下限から作る */
+const ranks = (s: number, a: number, b: number, c: number): RankTable => [
+  { rank: 'S', min: s },
+  { rank: 'A', min: a },
+  { rank: 'B', min: b },
+  { rank: 'C', min: c },
   { rank: 'D', min: -Infinity },
 ];
+
+/**
+ * スタート時の職業ごとのランクの基準点（design.md 9章）。
+ * 自動シミュレーションで、どの職業でも S が約5%、D が約20%になるように決める（npm run simulate の「職業ごとのランクの基準」）。
+ */
+export const RANKS_BY_JOB: Record<JobId, RankTable> = {
+  employee: ranks(360, 310, 260, 200),
+  civil: ranks(350, 310, 250, 190),
+  engineer: ranks(360, 310, 260, 210),
+  athlete: ranks(380, 320, 260, 180),
+  youtuber: ranks(380, 320, 240, 70),
+  freeter: ranks(330, 270, 150, -240),
+};

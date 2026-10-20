@@ -17,7 +17,7 @@ export type SquareType =
 export interface Square {
   id: number;
   type: SquareType;
-  /** 地図上の位置（0〜1000） */
+  /** 盤面上の位置 */
   x: number;
   y: number;
   /** 次のマス。将来の分かれ道に備えて複数持てる */
@@ -63,7 +63,11 @@ export interface Spouse {
   halfThisYear: boolean;
 }
 
+/** 投資方針の種類。safe・balanced・aggressive は自動投資の型 */
+export type PolicyKind = 'safe' | 'balanced' | 'aggressive' | 'manual' | 'none';
+
 export interface Policy {
+  kind?: PolicyKind;
   /** 余ったお金のうち投資に回す割合（0〜1）。残りは銀行預金に残る */
   investRatio: number;
   /** 投資に回すお金の配分（合計1） */
@@ -73,6 +77,8 @@ export interface Policy {
 export interface Player {
   age: number;
   jobId: JobId;
+  /** ゲームの始めにルーレットで決まった職業（ランクの基準に使う） */
+  startJobId?: JobId;
   salary: number;
   /** その年は給料が入らない（失業、重い病気） */
   noIncomeThisYear: boolean;
@@ -124,6 +130,8 @@ export interface Settlement {
   expense: Record<string, number>;
   net: number;
   invested: number;
+  /** ローン返済のうち、元本（借金が減った分） */
+  loanPrincipal: number;
   /** お金が足りず、売った資産の額 */
   sold: number;
   /** それでも足りず、借りた額 */
@@ -139,6 +147,30 @@ export interface YearRecord {
   happiness: number;
   economy: Economy;
   newsId: string;
+  /** 純資産が増えた・減った理由 */
+  breakdown: NetWorthBreakdown;
+  /** その年の価格（値動きのチャートと年利の表に使う。古いセーブにはない） */
+  market?: { prices: Record<AssetId, number>; realEstateIndex: number; livingIndex: number; depositRate: number };
+}
+
+export interface NetWorthBreakdown {
+  /** 働いて残したお金（給料など − 生活費などの支出。ローンは利息だけを支出に数える） */
+  work: number;
+  /** 投資の収入（利息・配当・家賃） */
+  investment: number;
+  /** 資産の値上がり・値下がり */
+  revaluation: number;
+  /** 出来事など（マスの出来事、ギャンブル、不動産の売り買いの費用など） */
+  other: number;
+}
+
+/** 年初の値動き。ニュースの画面で、自分の資産がいくら動いたかを見せる */
+export interface MarketChange {
+  prevEconomy: Economy;
+  /** 値動きの割合 */
+  rates: Record<AssetId | 'realEstate', number>;
+  /** 自分の資産が動いた金額 */
+  amounts: Record<AssetId | 'realEstate', number>;
 }
 
 export interface Stats {
@@ -179,6 +211,10 @@ export interface DecisionOption {
   key: string;
   params?: Record<string, number | string>;
   enabled: boolean;
+  /** 選んだときにすぐ動くお金（分かるときだけ） */
+  cash?: number;
+  /** 選んだときに動く幸福ポイント（分かるときだけ） */
+  happiness?: number;
 }
 
 export type Phase =
@@ -191,6 +227,8 @@ export type Phase =
   | 'finished';
 
 export interface Score {
+  /** ランクの基準にした職業 */
+  jobId?: JobId;
   happinessPoints: number;
   securityPoints: number;
   total: number;
@@ -222,4 +260,6 @@ export interface GameState {
   log: LogEntry[];
   stats: Stats;
   score: Score | null;
+  /** その年の年初の値動き */
+  marketChange?: MarketChange;
 }
