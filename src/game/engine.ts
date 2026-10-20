@@ -7,6 +7,10 @@ import { ALL_EVENTS, BAD_EVENTS, CARE, GOOD_EVENTS, LIFE_EVENTS, SICKNESS, SIDE_
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, GAMBLE_JACKPOT_HAPPINESS, type GambleId } from '../data/gamble';
 import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, JOB_IDS, salaryAtAge } from '../data/jobs';
 import {
+  BASE_INFLATION,
+  HAPPINESS_SCALE,
+  HOBBY_YEARLY_HAPPINESS,
+  PET_YEARLY_HAPPINESS,
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
   DEBT_HAPPINESS,
@@ -59,10 +63,12 @@ function log(s: GameState, key: string, extra: { params?: Record<string, number 
   s.log.push({ age: s.player.age, key, ...extra });
 }
 
+/** 幸福ポイントを足す。点数は倍率（HAPPINESS_SCALE）をかけてから足す */
 function addHappiness(s: GameState, amount: number, key: string) {
   if (amount === 0) return;
-  s.player.happiness += amount;
-  log(s, key, { happiness: amount });
+  const scaled = amount * HAPPINESS_SCALE;
+  s.player.happiness += scaled;
+  log(s, key, { happiness: scaled });
 }
 
 function addCash(s: GameState, amount: number, key: string) {
@@ -111,6 +117,7 @@ export function createGame(seed: number): GameState {
       economy: 'normal',
       realEstateIndex: 1,
       livingIndex: 1,
+      wageIndex: 1,
     },
     newsId: null,
     lastRoll: null,
@@ -202,6 +209,8 @@ function startYear(s: GameState) {
       log(s, 'auto.senior');
     }
     p.children.forEach((c, i) => ageChild(s, c, i));
+    if (p.hobby) addHappiness(s, HOBBY_YEARLY_HAPPINESS, 'auto.hobbyYear');
+    if (p.petYears !== null) addHappiness(s, PET_YEARLY_HAPPINESS, 'auto.petYear');
     if (p.petYears !== null) {
       p.petYears += 1;
       if (p.petYears >= PET.years) {
@@ -220,9 +229,15 @@ function startYear(s: GameState) {
   s.phase = 'yearStart';
 }
 
+/** 給料の水準（物価に合わせて上がった分） */
+const wageIndex = (s: GameState) => s.market.wageIndex ?? 1;
+
 function growSalary(s: GameState) {
   const p = s.player;
   const job = JOBS[p.jobId];
+  // 物価に合わせて上がる分（設計書 7章）。昇給はこの上に乗る
+  p.salary *= 1 + BASE_INFLATION;
+  if (p.spouse && p.spouse.work !== 'none') p.spouse.income *= 1 + BASE_INFLATION;
   if (job.volatility > 0) {
     const r = job.growth + job.volatility * (nextRandom(s) * 2 - 1);
     p.salary *= 1 + r;
@@ -245,7 +260,7 @@ function ageChild(s: GameState, c: Child, index: number) {
     c.university === 'none' ? CHILD_INDEPENDENT_AGE_NO_UNIVERSITY : CHILD_INDEPENDENT_AGE;
   if (c.age >= independentAge && c.university !== null) {
     c.independent = true;
-    addHappiness(s, 5, 'auto.childIndependent');
+    addHappiness(s, 3, 'auto.childIndependent');
   }
 }
 
@@ -331,6 +346,8 @@ function canAfford(s: GameState, amount: number) {
 }
 
 const MARRIAGE_HAPPINESS = 15;
+/** 結婚しないときの幸福ポイント（自分の時間を大切にする）。独身でも既婚でも同じくらい幸福ポイントを稼げるようにするため */
+const DECLINE_MARRIAGE_HAPPINESS = 10;
 const LARGE_WEDDING_HAPPINESS = 5;
 const HOME_HAPPINESS = 10;
 
@@ -342,7 +359,7 @@ function previewOf(s: GameState, effects: Effect[]): { cash?: number; happiness?
     if (e.t === 'cash') cash += e.amount;
     else if (e.t === 'bonus') cash += s.player.salary * e.rate;
     else if (e.t === 'sideBusiness') cash -= SIDE_BUSINESS.cost;
-    else if (e.t === 'happiness') happiness += e.amount;
+    else if (e.t === 'happiness') happiness += e.amount * HAPPINESS_SCALE;
   }
   return { ...(cash ? { cash } : {}), ...(happiness ? { happiness } : {}) };
 }
@@ -377,11 +394,11 @@ export function getOptions(s: GameState): DecisionOption[] {
             params: { cost: WEDDING_COST[size] },
             enabled: canAfford(s, WEDDING_COST[size]),
             cash: -WEDDING_COST[size],
-            happiness: MARRIAGE_HAPPINESS + (size === 'large' ? LARGE_WEDDING_HAPPINESS : 0),
+            happiness: (MARRIAGE_HAPPINESS + (size === 'large' ? LARGE_WEDDING_HAPPINESS : 0)) * HAPPINESS_SCALE,
           });
         }
       }
-      opts.push({ id: 'decline', key: 'option.marry.decline', enabled: true });
+      opts.push({ id: 'decline', key: 'option.marry.decline', enabled: true, happiness: DECLINE_MARRIAGE_HAPPINESS * HAPPINESS_SCALE });
       return opts;
     }
     case 'life':
@@ -427,8 +444,8 @@ export function getOptions(s: GameState): DecisionOption[] {
       const fullCash = price * (1 + REAL_ESTATE.buyCostRate);
       const params = { price };
       return [
-        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: !hasHome(s) && canAfford(s, loanCash), cash: -loanCash, happiness: HOME_HAPPINESS },
-        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: !hasHome(s) && canAfford(s, fullCash), cash: -fullCash, happiness: HOME_HAPPINESS },
+        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: !hasHome(s) && canAfford(s, loanCash), cash: -loanCash, happiness: HOME_HAPPINESS * HAPPINESS_SCALE },
+        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: !hasHome(s) && canAfford(s, fullCash), cash: -fullCash, happiness: HOME_HAPPINESS * HAPPINESS_SCALE },
         { id: 'rentalLoan', key: 'option.realEstate.rentalLoan', params, enabled: canAfford(s, loanCash), cash: -loanCash },
         { id: 'rentalCash', key: 'option.realEstate.rentalCash', params, enabled: canAfford(s, fullCash), cash: -fullCash },
         { id: 'skip', key: 'option.skip', enabled: true },
@@ -449,7 +466,7 @@ export function getOptions(s: GameState): DecisionOption[] {
       return ATHLETE_NEXT_JOBS.map((j) => ({
         id: `job:${j}`,
         key: 'option.jobChange',
-        params: { job: j, salary: Math.round(JOBS[j].startSalary) },
+        params: { job: j, salary: Math.round(JOBS[j].startSalary * wageIndex(s)) },
         enabled: true,
       }));
   }
@@ -487,12 +504,12 @@ function applyDecision(s: GameState, d: Decision, optionId: string) {
       if (optionId === 'ok') return;
       if (optionId === 'decline') {
         p.marriageDeclined = true;
-        log(s, 'marriage.decline');
+        addHappiness(s, DECLINE_MARRIAGE_HAPPINESS, 'marriage.decline');
         return;
       }
       const [, work, size] = optionId.split(':') as [string, SpouseWork, 'small' | 'large'];
       p.married = true;
-      p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome : 0, halfThisYear: false };
+      p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome * wageIndex(s) : 0, halfThisYear: false };
       addCash(s, -WEDDING_COST[size], `marriage.wedding.${size}`);
       addHappiness(s, MARRIAGE_HAPPINESS, 'marriage.marry');
       if (size === 'large') addHappiness(s, LARGE_WEDDING_HAPPINESS, 'marriage.largeWedding');
@@ -542,7 +559,7 @@ function applyDecision(s: GameState, d: Decision, optionId: string) {
 function changeJob(s: GameState, jobId: JobId, fromStart: boolean) {
   const p = s.player;
   p.jobId = jobId;
-  p.salary = fromStart ? JOBS[jobId].startSalary : salaryAtAge(jobId, p.age);
+  p.salary = (fromStart ? JOBS[jobId].startSalary : salaryAtAge(jobId, p.age)) * wageIndex(s);
   p.athleteRetireAge = null;
   log(s, 'job.change', { params: { job: jobId } });
 }
@@ -585,7 +602,7 @@ function applyEffect(s: GameState, e: Effect, key: string) {
     case 'spousePart':
       if (p.spouse) {
         p.spouse.work = 'part';
-        p.spouse.income = SPOUSE.partIncome;
+        p.spouse.income = SPOUSE.partIncome * wageIndex(s);
       }
       log(s, key);
       return;
@@ -692,7 +709,7 @@ function livingCost(s: GameState): number {
   const kids = p.children.filter((c) => !c.independent).length;
   let base = (p.married ? LIVING_COST.couple : LIVING_COST.single) + kids * LIVING_COST.perChild;
   if (hasHome(s)) base -= LIVING_COST.homeOwnerDiscount;
-  return base * s.market.livingIndex;
+  return base * JOBS[p.jobId].livingRate * s.market.livingIndex;
 }
 
 function educationCost(s: GameState): number {
@@ -817,6 +834,8 @@ function finalizeYear(s: GameState) {
     economy: s.market.economy,
     newsId: s.newsId ?? '',
     breakdown: breakdownOf(s, worth),
+    incomeTotal: s.lastSettlement ? Object.values(s.lastSettlement.income).reduce((a, b) => a + b, 0) : 0,
+    expenseTotal: s.lastSettlement ? Object.values(s.lastSettlement.expense).reduce((a, b) => a + b, 0) : 0,
     market: {
       prices: { ...s.market.prices },
       realEstateIndex: s.market.realEstateIndex,

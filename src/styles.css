@@ -904,3 +904,115 @@ details summary {
 .note .delta.minus {
   color: #ffb3b3;
 }
+
+/* ---------------- 自動で閉じるポップアップと、できごとの履歴 */
+
+.auto-overlay {
+  background: rgba(45, 42, 50, 0.2);
+  cursor: pointer;
+}
+.auto-popup {
+  width: min(480px, 100%);
+  animation: toast-in 0.25s ease-out;
+}
+.auto-bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.auto-bar div {
+  height: 100%;
+  background: var(--primary);
+  animation-name: auto-bar;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes auto-bar {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+.auto-hint {
+  text-align: right;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.feed-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100%);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  animation: feed-in 0.25s ease-out;
+}
+@keyframes feed-in {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+}
+.feed-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.feed-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.feed-list {
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.feed-year {
+  border-top: 2px solid var(--line);
+  padding: 6px 0;
+}
+.feed-year h3 {
+  margin: 2px 0 4px;
+  font-size: 14px;
+  color: var(--primary);
+}
+.feed-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: #f8f5ef;
+  color: var(--text);
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 3px 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+.feed-item span:first-child {
+  flex: 1;
+}
+.feed-item.static {
+  background: transparent;
+  font-weight: 500;
+}
+.feed-arrow {
+  color: var(--text-sub);
+  font-size: 11px;
+}
+.feed-detail {
+  padding: 6px 10px 8px;
+  font-size: 14px;
+}
+.panel-buttons .feed-button {
+  font-weight: 800;
+}

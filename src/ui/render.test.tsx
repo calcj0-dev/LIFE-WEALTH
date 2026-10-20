@@ -13,6 +13,7 @@ import { Result } from './Result';
 import { PriceChart, ReturnTable } from './PriceCharts';
 import { BudgetCard, JobRoulette, PolicySetup } from './Setup';
 import { AssetManager } from './AssetManager';
+import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './Feed';
 import { HappinessList, LedgerTable, NetWorthTable } from './Ledger';
 
 const noop = () => {};
@@ -39,6 +40,7 @@ describe('画面', () => {
     let s: GameState = setPolicy(chooseJob(createGame(5), 'employee'), POLICY_PRESETS.balanced);
     for (let year = 0; year < 44; year++) {
       expect(renderToString(<NewsModal s={s} onNext={noop} />)).toContain('ニュース');
+      expect(renderToString(<NewsBrief s={s} />)).toContain('ニュース');
       s = continueYear(s);
       while (s.phase === 'decision') {
         renderToString(<DecisionModal s={s} onChoose={noop} />);
@@ -54,7 +56,9 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       }
       renderToString(<Hud s={s} />);
-      expect(renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} onOpenNews={noop} onOpenYearEnd={noop} />)).toContain('今年の家計の予定');
+      expect(renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} onOpenFeed={noop} />)).toContain('できごとの履歴');
+      renderToString(<FeedPanel s={s} onClose={noop} />);
+      renderToString(<AutoPopup onClose={noop}><YearEndBrief s={s} /></AutoPopup>);
       renderToString(<YearEndModal s={s} last={false} closeOnly onNext={noop} />);
       renderToString(<AssetManager s={s} onChange={noop} onClose={noop} />);
       renderToString(<HistoryModal s={s} onClose={noop} />);

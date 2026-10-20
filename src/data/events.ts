@@ -75,12 +75,12 @@ export const LIFE_EVENTS: EventDef[] = [
     options: (s) =>
       s.player.spouse?.work === 'full'
         ? [
-            { id: 'birthStay', effects: [{ t: 'birth', spouse: 'stay' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 15 }] },
-            { id: 'birthLeave', effects: [{ t: 'birth', spouse: 'leave' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 15 }] },
+            { id: 'birthStay', effects: [{ t: 'birth', spouse: 'stay' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 10 }] },
+            { id: 'birthLeave', effects: [{ t: 'birth', spouse: 'leave' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 10 }] },
             skip,
           ]
         : [
-            { id: 'birth', effects: [{ t: 'birth', spouse: 'stay' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 15 }] },
+            { id: 'birth', effects: [{ t: 'birth', spouse: 'stay' }, { t: 'cash', amount: -BIRTH_COST }, { t: 'happiness', amount: 10 }] },
             skip,
           ],
   },
@@ -100,7 +100,7 @@ export const LIFE_EVENTS: EventDef[] = [
     id: 'promotion',
     weight: (s) => (JOBS[s.player.jobId].canBePromoted && employed(s) ? 2 : 0),
     options: [
-      { id: 'promotionAccept', effects: [{ t: 'salaryRate', rate: 0.1 }] },
+      { id: 'promotionAccept', effects: [{ t: 'salaryRate', rate: 0.05 }] },
       { id: 'promotionDecline', effects: [{ t: 'happiness', amount: 5 }] },
     ],
   },
@@ -143,7 +143,7 @@ export const LIFE_EVENTS: EventDef[] = [
     id: 'study',
     weight: (s) => (age(s) <= 50 ? 1 : 0),
     options: [
-      { id: 'studyDo', effects: [{ t: 'cash', amount: -30 }, { t: 'salaryRate', rate: 0.05 }, { t: 'happiness', amount: 3 }] },
+      { id: 'studyDo', effects: [{ t: 'cash', amount: -30 }, { t: 'salaryRate', rate: 0.03 }, { t: 'happiness', amount: 3 }] },
       skip,
     ],
   },
@@ -173,7 +173,7 @@ export const LIFE_EVENTS: EventDef[] = [
   {
     id: 'childGrowth',
     weight: (s) => (s.player.children.some((c) => !c.independent) ? 2 : 0),
-    options: ok({ t: 'cash', amount: -10 }, { t: 'happiness', amount: 5 }),
+    options: ok({ t: 'cash', amount: -10 }, { t: 'happiness', amount: 3 }),
   },
   {
     id: 'spouseReturn',
@@ -193,7 +193,7 @@ export const GOOD_EVENTS: EventDef[] = [
       { id: 'bonusInvest', effects: [{ t: 'bonus', rate: 0.1 }, { t: 'investBonus', rate: 0.1 }] },
     ],
   },
-  { id: 'raise', weight: (s) => (employed(s) && JOBS[s.player.jobId].volatility === 0 ? 2 : 0), options: ok({ t: 'salaryRate', rate: 0.05 }) },
+  { id: 'raise', weight: (s) => (employed(s) && JOBS[s.player.jobId].volatility === 0 ? 2 : 0), options: ok({ t: 'salaryRate', rate: 0.03 }) },
   { id: 'prize', weight: () => 1, options: ok({ t: 'cash', amount: 10 }, { t: 'happiness', amount: 3 }) },
   { id: 'refund', weight: () => 1, options: ok({ t: 'cash', amount: 20 }) },
   { id: 'parentsGift', weight: (s) => (age(s) <= 40 ? 1 : 0), options: ok({ t: 'cash', amount: 50 }) },

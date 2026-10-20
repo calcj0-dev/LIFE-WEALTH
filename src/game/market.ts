@@ -117,6 +117,8 @@ export function updateMarket(s: GameState): NewsDef {
     m.depositRate = Math.min(DEPOSIT_RATE_MAX, Math.max(DEPOSIT_RATE_MIN, m.depositRate + news.depositRateChange));
   }
   m.livingIndex *= 1 + BASE_INFLATION + (news.inflation ?? 0);
+  // 給料は毎年の物価の上昇（BASE_INFLATION）にだけ合わせて上がる。物価上昇のニュースの上乗せには合わせない
+  m.wageIndex = (m.wageIndex ?? 1) * (1 + BASE_INFLATION);
 
   const rates = {} as Record<Key, number>;
   const amounts = {} as Record<Key, number>;

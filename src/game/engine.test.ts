@@ -51,10 +51,10 @@ describe('お金の計算', () => {
     expect(loan.balance).toBe(0);
     expect(paid).toBeGreaterThan(1800);
   });
-  it('老後の安心ポイント: 1,000万円で約104、1億円で約200、マイナスは対称', () => {
-    expect(securityPoints(1000)).toBeCloseTo(104.1, 1);
-    expect(securityPoints(10000)).toBeCloseTo(200.4, 1);
-    expect(securityPoints(-1000)).toBeCloseTo(-104.1, 1);
+  it('老後の安心ポイント: 1,000万円で約52、1億円で約100、マイナスは対称', () => {
+    expect(securityPoints(1000)).toBeCloseTo(52.1, 1);
+    expect(securityPoints(10000)).toBeCloseTo(100.2, 1);
+    expect(securityPoints(-1000)).toBeCloseTo(-52.1, 1);
     expect(securityPoints(0)).toBe(0);
   });
   it('同じ年に買ってすぐ売ると、金額は元に戻る', () => {
@@ -190,7 +190,7 @@ describe('ゲームの進行', () => {
     expect(s.player.marriageDeclined).toBe(true);
     s = nextYear(s);
     s = continueYear(s);
-    s = { ...s, player: { ...s.player, position: MARRIAGE_STOP_INDEX - 1, lap: 1 } };
+    s = { ...s, player: { ...s.player, position: MARRIAGE_STOP_INDEX - 1, lap: 1, cash: 100 } };
     s = roll(s);
     expect(getOptions(s).some((o) => o.id.startsWith('marry:'))).toBe(true);
     s = choose(s, 'marry:full:small');

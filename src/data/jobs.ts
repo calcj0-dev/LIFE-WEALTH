@@ -20,15 +20,22 @@ export interface JobDef {
   canBePromoted: boolean;
   /** 転職先に選べるか */
   canTransferTo: boolean;
+  /** 生活費の水準（1なら標準。フリーターは質素な暮らしで0.8） */
+  livingRate: number;
   /** 職業の固定費（年、万円）。通勤、機材、トレーニングなど */
   fixedCost: number;
 }
 
+/**
+ * 職業のデータ。給料は手取り（年、万円）。
+ * 国税庁「民間給与実態統計調査」令和6年分（正社員の平均給与 545万円、正社員以外 206万円、情報通信業 660万円。いずれも税込み）
+ * を、手取りに直した水準に合わせて丸めた。スポーツ選手と YouTuber は統計がないので、仮の値。
+ */
 export const JOBS: Record<JobId, JobDef> = {
   employee: {
     id: 'employee',
-    startSalary: 300,
-    growth: 0.015,
+    startSalary: 250,
+    growth: 0.01,
     volatility: 0,
     hitChance: 0,
     hitMultiplier: 1,
@@ -38,11 +45,12 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    livingRate: 1,
     fixedCost: 10,
   },
   civil: {
     id: 'civil',
-    startSalary: 280,
+    startSalary: 240,
     growth: 0.01,
     volatility: 0,
     hitChance: 0,
@@ -53,12 +61,13 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    livingRate: 1,
     fixedCost: 10,
   },
   engineer: {
     id: 'engineer',
-    startSalary: 340,
-    growth: 0.02,
+    startSalary: 280,
+    growth: 0.015,
     volatility: 0,
     hitChance: 0,
     hitMultiplier: 1,
@@ -68,6 +77,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: true,
     canTransferTo: true,
+    livingRate: 1,
     fixedCost: 20,
   },
   athlete: {
@@ -83,6 +93,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 2,
     canBePromoted: false,
     canTransferTo: false,
+    livingRate: 1,
     fixedCost: 100,
   },
   youtuber: {
@@ -98,11 +109,12 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: false,
     canTransferTo: true,
+    livingRate: 1,
     fixedCost: 30,
   },
   freeter: {
     id: 'freeter',
-    startSalary: 200,
+    startSalary: 170,
     growth: 0.005,
     volatility: 0,
     hitChance: 0,
@@ -113,6 +125,7 @@ export const JOBS: Record<JobId, JobDef> = {
     sicknessMultiplier: 1,
     canBePromoted: false,
     canTransferTo: true,
+    livingRate: 0.8,
     fixedCost: 0,
   },
 };

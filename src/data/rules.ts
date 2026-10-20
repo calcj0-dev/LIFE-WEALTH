@@ -13,22 +13,27 @@ export const ROULETTE_MAX = 6;
 export const SENIOR_AGE = 60;
 export const SENIOR_SALARY_RATE = 0.6;
 
+/** 生活費（年）。総務省「家計調査」2025年平均（単身 月17.3万円、二人以上の勤労者世帯 月34.6万円）をもとに丸めた */
 export const LIVING_COST = {
-  single: 160,
-  couple: 260,
-  perChild: 50,
+  single: 200,
+  couple: 320,
+  perChild: 40,
   /** 持ち家なら家賃分が減る */
-  homeOwnerDiscount: 60,
+  homeOwnerDiscount: 80,
 };
 
-/** 教育費（年）。子どもの年齢ごと */
+/**
+ * 教育費（年）。子どもの年齢ごと。
+ * 小中高: 文部科学省「子供の学習費調査」令和5年度（令和8年1月の訂正後）の学習費総額を丸めた。
+ * 大学: 日本政策金融公庫「教育費負担の実態調査」令和3年度の在学費用に、入学費用を4年でならして足した（私立は文系）。
+ */
 export const EDUCATION_COST = {
   /** 0〜5歳の保育料（共働きのときだけ） */
   daycare: 30,
-  elementary: { public: 30, private: 160 },
-  juniorHigh: { public: 50, private: 140 },
-  highSchool: { public: 50, private: 100 },
-  university: { national: 100, private: 150 },
+  elementary: { public: 35, private: 175 },
+  juniorHigh: { public: 55, private: 155 },
+  highSchool: { public: 60, private: 120 },
+  university: { national: 120, private: 170 },
 };
 
 export const CHILD_INDEPENDENT_AGE = 22;
@@ -39,8 +44,9 @@ export const BIRTH_COST = 50;
 
 export const WEDDING_COST = { small: 50, large: 300 };
 
+/** 配偶者の収入。共働きの手取りは、国税庁「民間給与実態統計調査」令和6年分の女性の平均給与（333万円、税込み）を手取りに直した水準に丸めた */
 export const SPOUSE = {
-  fullStartIncome: 280,
+  fullStartIncome: 240,
   fullGrowth: 0.015,
   partIncome: 100,
 };
@@ -60,7 +66,8 @@ export const INSURANCE = {
 };
 
 export const REAL_ESTATE = {
-  basePrice: 2000,
+  /** 住宅金融支援機構「フラット35利用者調査」2023年度の中古マンションの所要資金（3,037万円）をもとに丸めた */
+  basePrice: 3000,
   offerMin: 0.8,
   offerMax: 1.2,
   buyCostRate: 0.05,
@@ -75,11 +82,21 @@ export const REAL_ESTATE = {
   rental: { rate: 0.02, years: 30 },
 };
 
-/** 借金（カードローン）がある年の幸福ポイント */
-export const DEBT_HAPPINESS = -3;
+/**
+ * 幸福ポイントの倍率。出来事のデータには目安の点数（小3・中5・大10・特大15）を書き、ここで全体の重みを決める。
+ * 「人生で得た幸福ポイント」と「老後の安心ポイント」が、平均でだいたい同じになるように調整する（段階3）
+ */
+export const HAPPINESS_SCALE = 2;
+
+/** 借金（カードローン）がある年の幸福ポイント（倍率をかける前） */
+export const DEBT_HAPPINESS = -1;
 
 /** 老後の安心ポイント = SCALE × log10(1 + 純資産 ÷ UNIT) */
-export const SECURITY = { scale: 100, unit: 100 };
+export const SECURITY = { scale: 50, unit: 100 };
+
+/** 趣味を続けている間、ペットがいる間に、毎年もらえる幸福ポイント（倍率をかける前） */
+export const HOBBY_YEARLY_HAPPINESS = 2;
+export const PET_YEARLY_HAPPINESS = 1;
 
 export type RankTable = { rank: string; min: number }[];
 
@@ -97,10 +114,10 @@ const ranks = (s: number, a: number, b: number, c: number): RankTable => [
  * 自動シミュレーションで、どの職業でも S が約5%、D が約20%になるように決める（npm run simulate の「職業ごとのランクの基準」）。
  */
 export const RANKS_BY_JOB: Record<JobId, RankTable> = {
-  employee: ranks(360, 310, 260, 200),
-  civil: ranks(350, 310, 250, 190),
-  engineer: ranks(360, 310, 260, 210),
-  athlete: ranks(380, 320, 260, 180),
-  youtuber: ranks(380, 320, 240, 70),
-  freeter: ranks(330, 270, 150, -240),
+  employee: ranks(370, 280, 190, 70),
+  civil: ranks(380, 290, 210, 120),
+  engineer: ranks(350, 270, 170, 90),
+  athlete: ranks(400, 320, 220, 110),
+  youtuber: ranks(390, 290, 200, 60),
+  freeter: ranks(320, 240, 110, -120),
 };

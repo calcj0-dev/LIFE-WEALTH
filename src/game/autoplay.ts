@@ -15,34 +15,79 @@ export interface Strategy {
 
 export const DEFAULT_STRATEGY: Strategy = { marriage: 'random', gambleChance: 0.3, spendChance: 0.5 };
 
-/** 決定の選び方。乱数は Math.random ではなく、シード値から作った専用の乱数を使う */
+/**
+ * 決定の選び方。人間らしく、お金に余裕がないときは使わず、余裕があるときは楽しむ。
+ * 乱数は Math.random ではなく、シード値から作った専用の乱数を使う。
+ */
 function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy, rand: () => number): string {
   const enabled = options.filter((o) => o.enabled);
   const d = s.decision!;
+  const cash = s.player.cash;
   const skip = enabled.find((o) => o.id === 'skip' || o.id === 'decline');
-  if (d.kind === 'marriage' && enabled.length > 1) {
-    const marry = strategy.marriage === 'always' || (strategy.marriage === 'random' && rand() < 0.5);
-    if (!marry) return 'decline';
-  }
-  // 私立は、手元に余裕があるときだけ選ぶ
-  if (d.kind === 'school' || d.kind === 'university') {
-    const rich = s.player.cash > 1000;
-    const pool = enabled.filter((o) => rich || o.id !== 'private');
-    return pool[Math.floor(rand() * pool.length)].id;
-  }
-  if (d.kind === 'gamble') {
-    if (rand() >= strategy.gambleChance) return 'skip';
-    const bets = enabled.filter((o) => o.id !== 'skip' && Number(o.params?.bet) <= 10);
-    return bets.length ? bets[Math.floor(rand() * bets.length)].id : 'skip';
-  }
-  if (skip && (d.kind === 'life' || d.kind === 'realEstate' || d.kind === 'insurance')) {
-    if (rand() >= strategy.spendChance) return skip.id;
-    const others = enabled.filter((o) => o !== skip);
-    return others.length ? others[Math.floor(rand() * others.length)].id : skip.id;
-  }
   const others = enabled.filter((o) => o !== skip);
-  const pool = others.length ? others : enabled;
-  return pool[Math.floor(rand() * pool.length)].id;
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+  /** 支払いが預金の3分の1以下なら、余裕があるとみなす */
+  const affordable = (o: DecisionOption) => (o.cash ?? 0) >= 0 || -(o.cash ?? 0) * 3 <= cash;
+
+  switch (d.kind) {
+    case 'marriage': {
+      if (enabled.length <= 1) return enabled[0].id;
+      const marry = strategy.marriage === 'always' || (strategy.marriage === 'random' && rand() < 0.5);
+      if (!marry) return 'decline';
+      const work = rand() < 0.6 ? 'full' : 'none';
+      const size = cash > 1000 && rand() < 0.3 ? 'large' : 'small';
+      return (enabled.find((o) => o.id === `marry:${work}:${size}`) ?? others[0] ?? enabled[0]).id;
+    }
+    case 'school':
+    case 'university': {
+      // 私立は、手元に余裕があるときだけ選ぶ
+      const rich = cash > 1000;
+      return pick(enabled.filter((o) => rich || o.id !== 'private')).id;
+    }
+    case 'gamble': {
+      if (rand() >= strategy.gambleChance) return 'skip';
+      const bets = others.filter((o) => Number(o.params?.bet) <= (cash > 200 ? 10 : 1));
+      return bets.length ? pick(bets).id : 'skip';
+    }
+    case 'insurance': {
+      const medical = enabled.find((o) => o.id === 'medical');
+      if (medical && s.player.age <= 40 && rand() < 0.6) return medical.id;
+      const fire = enabled.find((o) => o.id === 'fire' || o.id === 'both');
+      if (fire && rand() < 0.7) return fire.id;
+      return 'skip';
+    }
+    case 'realEstate': {
+      const home = enabled.find((o) => o.id === 'homeLoan');
+      if (home && s.player.age >= 28 && s.player.age <= 45 && rand() < 0.4 && affordable(home)) return home.id;
+      const rental = enabled.find((o) => o.id === 'rentalLoan');
+      if (rental && rand() < 0.15 && affordable(rental)) return rental.id;
+      return 'skip';
+    }
+    case 'athleteRetire':
+      return pick(enabled).id;
+    default:
+      break;
+  }
+
+  if (d.eventId === 'jobChange') {
+    const better = others.filter((o) => Number(o.params?.salary ?? 0) > s.player.salary * 1.1);
+    return better.length && rand() < 0.5 ? pick(better).id : (skip ?? enabled[0]).id;
+  }
+  if (d.eventId === 'birth') {
+    return others.length && rand() < 0.6 ? (others.find((o) => o.id !== 'birthLeave' || rand() < 0.3) ?? others[0]).id : (skip ?? enabled[0]).id;
+  }
+  // 「見送る」がある出来事: 余裕があり、楽しめるものだけを、ときどき選ぶ
+  if (skip) {
+    const fun = others.filter((o) => (o.happiness ?? 0) > 0 && affordable(o));
+    return fun.length && rand() < strategy.spendChance ? pick(fun).id : skip.id;
+  }
+  // どちらにも良い面と悪い面がある選択: 幸福を選ぶか、お金を選ぶか
+  if (enabled.length > 1) {
+    const byHappiness = [...enabled].sort((a, b) => (b.happiness ?? 0) - (a.happiness ?? 0))[0];
+    const byCash = [...enabled].sort((a, b) => (b.cash ?? 0) - (a.cash ?? 0))[0];
+    return (rand() < 0.5 && affordable(byHappiness) ? byHappiness : byCash).id;
+  }
+  return enabled[0].id;
 }
 
 function makeRand(seed: number) {
