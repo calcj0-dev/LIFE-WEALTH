@@ -27,9 +27,9 @@ describe('画面', () => {
     expect(renderToString(<JobRoulette s={g} onDone={noop} />)).toContain('会社員');
     expect(renderToString(<BudgetCard s={chooseJob(g, 'athlete')} title="家計" />)).toContain('職業の固定費');
     const policy = renderToString(<PolicySetup doneLabel="始める" onDone={noop} />);
-    expect(policy).toContain('自動投資');
-    expect(policy).toContain('投資しない');
-    expect(policy).toContain('バランス型');
+    for (const name of ['預金だけ（初期投資なし）', '安全型', 'バランス型', '積極型', '手動']) expect(policy).toContain(name);
+    expect(policy).toContain('銀行預金50%');
+    expect(policy).not.toContain('投資に回す割合');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
     let s: GameState = setPolicy(chooseJob(createGame(5), 'employee'), POLICY_PRESETS.balanced);

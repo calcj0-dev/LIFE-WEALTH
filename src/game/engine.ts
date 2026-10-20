@@ -160,8 +160,28 @@ export function setPolicy(state: GameState, policy: Policy): GameState {
   if (!validatePolicy(policy)) throw new Error('invalid policy');
   const s = clone(state);
   s.player.policy = structuredClone(policy);
+  rebalance(s);
   startYear(s);
   return s;
+}
+
+/** 銀行預金と資産（不動産を除く）の合計を、方針の割合に分けたときの、資産ごとの売り買いの額（＋買う、−売る） */
+export function rebalancePlan(s: GameState, policy: Policy): Record<AssetId, number> {
+  const total = Math.max(0, s.player.cash) + financialAssets(s);
+  const plan = {} as Record<AssetId, number>;
+  for (const id of ASSET_IDS) {
+    plan[id] = total * policy.investRatio * policy.allocation[id] - assetValue(s, id);
+  }
+  return plan;
+}
+
+/** 方針の割合に合うように、資産を売り買いする（先に売ってから買う） */
+function rebalance(s: GameState) {
+  const plan = rebalancePlan(s, s.player.policy);
+  for (const id of ASSET_IDS) if (plan[id] < 0) sellAsset(s, id, -plan[id]);
+  for (const id of ASSET_IDS) if (plan[id] > 0) buyAsset(s, id, plan[id]);
+  const moved = ASSET_IDS.reduce((a, id) => a + Math.abs(plan[id]), 0);
+  if (moved >= 1) log(s, 'policy.rebalance', { params: { amount: Math.round(moved) } });
 }
 
 // ---------------------------------------------------------------- 年初
@@ -857,6 +877,7 @@ export function changePolicy(state: GameState, policy: Policy): GameState {
   if (!validatePolicy(policy)) throw new Error('invalid policy');
   const s = clone(state);
   s.player.policy = structuredClone(policy);
+  rebalance(s);
   return s;
 }
 

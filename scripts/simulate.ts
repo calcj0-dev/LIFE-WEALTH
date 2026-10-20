@@ -114,7 +114,7 @@ const spent = rows.reduce((a, r) => a + r.gambleSpent, 0);
 const returned = rows.reduce((a, r) => a + r.gambleReturned, 0);
 
 const priceNames: Record<string, string> = {
-  bond: '債券（利息を除く）',
+  bond: '国債（利息を除く）',
   gold: 'ゴールド',
   fund: '投資信託',
   stock: '株式（配当を除く）',
