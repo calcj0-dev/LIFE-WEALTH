@@ -1,24 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { END_AGE } from './data/rules';
-import { choose, continueYear, createGame, nextYear, roll, setPolicy } from './game/engine';
+import { choose, chooseYears, createGame, nextYear, roll } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
+import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, isNotableYearEnd } from './ui/Modals';
-import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './ui/Feed';
-import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
-import { AssetManager } from './ui/AssetManager';
-import { BudgetCard, JobRoulette, PolicySetup } from './ui/Setup';
+import { JobRoulette, YearsSetup } from './ui/Setup';
+import { Toasts } from './ui/Toasts';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
-
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -30,35 +27,39 @@ export function App() {
   const [spinValue, setSpinValue] = useState<number | null>(null);
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showManager, setShowManager] = useState(false);
+  const [showFeed, setShowFeed] = useState(false);
   /** ふつうの年のニュースと決算を、自動で閉じるポップアップで見せている間 */
   const [autoView, setAutoView] = useState<'news' | 'yearEnd' | null>(null);
-  const [showFeed, setShowFeed] = useState(false);
+  /** 年末のニュースを見た年。年末は「ニュース → 決算」の順に見せる */
+  const [newsSeenYear, setNewsSeenYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const busyNow = spinning || movingPos !== null;
-  const paused = showManager || showHistory || showFeed;
+  const busy = spinning || movingPos !== null;
+  const paused = showHistory || showFeed;
+  const yearEnd = game?.phase === 'yearEnd';
+  const newsStep = yearEnd && newsSeenYear !== game!.year;
 
   // ふつうの年のニュースと決算は、約3秒で自動で閉じるポップアップで見せてから進む（design.md 2.2）
   useEffect(() => {
-    if (!game || busyNow || paused || autoView) return;
-    if (game.phase === 'yearStart' && !isImportantNews(game)) setAutoView('news');
-    else if (game.phase === 'yearEnd' && !isNotableYearEnd(game, game.player.age >= END_AGE)) setAutoView('yearEnd');
-  }, [game, busyNow, paused, autoView]);
-
-  const closeAuto = () => {
-    if (!game) return;
-    if (autoView === 'news' && game.phase === 'yearStart') setGame(continueYear(game));
-    if (autoView === 'yearEnd' && game.phase === 'yearEnd') setGame(nextYear(game));
-    setAutoView(null);
-  };
+    if (!game || !yearEnd || busy || paused || autoView) return;
+    if (newsStep) {
+      if (!isImportantNews(game)) setAutoView('news');
+    } else if (!isNotableYearEnd(game)) setAutoView('yearEnd');
+  }, [game, yearEnd, newsStep, busy, paused, autoView]);
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
     saveGame(s && s.phase !== 'finished' ? s : null);
     if (!s || s.phase === 'finished') setSaved(null);
+  };
+
+  const closeAuto = () => {
+    if (!game) return;
+    if (autoView === 'news') setNewsSeenYear(game.year);
+    if (autoView === 'yearEnd' && game.phase === 'yearEnd') setGame(nextYear(game));
+    setAutoView(null);
   };
 
   const later = (fn: () => void, ms: number) => {
@@ -81,8 +82,6 @@ export function App() {
     }, SPIN_MS);
   };
 
-  const busy = spinning || movingPos !== null;
-
   let screen: React.ReactNode;
   if (!game) {
     screen = (
@@ -101,19 +100,14 @@ export function App() {
         </div>
       </div>
     );
+  } else if (game.phase === 'setupYears') {
+    screen = <YearsSetup onDone={(years) => setGame(chooseYears(game, years))} />;
   } else if (game.phase === 'setupJob') {
     screen = <JobRoulette s={game} onDone={setGame} />;
-  } else if (game.phase === 'setupPolicy') {
-    screen = (
-      <PolicySetup
-        header={<BudgetCard s={game} title={t('budget.title')} />}
-        doneLabel={t('setup.policy.start')}
-        onDone={(p) => setGame(setPolicy(game, p))}
-      />
-    );
   } else if (game.phase === 'finished') {
     screen = <Result s={game} onAgain={() => setGame(null)} />;
   } else {
+    const ready = !busy && !paused;
     screen = (
       <div className="game">
         <Hud s={game} />
@@ -132,35 +126,25 @@ export function App() {
               onSpin={spin}
             />
           </div>
-          <SidePanel
-            s={game}
-            onOpenHistory={() => setShowHistory(true)}
-            onOpenManager={() => setShowManager(true)}
-            onOpenFeed={() => setShowFeed(true)}
-          />
+          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
         <Toasts log={game.log} />
-        {autoView === 'news' && game.phase === 'yearStart' && (
+        {autoView === 'news' && yearEnd && (
           <AutoPopup onClose={closeAuto}>
             <NewsBrief s={game} />
           </AutoPopup>
         )}
-        {autoView === 'yearEnd' && game.phase === 'yearEnd' && (
+        {autoView === 'yearEnd' && yearEnd && (
           <AutoPopup onClose={closeAuto}>
             <YearEndBrief s={game} />
           </AutoPopup>
         )}
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
-        {showManager && <AssetManager s={game} onChange={setGame} onClose={() => setShowManager(false)} />}
-        {!busy && !paused && game.phase === 'yearStart' && isImportantNews(game) && (
-          <NewsModal s={game} onNext={() => setGame(continueYear(game))} onOpenManager={() => setShowManager(true)} />
-        )}
-        {!busy && !paused && game.phase === 'decision' && (
-          <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />
-        )}
-        {!busy && !paused && game.phase === 'yearEnd' && isNotableYearEnd(game, game.player.age >= END_AGE) && (
-          <YearEndModal s={game} last={game.player.age >= END_AGE} onNext={() => setGame(nextYear(game))} />
+        {ready && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
+        {ready && !autoView && newsStep && isImportantNews(game) && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
+        {ready && !autoView && yearEnd && !newsStep && isNotableYearEnd(game) && (
+          <YearEndModal s={game} onNext={() => setGame(nextYear(game))} />
         )}
       </div>
     );

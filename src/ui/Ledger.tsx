@@ -5,11 +5,11 @@ import { useState } from 'react';
 import { ASSET_IDS } from '../data/assets';
 import type { GameState, LogEntry } from '../game/types';
 import { formatMoney, t } from '../i18n';
-import { HappinessDelta, MoneyDelta } from './Delta';
-import { logLabel, movingEntries } from './logLabel';
+import { MoneyDelta } from './Delta';
+import { logLabel } from './logLabel';
 
-const INCOME_ORDER = ['salary', 'spouse', 'sideBusiness', 'interest', 'bond', 'dividend', 'rent'];
-const EXPENSE_ORDER = ['living', 'jobCost', 'hobby', 'pet', 'education', 'loan', 'insurance'];
+const INCOME_ORDER = ['salary', 'spouse', 'sideBusiness', 'interest', 'bond', 'dividend'];
+const EXPENSE_ORDER = ['living', 'jobCost', 'education', 'loan', 'insurance'];
 const ICONS: Record<string, string> = {
   salary: '💼',
   spouse: '👫',
@@ -17,11 +17,8 @@ const ICONS: Record<string, string> = {
   interest: '🏦',
   bond: '📜',
   dividend: '📈',
-  rent: '🏢',
   living: '🍚',
   jobCost: '🧰',
-  hobby: '🎨',
-  pet: '🐶',
   education: '🎓',
   loan: '🏠',
   insurance: '🛡️',
@@ -123,7 +120,7 @@ export function Details({ children }: { children: React.ReactNode }) {
 }
 
 /** マスの出来事として並べないお金の動き（純資産は変わらない、または別の行で数えるもの） */
-const NOT_EVENTS = ['realEstate.buy', 'realEstate.sell', 'loan.prepay', 'shortfall', 'policy.rebalance'];
+const NOT_EVENTS = ['realEstate.buy', 'realEstate.sell', 'loan.prepay', 'shortfall'];
 const isEvent = (e: LogEntry) => e.cash !== undefined && !NOT_EVENTS.some((k) => e.key.startsWith(k));
 
 /** 純資産が増えた・減った理由の表。それぞれ内訳を小さく添える */
@@ -132,7 +129,7 @@ export function NetWorthTable({ s }: { s: GameState }) {
   const rec = s.history[s.history.length - 1];
   const b = rec.breakdown;
   const change = b.work + b.investment + b.revaluation + b.other;
-  const events = s.log.filter((l) => l.age === st.age && isEvent(l) && Math.round(l.cash!) !== 0);
+  const events = s.log.filter((l) => l.year === st.year && isEvent(l) && Math.round(l.cash! * 10) !== 0);
   const eventsTotal = events.reduce((a, e) => a + e.cash!, 0);
   const rest = b.other - eventsTotal;
   const amounts = s.marketChange?.amounts;
@@ -182,27 +179,6 @@ export function NetWorthTable({ s }: { s: GameState }) {
           </td>
         </tr>
       </tfoot>
-    </table>
-  );
-}
-
-/** 幸福ポイントが動いた出来事の一覧 */
-export function HappinessList({ s }: { s: GameState }) {
-  const age = s.lastSettlement!.age;
-  const items = movingEntries(s.log.filter((l) => l.age === age)).filter((e) => e.happiness);
-  if (!items.length) return null;
-  return (
-    <table className="worth-table">
-      <tbody>
-        {items.map((e, i) => (
-          <tr key={i}>
-            <td>{logLabel(e)}</td>
-            <td className="ledger-money">
-              <HappinessDelta v={e.happiness!} />
-            </td>
-          </tr>
-        ))}
-      </tbody>
     </table>
   );
 }

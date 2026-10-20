@@ -1,0 +1,59 @@
+{
+  "_note": "年末に1つ起きる政治・経済のニュース。design.md 7章。shocks はその年の値動きへの上乗せ。銘柄の id か realEstate を書く",
+  "news": [
+    { "id": "calm", "weight": 3, "shocks": {} },
+    {
+      "id": "boom",
+      "weight": 1.5,
+      "economy": "boom",
+      "shocks": { "fund": 0.05, "it": 0.1, "food": 0.05, "energy": 0.05, "bank": 0.1 }
+    },
+    {
+      "id": "slowdown",
+      "weight": 1.5,
+      "economy": "recession",
+      "shocks": { "fund": -0.05, "gold": 0.05, "bond": 0.02, "it": -0.15, "food": -0.05, "energy": -0.1, "bank": -0.15 }
+    },
+    {
+      "id": "crisis",
+      "weight": 0.5,
+      "economy": "recession",
+      "important": true,
+      "shocks": { "fund": -0.3, "gold": 0.1, "bond": 0.02, "realEstate": -0.1, "it": -0.35, "food": -0.15, "energy": -0.25, "bank": -0.4 }
+    },
+    {
+      "id": "rateUp",
+      "weight": 1,
+      "depositRateChange": 0.005,
+      "shocks": { "bond": -0.05, "realEstate": -0.05, "it": -0.1, "bank": 0.1 }
+    },
+    {
+      "id": "rateDown",
+      "weight": 1,
+      "depositRateChange": -0.005,
+      "shocks": { "bond": 0.05, "realEstate": 0.05, "it": 0.1, "bank": -0.05 }
+    },
+    {
+      "id": "inflation",
+      "weight": 1,
+      "inflation": 0.05,
+      "shocks": { "gold": 0.1, "it": -0.05, "energy": 0.2, "bank": 0.05 }
+    },
+    {
+      "id": "techBoom",
+      "weight": 0.5,
+      "important": true,
+      "shocks": { "fund": 0.1, "it": 0.3, "energy": -0.05, "bank": 0.05 }
+    },
+    {
+      "id": "geopolitics",
+      "weight": 0.5,
+      "shocks": { "gold": 0.1, "it": -0.1, "food": -0.05, "energy": 0.15, "bank": -0.1 }
+    },
+    {
+      "id": "housingBoom",
+      "weight": 0.5,
+      "shocks": { "realEstate": 0.1, "bank": 0.05 }
+    }
+  ]
+}

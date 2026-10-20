@@ -4,12 +4,14 @@ import type { Square, SquareType } from '../game/types';
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
   stopMarriage: 1,
-  life: 24,
-  good: 17,
-  bad: 13,
+  birth: 2,
+  small: 34,
+  medium: 12,
+  large: 6,
+  stock: 6,
+  investTalk: 3,
   gamble: 3,
-  insurance: 3,
-  realEstate: 10,
+  realEstate: 4,
 };
 
 /** 結婚ストップのマスの位置（スタートから何マス先か） */
@@ -30,7 +32,7 @@ function buildOrder(): SquareType[] {
 
   // 種類ごとに「盤面上の理想の位置」を等間隔に並べ、近い順に空きマスへ割り当てる
   const wanted: { type: SquareType; pos: number }[] = [];
-  const order: SquareType[] = ['life', 'good', 'bad', 'realEstate', 'gamble', 'insurance'];
+  const order: SquareType[] = ['small', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'birth'];
   order.forEach((type, k) => {
     const n = SQUARE_COUNTS[type];
     for (let j = 0; j < n; j++) {

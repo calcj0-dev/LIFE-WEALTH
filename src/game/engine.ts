@@ -1,118 +1,112 @@
-// ゲームの進行。画面（React）には依存しない。
+// ゲームの進行。画面（React）には依存しない。1ターン＝1ヶ月（design.md 2章）。
 // どの関数も、受け取った状態を書き換えずに、新しい状態を返す。
 
-import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE } from '../data/assets';
+import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, START_PRICE, zeroHoldings } from '../data/assets';
 import { BOARD } from '../data/board';
-import { ALL_EVENTS, BAD_EVENTS, CARE, GOOD_EVENTS, LIFE_EVENTS, SICKNESS, SIDE_BUSINESS, type Effect, type EventDef } from '../data/events';
-import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, GAMBLE_JACKPOT_HAPPINESS, type GambleId } from '../data/gamble';
-import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_AGE, JOBS, JOB_IDS, salaryAtAge } from '../data/jobs';
+import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSize } from '../data/events';
+import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, type GambleId } from '../data/gamble';
+import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_YEAR, JOBS, JOB_IDS, salaryAtYear } from '../data/jobs';
 import {
-  BASE_INFLATION,
-  HAPPINESS_SCALE,
-  HOBBY_YEARLY_HAPPINESS,
-  PET_YEARLY_HAPPINESS,
+  BIRTH,
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
-  DEBT_HAPPINESS,
   EDUCATION_COST,
-  END_AGE,
-  HOBBY,
+  HIGH_SCHOOL_FACES,
   INSURANCE,
   LIVING_COST,
-  PET,
+  MARRIAGE,
+  MAX_CHILDREN,
+  MONTHS_PER_YEAR,
   REAL_ESTATE,
   ROULETTE_MAX,
-  SENIOR_AGE,
-  SENIOR_SALARY_RATE,
   SPOUSE,
-  START_AGE,
+  SPOUSE_WORK_FACES,
   START_CASH,
-  WEDDING_COST,
+  UNIVERSITY_FACES,
+  YEAR_OPTIONS,
+  DEFAULT_YEARS,
+  BASE_INFLATION,
 } from '../data/rules';
 import {
   assetValue,
   buyAsset,
   createLoan,
   financialAssets,
-  investByPolicy,
   netWorth,
-  payLoanYear,
-  prepayLoan,
+  payLoanMonth,
   realEstateValue,
   sellAsset,
+  sellOrder,
   totalDebt,
 } from './finance';
-import { updateMarket } from './market';
+import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
 import { nextRandom, pickWeighted, randomInt } from './rng';
-import { computeScore } from './score';
-import type {
-  AssetId,
-  Child,
-  Decision,
-  DecisionOption,
-  GameState,
-  JobId,
-  Policy,
-  Settlement,
-  SpouseWork,
-} from './types';
+import { computeResult } from './score';
+import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, Settlement, SpouseWork } from './types';
 
 const clone = (s: GameState): GameState => structuredClone(s);
 
-function log(s: GameState, key: string, extra: { params?: Record<string, number | string>; cash?: number; happiness?: number } = {}) {
-  s.log.push({ age: s.player.age, key, ...extra });
+type LogExtra = { params?: Record<string, number | string>; cash?: number; notice?: boolean };
+
+function log(s: GameState, key: string, extra: LogExtra = {}) {
+  s.log.push({ year: s.year, month: s.month, key, ...extra });
 }
 
-/** 幸福ポイントを足す。点数は倍率（HAPPINESS_SCALE）をかけてから足す */
-function addHappiness(s: GameState, amount: number, key: string) {
-  if (amount === 0) return;
-  const scaled = amount * HAPPINESS_SCALE;
-  s.player.happiness += scaled;
-  log(s, key, { happiness: scaled });
-}
-
-function addCash(s: GameState, amount: number, key: string) {
+function addCash(s: GameState, amount: number, key: string, params?: Record<string, number | string>) {
   if (amount === 0) return;
   s.player.cash += amount;
-  log(s, key, { cash: amount });
+  log(s, key, { cash: amount, ...(params ? { params } : {}) });
 }
+
+/** ルーレット（1〜6）を回す */
+const rollDie = (s: GameState) => randomInt(s, 1, ROULETTE_MAX);
+/** 出目がどの結果に当たるか */
+function faceResult<K extends string>(faces: Record<K, number[]>, face: number): K {
+  return (Object.keys(faces) as K[]).find((k) => faces[k].includes(face))!;
+}
+
+const emptyFlows = (year: number): Settlement => ({
+  year,
+  income: {},
+  expense: {},
+  net: 0,
+  loanPrincipal: 0,
+  sold: 0,
+  borrowed: 0,
+  revaluation: 0,
+});
 
 // ---------------------------------------------------------------- 開始
 
 export function createGame(seed: number): GameState {
-  const zero = { bond: 0, gold: 0, fund: 0, stock: 0 };
-  return {
-    saveVersion: 1,
+  const s: GameState = {
+    saveVersion: 2,
     seed,
     rngState: seed >>> 0,
+    years: DEFAULT_YEARS,
     year: 1,
-    phase: 'setupJob',
+    month: 1,
+    phase: 'setupYears',
     player: {
-      age: START_AGE,
-      jobId: 'employee',
+      jobId: JOB_IDS[0],
       salary: 0,
-      noIncomeThisYear: false,
-      careAtHomeThisYear: false,
-      athleteRetireAge: null,
+      noIncomeMonths: 0,
+      athleteRetireYear: null,
       cash: START_CASH,
-      holdings: { ...zero },
+      holdings: zeroHoldings(),
       married: false,
-      marriageDeclined: false,
       spouse: null,
       children: [],
-      properties: [],
+      home: null,
       cardLoan: 0,
       medicalPremium: null,
-      hobby: false,
-      petYears: null,
       sideBusinessIncome: 0,
-      policy: { investRatio: 0, allocation: { bond: 0, gold: 0, fund: 1, stock: 0 } },
-      happiness: 0,
+      sideBusinessTried: false,
       position: 0,
       lap: 0,
     },
     market: {
-      prices: Object.fromEntries(ASSET_IDS.map((id) => [id, ASSETS[id].startPrice])) as Record<AssetId, number>,
+      prices: Object.fromEntries(ASSET_IDS.map((id) => [id, START_PRICE])),
       depositRate: START_DEPOSIT_RATE,
       economy: 'normal',
       realEstateIndex: 1,
@@ -125,22 +119,39 @@ export function createGame(seed: number): GameState {
     decision: null,
     queue: [],
     decisionFrom: null,
+    yearFlows: emptyFlows(1),
     lastSettlement: null,
     history: [],
+    prices: [],
     log: [],
     stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0 },
-    score: null,
+    result: null,
+    yearMarket: { startPrices: {}, startRealEstateIndex: 1, amounts: {} },
+    marketChange: null,
   };
+  s.yearMarket = newYearMarket(s);
+  recordPrices(s, 0);
+  return s;
+}
+
+/** 遊ぶ年数を決める（10・20・30・40・50年） */
+export function chooseYears(state: GameState, years: number): GameState {
+  assertPhase(state, 'setupYears');
+  if (!YEAR_OPTIONS.includes(years)) throw new Error(`invalid years: ${years}`);
+  const s = clone(state);
+  s.years = years;
+  s.phase = 'setupJob';
+  return s;
 }
 
 export function chooseJob(state: GameState, jobId: JobId): GameState {
   assertPhase(state, 'setupJob');
+  if (!JOBS[jobId]) throw new Error(`unknown job: ${jobId}`);
   const s = clone(state);
   s.player.jobId = jobId;
-  s.player.startJobId = jobId;
   s.player.salary = JOBS[jobId].startSalary;
-  s.player.athleteRetireAge = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_AGE.min, ATHLETE_RETIRE_AGE.max) : null;
-  s.phase = 'setupPolicy';
+  s.player.athleteRetireYear = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_YEAR.min, ATHLETE_RETIRE_YEAR.max) : null;
+  s.phase = 'roll';
   return s;
 }
 
@@ -152,145 +163,12 @@ export function rollJob(state: GameState): GameState {
   return chooseJob({ ...state, rngState: probe.rngState }, jobId);
 }
 
-export function validatePolicy(policy: Policy): boolean {
-  const sum = ASSET_IDS.reduce((a, id) => a + policy.allocation[id], 0);
-  return (
-    policy.investRatio >= 0 &&
-    policy.investRatio <= 1 &&
-    ASSET_IDS.every((id) => policy.allocation[id] >= 0) &&
-    Math.abs(sum - 1) < 1e-6
-  );
-}
-
-export function setPolicy(state: GameState, policy: Policy): GameState {
-  assertPhase(state, 'setupPolicy');
-  if (!validatePolicy(policy)) throw new Error('invalid policy');
-  const s = clone(state);
-  s.player.policy = structuredClone(policy);
-  rebalance(s);
-  startYear(s);
-  return s;
-}
-
-/** 銀行預金と資産（不動産を除く）の合計を、方針の割合に分けたときの、資産ごとの売り買いの額（＋買う、−売る） */
-export function rebalancePlan(s: GameState, policy: Policy): Record<AssetId, number> {
-  const total = Math.max(0, s.player.cash) + financialAssets(s);
-  const plan = {} as Record<AssetId, number>;
-  for (const id of ASSET_IDS) {
-    plan[id] = total * policy.investRatio * policy.allocation[id] - assetValue(s, id);
-  }
-  return plan;
-}
-
-/** 方針の割合に合うように、資産を売り買いする（先に売ってから買う） */
-function rebalance(s: GameState) {
-  const plan = rebalancePlan(s, s.player.policy);
-  for (const id of ASSET_IDS) if (plan[id] < 0) sellAsset(s, id, -plan[id]);
-  for (const id of ASSET_IDS) if (plan[id] > 0) buyAsset(s, id, plan[id]);
-  const moved = ASSET_IDS.reduce((a, id) => a + Math.abs(plan[id]), 0);
-  if (moved >= 1) log(s, 'policy.rebalance', { params: { amount: Math.round(moved) } });
-}
-
-// ---------------------------------------------------------------- 年初
-
-function startYear(s: GameState) {
-  const p = s.player;
-  p.noIncomeThisYear = false;
-  p.careAtHomeThisYear = false;
-  if (p.spouse) p.spouse.halfThisYear = false;
-
-  if (s.year > 1) {
-    p.age += 1;
-    growSalary(s);
-    if (p.spouse?.work === 'full') p.spouse.income *= 1 + SPOUSE.fullGrowth;
-    if (p.age === SENIOR_AGE) {
-      p.salary *= SENIOR_SALARY_RATE;
-      if (p.spouse) p.spouse.income *= SENIOR_SALARY_RATE;
-      log(s, 'auto.senior');
-    }
-    p.children.forEach((c, i) => ageChild(s, c, i));
-    if (p.hobby) addHappiness(s, HOBBY_YEARLY_HAPPINESS, 'auto.hobbyYear');
-    if (p.petYears !== null) addHappiness(s, PET_YEARLY_HAPPINESS, 'auto.petYear');
-    if (p.petYears !== null) {
-      p.petYears += 1;
-      if (p.petYears >= PET.years) {
-        p.petYears = null;
-        log(s, 'auto.petEnd');
-      }
-    }
-    if (p.jobId === 'athlete' && p.athleteRetireAge !== null && p.age >= p.athleteRetireAge) {
-      s.queue.push({ kind: 'athleteRetire' });
-    }
-  }
-
-  updateMarket(s);
-  s.lastRoll = null;
-  s.lastPath = [];
-  s.phase = 'yearStart';
-}
-
-/** 給料の水準（物価に合わせて上がった分） */
-const wageIndex = (s: GameState) => s.market.wageIndex ?? 1;
-
-function growSalary(s: GameState) {
-  const p = s.player;
-  const job = JOBS[p.jobId];
-  // 物価に合わせて上がる分（設計書 7章）。昇給はこの上に乗る
-  p.salary *= 1 + BASE_INFLATION;
-  if (p.spouse && p.spouse.work !== 'none') p.spouse.income *= 1 + BASE_INFLATION;
-  if (job.volatility > 0) {
-    const r = job.growth + job.volatility * (nextRandom(s) * 2 - 1);
-    p.salary *= 1 + r;
-    if (job.hitChance > 0 && nextRandom(s) < job.hitChance) {
-      p.salary *= job.hitMultiplier;
-      log(s, 'auto.hit');
-    }
-    p.salary = Math.min(job.maxSalary, Math.max(job.minSalary, p.salary));
-  } else {
-    p.salary *= 1 + job.growth;
-  }
-}
-
-function ageChild(s: GameState, c: Child, index: number) {
-  if (c.independent) return;
-  c.age += 1;
-  if (c.age === 6 || c.age === 12 || c.age === 15) s.queue.push({ kind: 'school', childIndex: index });
-  if (c.age === 18) s.queue.push({ kind: 'university', childIndex: index });
-  const independentAge =
-    c.university === 'none' ? CHILD_INDEPENDENT_AGE_NO_UNIVERSITY : CHILD_INDEPENDENT_AGE;
-  if (c.age >= independentAge && c.university !== null) {
-    c.independent = true;
-    addHappiness(s, 3, 'auto.childIndependent');
-  }
-}
-
-/** 年初のニュースを見たあとに進む */
-export function continueYear(state: GameState): GameState {
-  assertPhase(state, 'yearStart');
-  const s = clone(state);
-  nextFromQueue(s);
-  return s;
-}
-
-function nextFromQueue(s: GameState) {
-  const d = s.queue.shift();
-  if (d) {
-    s.decision = d;
-    s.decisionFrom = 'yearStart';
-    s.phase = 'decision';
-  } else {
-    s.decision = null;
-    s.decisionFrom = null;
-    s.phase = 'roll';
-  }
-}
-
-// ---------------------------------------------------------------- 移動
+// ---------------------------------------------------------------- 移動とマス
 
 export function roll(state: GameState): GameState {
   assertPhase(state, 'roll');
   const s = clone(state);
-  const steps = randomInt(s, 1, ROULETTE_MAX);
+  const steps = rollDie(s);
   s.lastRoll = steps;
   s.lastPath = [];
   let pos = s.player.position;
@@ -298,125 +176,154 @@ export function roll(state: GameState): GameState {
     pos = BOARD[pos].next[0];
     if (pos === 0) s.player.lap += 1;
     s.lastPath.push(pos);
-    if (BOARD[pos].type === 'stopMarriage') break;
+    // 結婚マスは、独身なら出目が残っていても必ず止まる（design.md 3.5）
+    if (BOARD[pos].type === 'stopMarriage' && !s.player.married) break;
   }
   s.player.position = pos;
-  s.decision = decisionForSquare(s);
-  s.decisionFrom = 'square';
-  s.phase = 'decision';
+  handleSquare(s);
   return s;
 }
 
-function decisionForSquare(s: GameState): Decision {
-  const sq = BOARD[s.player.position];
-  switch (sq.type) {
+function startDecision(s: GameState, d: Decision, from: 'queue' | 'square') {
+  s.decision = d;
+  s.decisionFrom = from;
+  s.phase = 'decision';
+}
+
+/** 止まったマスの出来事。小さな出来事は止めずにすぐ起こし、月末に進む（design.md 2.2） */
+function handleSquare(s: GameState) {
+  const p = s.player;
+  const square = BOARD[p.position];
+  const notice = (key: string) => {
+    log(s, key, { notice: true });
+    endMonth(s);
+  };
+  switch (square.type) {
     case 'start':
-      return { kind: 'notice', messageKey: 'square.start' };
+      return notice('square.start');
     case 'stopMarriage':
-      return { kind: 'marriage' };
-    case 'life':
-      return eventDecision(s, 'life', LIFE_EVENTS);
-    case 'good':
-      return eventDecision(s, 'good', GOOD_EVENTS);
-    case 'bad':
-      return eventDecision(s, 'bad', BAD_EVENTS);
+      if (p.married) return notice('square.marriage.married');
+      return startDecision(s, { kind: 'marriage' }, 'square');
+    case 'birth':
+      if (!p.married) {
+        addCash(s, -BIRTH.gift, 'birth.gift');
+        return endMonth(s);
+      }
+      if (p.children.length >= MAX_CHILDREN) return notice('square.birth.full');
+      return startDecision(s, { kind: 'birth' }, 'square');
+    case 'small': {
+      const ev = pickEvent(s, 'small');
+      if (!ev) return notice('square.nothing');
+      for (const e of ev.effects ?? []) applyEffect(s, e, `event.${ev.id}`);
+      return endMonth(s);
+    }
+    case 'medium':
+    case 'large': {
+      const ev = pickEvent(s, square.type);
+      if (!ev) return notice('square.nothing');
+      return startDecision(s, { kind: 'event', eventId: ev.id }, 'square');
+    }
+    case 'stock':
+      // 株のマスは段階3.5の2で作る
+      return notice('square.stock.soon');
+    case 'investTalk':
+      // 投資の話のマスは段階3.5の3で作る
+      return notice('square.investTalk.soon');
     case 'gamble':
-      return { kind: 'gamble' };
-    case 'insurance':
-      return { kind: 'insurance' };
+      return startDecision(s, { kind: 'gamble' }, 'square');
     case 'realEstate': {
+      if (p.home) return notice('square.realEstate.owned');
       const ratio = REAL_ESTATE.offerMin + nextRandom(s) * (REAL_ESTATE.offerMax - REAL_ESTATE.offerMin);
       const price = Math.round((REAL_ESTATE.basePrice * s.market.realEstateIndex * ratio) / 10) * 10;
-      return { kind: 'realEstate', offerPrice: price };
+      return startDecision(s, { kind: 'realEstate', offerPrice: price }, 'square');
     }
   }
 }
 
-function eventDecision(s: GameState, kind: 'life' | 'good' | 'bad', events: EventDef[]): Decision {
-  const e = pickWeighted(s, events, (ev) => ev.weight(s));
-  if (!e) return { kind: 'notice', messageKey: 'square.nothing' };
-  return { kind, eventId: e.id };
+const employed = (s: GameState) => s.player.noIncomeMonths === 0;
+
+/** 出来事の条件に合うか */
+export function eventMatches(s: GameState, ev: EventDef): boolean {
+  const p = s.player;
+  const job = JOBS[p.jobId];
+  const w = ev.when ?? {};
+  const checks: [boolean | undefined, boolean][] = [
+    [w.married, p.married],
+    [w.hasChildren, p.children.some((c) => !c.independent)],
+    [w.homeOwner, p.home !== null],
+    [w.employed, employed(s)],
+    [w.promotable, job.canBePromoted],
+    [w.stableIncome, job.volatility === 0],
+    [w.sideBusiness, p.sideBusinessTried],
+  ];
+  if (checks.some(([want, actual]) => want !== undefined && want !== actual)) return false;
+  if (w.spouseWork !== undefined && p.spouse?.work !== w.spouseWork) return false;
+  if (w.minYear !== undefined && s.year < w.minYear) return false;
+  if (w.maxYear !== undefined && s.year > w.maxYear) return false;
+  if (ev.choice === 'jobChange' && jobChangeTargets(s).length === 0) return false;
+  return true;
 }
+
+function eventWeight(s: GameState, ev: EventDef): number {
+  if (!eventMatches(s, ev)) return 0;
+  const job = JOBS[s.player.jobId];
+  if (ev.weightBy === 'unemployment') return ev.weight * job.unemploymentWeight;
+  if (ev.weightBy === 'sickness') return ev.weight * job.sicknessMultiplier;
+  return ev.weight;
+}
+
+function pickEvent(s: GameState, size: EventSize): EventDef | null {
+  return pickWeighted(
+    s,
+    EVENTS.filter((e) => e.size === size),
+    (e) => eventWeight(s, e),
+  );
+}
+
+const jobChangeTargets = (s: GameState) => JOB_IDS.filter((j) => j !== s.player.jobId && JOBS[j].canTransferTo);
 
 // ---------------------------------------------------------------- 選択肢
 
 /** 銀行預金で払えるか */
-function canAfford(s: GameState, amount: number) {
-  return s.player.cash >= amount;
-}
+const canAfford = (s: GameState, amount: number) => s.player.cash >= amount;
 
-const MARRIAGE_HAPPINESS = 15;
-/** 結婚しないときの幸福ポイント（自分の時間を大切にする）。独身でも既婚でも同じくらい幸福ポイントを稼げるようにするため */
-const DECLINE_MARRIAGE_HAPPINESS = 10;
-const LARGE_WEDDING_HAPPINESS = 5;
-const HOME_HAPPINESS = 10;
-
-/** 選んだときにすぐ動くお金と幸福ポイント。結果が運で決まるもの（病気、副業の成否）は分かる分だけ */
-function previewOf(s: GameState, effects: Effect[]): { cash?: number; happiness?: number } {
+/** 選ぶものがない出来事で、すぐに動くお金（分かる分だけ） */
+function previewCash(effects: Effect[]): number | undefined {
   let cash = 0;
-  let happiness = 0;
-  for (const e of effects) {
-    if (e.t === 'cash') cash += e.amount;
-    else if (e.t === 'bonus') cash += s.player.salary * e.rate;
-    else if (e.t === 'sideBusiness') cash -= SIDE_BUSINESS.cost;
-    else if (e.t === 'happiness') happiness += e.amount * HAPPINESS_SCALE;
-  }
-  return { ...(cash ? { cash } : {}), ...(happiness ? { happiness } : {}) };
+  for (const e of effects) if (e.t === 'cash') cash += e.amount;
+  return cash || undefined;
 }
-
-/** 選んだときにすぐ払うお金 */
-function upfrontCost(effects: Effect[]): number {
-  return effects.reduce((sum, e) => {
-    if (e.t === 'cash' && e.amount < 0) return sum - e.amount;
-    if (e.t === 'sideBusiness') return sum + SIDE_BUSINESS.cost;
-    return sum;
-  }, 0);
-}
-
-const hasHome = (s: GameState) => s.player.properties.some((p) => p.use === 'home');
-const marriageAvailable = (s: GameState) => !s.player.married && s.player.lap <= 1;
 
 export function getOptions(s: GameState): DecisionOption[] {
   const d = s.decision;
   if (!d) return [];
-  const p = s.player;
   switch (d.kind) {
     case 'notice':
       return [{ id: 'ok', key: 'option.ok', enabled: true }];
-    case 'marriage': {
-      if (!marriageAvailable(s)) return [{ id: 'ok', key: 'option.ok', enabled: true }];
-      const opts: DecisionOption[] = [];
-      for (const work of ['full', 'none'] as SpouseWork[]) {
-        for (const size of ['small', 'large'] as const) {
-          opts.push({
-            id: `marry:${work}:${size}`,
-            key: `option.marry.${work}.${size}`,
-            params: { cost: WEDDING_COST[size] },
-            enabled: canAfford(s, WEDDING_COST[size]),
-            cash: -WEDDING_COST[size],
-            happiness: (MARRIAGE_HAPPINESS + (size === 'large' ? LARGE_WEDDING_HAPPINESS : 0)) * HAPPINESS_SCALE,
-          });
-        }
+    case 'marriage':
+    case 'birth':
+      return [{ id: 'spin', key: 'option.spin', enabled: true }];
+    case 'event': {
+      const ev = EVENTS_BY_ID[d.eventId!];
+      if (ev.choice === 'jobChange') {
+        return [
+          ...jobChangeTargets(s).map((j) => ({
+            id: `job:${j}`,
+            key: 'option.job',
+            params: { job: j, salary: Math.round(salaryAtYear(j, s.year) * s.market.wageIndex) },
+            enabled: true,
+          })),
+          { id: 'skip', key: 'option.skip', enabled: true },
+        ];
       }
-      opts.push({ id: 'decline', key: 'option.marry.decline', enabled: true, happiness: DECLINE_MARRIAGE_HAPPINESS * HAPPINESS_SCALE });
-      return opts;
-    }
-    case 'life':
-    case 'good':
-    case 'bad': {
-      const ev = ALL_EVENTS[d.eventId!];
-      const defs = typeof ev.options === 'function' ? ev.options(s) : ev.options;
-      // 現金で払えない選択肢は選べない。ただし、どれも払えないとき（介護など避けられない出来事）は選べる
-      const allowed = defs.map((o) => (o.enabled ? o.enabled(s) : true));
-      const affordable = defs.map((o, i) => allowed[i] && canAfford(s, upfrontCost(o.effects)));
-      const useAffordable = affordable.some(Boolean);
-      return defs.map((o, i) => ({
-        id: o.id,
-        key: o.id === 'ok' || o.id === 'skip' ? `option.${o.id}` : `option.${o.id.split(':')[0]}`,
-        params: o.params?.(s) ?? (o.id.startsWith('job:') ? { job: o.id.slice(4) } : undefined),
-        enabled: useAffordable ? affordable[i] : allowed[i],
-        ...previewOf(s, o.effects),
-      }));
+      if (ev.choice === 'sideBusiness') {
+        return [
+          { id: 'try', key: 'option.sideBusinessTry', params: { cost: SIDE_BUSINESS.cost }, enabled: canAfford(s, SIDE_BUSINESS.cost), cash: -SIDE_BUSINESS.cost },
+          { id: 'skip', key: 'option.skip', enabled: true },
+        ];
+      }
+      const cash = previewCash(ev.effects ?? []);
+      return [{ id: 'ok', key: 'option.ok', enabled: true, ...(cash !== undefined ? { cash } : {}) }];
     }
     case 'gamble': {
       const opts: DecisionOption[] = [];
@@ -428,52 +335,30 @@ export function getOptions(s: GameState): DecisionOption[] {
       opts.push({ id: 'skip', key: 'option.skip', enabled: true });
       return opts;
     }
-    case 'insurance': {
-      const premium = medicalPremiumAt(p.age);
-      const uninsured = p.properties.filter((x) => !x.fireInsured).length;
-      const opts: DecisionOption[] = [];
-      if (p.medicalPremium === null) opts.push({ id: 'medical', key: 'option.insurance.medical', params: { premium }, enabled: true });
-      if (uninsured > 0) opts.push({ id: 'fire', key: 'option.insurance.fire', params: { premium: uninsured * INSURANCE.firePremiumPerProperty }, enabled: true });
-      if (p.medicalPremium === null && uninsured > 0) opts.push({ id: 'both', key: 'option.insurance.both', enabled: true });
-      opts.push({ id: 'skip', key: 'option.skip', enabled: true });
-      return opts;
-    }
     case 'realEstate': {
       const price = d.offerPrice!;
       const loanCash = price * (REAL_ESTATE.downPaymentRate + REAL_ESTATE.buyCostRate);
       const fullCash = price * (1 + REAL_ESTATE.buyCostRate);
       const params = { price };
       return [
-        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: !hasHome(s) && canAfford(s, loanCash), cash: -loanCash, happiness: HOME_HAPPINESS * HAPPINESS_SCALE },
-        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: !hasHome(s) && canAfford(s, fullCash), cash: -fullCash, happiness: HOME_HAPPINESS * HAPPINESS_SCALE },
-        { id: 'rentalLoan', key: 'option.realEstate.rentalLoan', params, enabled: canAfford(s, loanCash), cash: -loanCash },
-        { id: 'rentalCash', key: 'option.realEstate.rentalCash', params, enabled: canAfford(s, fullCash), cash: -fullCash },
+        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: canAfford(s, loanCash), cash: -loanCash },
+        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: canAfford(s, fullCash), cash: -fullCash },
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
-    case 'school':
-      return [
-        { id: 'public', key: 'option.school.public', enabled: true },
-        { id: 'private', key: 'option.school.private', enabled: true },
-      ];
-    case 'university':
-      return [
-        { id: 'national', key: 'option.university.national', enabled: true },
-        { id: 'private', key: 'option.university.private', enabled: true },
-        { id: 'none', key: 'option.university.none', enabled: true },
-      ];
     case 'athleteRetire':
       return ATHLETE_NEXT_JOBS.map((j) => ({
         id: `job:${j}`,
         key: 'option.jobChange',
-        params: { job: j, salary: Math.round(JOBS[j].startSalary * wageIndex(s)) },
+        params: { job: j, salary: Math.round(JOBS[j].startSalary * s.market.wageIndex) },
         enabled: true,
       }));
   }
 }
 
-export function medicalPremiumAt(age: number): number {
-  return INSURANCE.medicalBasePremium + INSURANCE.medicalPremiumPerYear * (age - START_AGE);
+/** 医療保険の保険料（年）。入る年が遅いほど高い */
+export function medicalPremiumAt(year: number): number {
+  return INSURANCE.medicalBasePremium + INSURANCE.medicalPremiumPerYear * (year - 1);
 }
 
 // ---------------------------------------------------------------- 決定
@@ -484,84 +369,88 @@ export function choose(state: GameState, optionId: string): GameState {
   if (!option) throw new Error(`unknown option: ${optionId}`);
   if (!option.enabled) throw new Error(`option not available: ${optionId}`);
   const s = clone(state);
-  applyDecision(s, s.decision!, optionId);
-  if (s.decisionFrom === 'yearStart') {
-    nextFromQueue(s);
-  } else {
-    s.decision = null;
-    s.decisionFrom = null;
-    settleYear(s);
+  const followUp = applyDecision(s, s.decision!, optionId);
+  if (followUp) {
+    // ルーレットの結果を、同じ流れの中でお知らせとして見せる
+    s.decision = followUp;
+    return s;
   }
+  const from = s.decisionFrom;
+  s.decision = null;
+  s.decisionFrom = null;
+  if (from === 'queue') nextFromQueue(s);
+  else endMonth(s);
   return s;
 }
 
-function applyDecision(s: GameState, d: Decision, optionId: string) {
+/** 決定を反映する。ルーレットの結果を見せるときは、次に出すお知らせを返す */
+function applyDecision(s: GameState, d: Decision, optionId: string): Decision | null {
   const p = s.player;
   switch (d.kind) {
     case 'notice':
-      return;
+      return null;
     case 'marriage': {
-      if (optionId === 'ok') return;
-      if (optionId === 'decline') {
-        p.marriageDeclined = true;
-        addHappiness(s, DECLINE_MARRIAGE_HAPPINESS, 'marriage.decline');
-        return;
+      const face = rollDie(s);
+      if (!MARRIAGE.faces.includes(face)) {
+        log(s, 'marriage.no', { params: { face } });
+        return { kind: 'notice', messageKey: 'marriage.no', params: { face }, fromSquare: true };
       }
-      const [, work, size] = optionId.split(':') as [string, SpouseWork, 'small' | 'large'];
+      const workFace = rollDie(s);
+      const work: SpouseWork = faceResult(SPOUSE_WORK_FACES, workFace);
       p.married = true;
-      p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome * wageIndex(s) : 0, halfThisYear: false };
-      addCash(s, -WEDDING_COST[size], `marriage.wedding.${size}`);
-      addHappiness(s, MARRIAGE_HAPPINESS, 'marriage.marry');
-      if (size === 'large') addHappiness(s, LARGE_WEDDING_HAPPINESS, 'marriage.largeWedding');
-      return;
+      p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome * s.market.wageIndex : 0, halfThisYear: false };
+      log(s, 'marriage.marry', { notice: true });
+      addCash(s, -MARRIAGE.cost, 'marriage.cost');
+      return { kind: 'notice', messageKey: `marriage.yes.${work}`, params: { face, workFace, cost: MARRIAGE.cost }, fromSquare: true };
     }
-    case 'life':
-    case 'good':
-    case 'bad': {
-      const ev = ALL_EVENTS[d.eventId!];
-      const defs = typeof ev.options === 'function' ? ev.options(s) : ev.options;
-      const def = defs.find((o) => o.id === optionId)!;
-      for (const e of def.effects) applyEffect(s, e, `event.${ev.id}`);
-      if (def.effects.length === 0) log(s, `event.${ev.id}.skip`);
-      return;
+    case 'birth': {
+      const face = rollDie(s);
+      if (!BIRTH.faces.includes(face)) return { kind: 'notice', messageKey: 'birth.no', params: { face }, fromSquare: true };
+      p.children.push({ age: 0, highSchool: null, university: null, independent: false });
+      if (p.spouse?.work === 'full') p.spouse.halfThisYear = true;
+      log(s, 'birth.born', { notice: true });
+      addCash(s, -BIRTH.cost, 'birth.cost');
+      return { kind: 'notice', messageKey: p.spouse?.work === 'full' ? 'birth.yes.leave' : 'birth.yes', params: { face, cost: BIRTH.cost }, fromSquare: true };
+    }
+    case 'event': {
+      const ev = EVENTS_BY_ID[d.eventId!];
+      if (optionId === 'skip') {
+        log(s, `event.${ev.id}.skip`);
+      } else if (ev.choice === 'jobChange') {
+        changeJob(s, optionId.slice(4), false);
+      } else if (ev.choice === 'sideBusiness') {
+        p.sideBusinessTried = true;
+        addCash(s, -SIDE_BUSINESS.cost, 'event.sideBusiness.cost');
+        if (nextRandom(s) < SIDE_BUSINESS.successChance) {
+          p.sideBusinessIncome = SIDE_BUSINESS.income * s.market.wageIndex;
+          log(s, 'event.sideBusiness.success', { notice: true });
+        } else {
+          log(s, 'event.sideBusiness.fail', { notice: true });
+        }
+      } else {
+        for (const e of ev.effects ?? []) applyEffect(s, e, `event.${ev.id}`);
+      }
+      return null;
     }
     case 'gamble':
       if (optionId !== 'skip') gamble(s, optionId);
-      return;
-    case 'insurance':
-      if (optionId === 'medical' || optionId === 'both') {
-        p.medicalPremium = medicalPremiumAt(p.age);
-        log(s, 'insurance.medical.join', { params: { premium: p.medicalPremium } });
-      }
-      if (optionId === 'fire' || optionId === 'both') {
-        p.properties.forEach((x) => (x.fireInsured = true));
-        log(s, 'insurance.fire.join');
-      }
-      return;
+      return null;
     case 'realEstate':
-      if (optionId !== 'skip') buyProperty(s, d.offerPrice!, optionId);
-      return;
-    case 'school':
-      p.children[d.childIndex!].school = optionId as Child['school'];
-      log(s, `school.${optionId}`);
-      return;
-    case 'university':
-      p.children[d.childIndex!].university = optionId as Child['university'];
-      log(s, `university.${optionId}`);
-      return;
+      if (optionId !== 'skip') buyHome(s, d.offerPrice!, optionId === 'homeLoan');
+      return null;
     case 'athleteRetire':
-      changeJob(s, optionId.slice(4) as JobId, true);
-      p.athleteRetireAge = null;
-      return;
+      changeJob(s, optionId.slice(4), true);
+      return null;
   }
 }
 
 function changeJob(s: GameState, jobId: JobId, fromStart: boolean) {
   const p = s.player;
   p.jobId = jobId;
-  p.salary = (fromStart ? JOBS[jobId].startSalary : salaryAtAge(jobId, p.age)) * wageIndex(s);
-  p.athleteRetireAge = null;
-  log(s, 'job.change', { params: { job: jobId } });
+  p.salary = (fromStart ? JOBS[jobId].startSalary : salaryAtYear(jobId, s.year)) * s.market.wageIndex;
+  // 引退のあとの職業は、引退の記録にする
+  log(s, fromStart && p.athleteRetireYear !== null ? 'job.retire' : 'job.change', { params: { job: jobId }, notice: true });
+  p.athleteRetireYear = null;
 }
 
 function applyEffect(s: GameState, e: Effect, key: string) {
@@ -570,104 +459,49 @@ function applyEffect(s: GameState, e: Effect, key: string) {
     case 'cash':
       addCash(s, e.amount, key);
       return;
-    case 'happiness':
-      addHappiness(s, e.amount, key);
-      return;
     case 'salaryRate':
       p.salary *= 1 + e.rate;
-      log(s, `${key}.salary`, { params: { rate: e.rate } });
+      log(s, `${key}.salary`, { params: { rate: Math.round(e.rate * 100) } });
       return;
-    case 'bonus':
-      addCash(s, p.salary * e.rate, key);
-      return;
-    case 'investBonus': {
-      const spent = investByPolicy(s, p.salary * e.rate);
-      log(s, `${key}.invest`, { params: { amount: Math.round(spent) } });
-      return;
-    }
     case 'noIncome':
-      p.noIncomeThisYear = true;
-      return;
-    case 'birth':
-      p.children.push({ age: 0, school: 'public', university: null, independent: false });
-      if (p.spouse && p.spouse.work === 'full') {
-        if (e.spouse === 'leave') {
-          p.spouse.work = 'none';
-          p.spouse.income = 0;
-        } else {
-          p.spouse.halfThisYear = true;
-        }
-      }
+      p.noIncomeMonths = Math.max(p.noIncomeMonths, e.months);
+      log(s, `${key}.noIncome`, { params: { months: e.months }, notice: true });
       return;
     case 'spousePart':
       if (p.spouse) {
         p.spouse.work = 'part';
-        p.spouse.income = SPOUSE.partIncome * wageIndex(s);
+        p.spouse.income = SPOUSE_PART_INCOME * s.market.wageIndex;
       }
-      log(s, key);
+      log(s, key, { notice: true });
       return;
     case 'sickness': {
       const heavy = nextRandom(s) < SICKNESS.heavyChance;
-      const cost = heavy ? SICKNESS.heavyCost : SICKNESS.lightCost;
-      if (heavy) p.noIncomeThisYear = true;
+      if (heavy) p.noIncomeMonths = Math.max(p.noIncomeMonths, SICKNESS.heavyMonths);
       if (p.medicalPremium !== null) {
-        s.stats.insurancePaid += cost;
-        log(s, `${key}.covered`, { params: { cost, heavy: heavy ? 1 : 0 } });
+        s.stats.insurancePaid += SICKNESS.cost;
+        log(s, `${key}.covered`, { params: { cost: SICKNESS.cost }, notice: true });
       } else {
-        addCash(s, -cost, heavy ? `${key}.heavy` : `${key}.light`);
+        addCash(s, -SICKNESS.cost, heavy ? `${key}.heavy` : key);
       }
       return;
     }
-    case 'careHome':
-      p.careAtHomeThisYear = true;
-      return;
-    case 'hobbyStart':
-      p.hobby = true;
-      return;
-    case 'petStart':
-      p.petYears = 0;
-      return;
-    case 'sideBusiness':
-      addCash(s, -SIDE_BUSINESS.cost, `${key}.cost`);
-      if (nextRandom(s) < SIDE_BUSINESS.successChance) {
-        p.sideBusinessIncome = SIDE_BUSINESS.income;
-        addHappiness(s, SIDE_BUSINESS.happinessSuccess, `${key}.success`);
-      } else {
-        addHappiness(s, SIDE_BUSINESS.happinessFail, `${key}.fail`);
-      }
-      return;
-    case 'jobChange':
-      changeJob(s, e.jobId, false);
-      return;
-    case 'vacancy': {
-      const rentals = p.properties.filter((x) => x.use === 'rental');
-      if (rentals.length) rentals[randomInt(s, 0, rentals.length - 1)].vacant = true;
-      log(s, key);
-      return;
-    }
-    case 'repair':
-      addCash(s, -e.amount, key);
-      return;
-    case 'disaster': {
-      const target = p.properties[randomInt(s, 0, p.properties.length - 1)];
-      if (target.fireInsured) {
+    case 'disaster':
+      if (p.home?.fireInsured) {
         s.stats.insurancePaid += e.amount;
-        log(s, `${key}.covered`, { params: { cost: e.amount } });
+        log(s, `${key}.covered`, { params: { cost: e.amount }, notice: true });
       } else {
         addCash(s, -e.amount, key);
       }
       return;
-    }
   }
 }
 
 function gamble(s: GameState, optionId: string) {
   const [id, betText] = optionId.split(':') as [GambleId, string];
   const bet = Number(betText);
-  const def = GAMBLES[id];
   let r = nextRandom(s);
   let multiplier = 0;
-  for (const o of def.outcomes) {
+  for (const o of GAMBLES[id].outcomes) {
     if (r < o.probability) {
       multiplier = o.multiplier;
       break;
@@ -678,40 +512,31 @@ function gamble(s: GameState, optionId: string) {
   s.stats.gambleSpent += bet;
   s.stats.gambleReturned += back;
   addCash(s, back - bet, `gamble.${id}`);
-  if (multiplier >= 100) addHappiness(s, GAMBLE_JACKPOT_HAPPINESS, 'gamble.jackpot');
 }
 
-function buyProperty(s: GameState, price: number, optionId: string) {
-  const p = s.player;
-  const use = optionId.startsWith('home') ? 'home' : 'rental';
-  const withLoan = optionId.endsWith('Loan');
+function buyHome(s: GameState, price: number, withLoan: boolean) {
   const fairValue = REAL_ESTATE.basePrice * s.market.realEstateIndex;
-  const buyCost = price * REAL_ESTATE.buyCostRate;
-  const terms = use === 'home' ? REAL_ESTATE.home : REAL_ESTATE.rental;
   const down = withLoan ? price * REAL_ESTATE.downPaymentRate : price;
-  addCash(s, -(down + buyCost), `realEstate.buy.${use}`);
-  const id = Math.max(0, ...p.properties.map((x) => x.id)) + 1;
-  p.properties.push({
-    id,
-    use,
+  addCash(s, -(down + price * REAL_ESTATE.buyCostRate), 'realEstate.buy');
+  s.player.home = {
     value: fairValue,
-    loan: withLoan ? createLoan(price - down, terms.rate, terms.years) : null,
+    loan: withLoan ? createLoan(price - down, REAL_ESTATE.loan.rate, REAL_ESTATE.loan.years) : null,
+    // 住宅ローンで買うと、火災・地震保険に自動で入る（design.md 4.4）
     fireInsured: withLoan,
-    vacant: false,
-  });
-  if (use === 'home') addHappiness(s, HOME_HAPPINESS, 'realEstate.home');
+  };
 }
 
-// ---------------------------------------------------------------- 年末決算
+// ---------------------------------------------------------------- 月末
 
 function livingCost(s: GameState): number {
   const p = s.player;
   const kids = p.children.filter((c) => !c.independent).length;
   let base = (p.married ? LIVING_COST.couple : LIVING_COST.single) + kids * LIVING_COST.perChild;
-  if (hasHome(s)) base -= LIVING_COST.homeOwnerDiscount;
+  if (p.home) base -= LIVING_COST.homeOwnerDiscount;
   return base * JOBS[p.jobId].livingRate * s.market.livingIndex;
 }
 
+/** 教育費（年） */
 function educationCost(s: GameState): number {
   const p = s.player;
   const daycare = p.spouse?.work === 'full';
@@ -719,123 +544,161 @@ function educationCost(s: GameState): number {
   for (const c of p.children) {
     if (c.independent) continue;
     if (c.age <= 5) total += daycare ? EDUCATION_COST.daycare : 0;
-    else if (c.age <= 11) total += EDUCATION_COST.elementary[c.school];
-    else if (c.age <= 14) total += EDUCATION_COST.juniorHigh[c.school];
-    else if (c.age <= 17) total += EDUCATION_COST.highSchool[c.school];
+    else if (c.age <= 11) total += EDUCATION_COST.elementary;
+    else if (c.age <= 14) total += EDUCATION_COST.juniorHigh;
+    else if (c.age <= 17) total += EDUCATION_COST.highSchool[c.highSchool ?? 'public'];
     else if (c.university === 'national' || c.university === 'private') total += EDUCATION_COST.university[c.university];
   }
   return total;
 }
 
 /**
- * 1年分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（年初の「今年の予定」に使う）。
- * 予定では、その年の出来事（失業、病気など）はまだ起きていないものとして計算する。
+ * 1ヶ月分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（画面の「今月の家計」に使う）。
+ * 金額のデータは1年分なので、12で割る。
  */
-function computeFlows(s: GameState, dryRun: boolean) {
+function computeMonth(s: GameState, dryRun: boolean) {
   const p = s.player;
   const income: Record<string, number> = {};
   const expense: Record<string, number> = {};
+  const m = MONTHS_PER_YEAR;
 
-  income.salary = p.noIncomeThisYear ? 0 : p.salary * (p.careAtHomeThisYear ? CARE.homeSalaryRate : 1);
-  income.spouse = p.spouse ? p.spouse.income * (p.spouse.halfThisYear ? 0.5 : 1) : 0;
-  income.sideBusiness = p.sideBusinessIncome;
-  income.interest = Math.max(0, p.cash) * s.market.depositRate;
-  income.bond = assetValue(s, 'bond') * ASSETS.bond.incomeYield;
-  income.dividend = assetValue(s, 'stock') * ASSETS.stock.incomeYield;
-  income.rent = p.properties
-    .filter((x) => x.use === 'rental' && !x.vacant)
-    .reduce((sum, x) => sum + x.value * REAL_ESTATE.rentYield * (1 - REAL_ESTATE.rentCostRate), 0);
+  income.salary = employed(s) ? p.salary / m : 0;
+  income.spouse = p.spouse ? (p.spouse.income * (p.spouse.halfThisYear ? 0.5 : 1)) / m : 0;
+  income.sideBusiness = p.sideBusinessIncome / m;
 
-  expense.jobCost = JOBS[p.jobId].fixedCost;
-  expense.living = livingCost(s);
-  expense.hobby = p.hobby ? HOBBY.yearlyCost : 0;
-  expense.pet = p.petYears !== null ? PET.yearlyCost : 0;
-  expense.education = educationCost(s);
+  expense.jobCost = JOBS[p.jobId].fixedCost / m;
+  expense.living = livingCost(s) / m;
+  expense.education = educationCost(s) / m;
   let loanInterest = 0;
-  expense.loan = p.properties.reduce((sum, x) => {
-    if (!x.loan) return sum;
-    if (dryRun) return sum + Math.min(x.loan.payment, x.loan.balance * (1 + x.loan.rate));
-    const r = payLoanYear(x.loan);
-    loanInterest += r.interest;
-    return sum + r.paid;
-  }, 0);
-  expense.insurance =
-    (p.medicalPremium ?? 0) + p.properties.filter((x) => x.fireInsured).length * INSURANCE.firePremiumPerProperty;
-  if (!dryRun) for (const x of p.properties) if (x.loan && x.loan.balance === 0) x.loan = null;
+  const loan = p.home?.loan;
+  if (loan) {
+    if (dryRun) expense.loan = Math.min(loan.payment, loan.balance * (1 + loan.rate / 12));
+    else {
+      const r = payLoanMonth(loan);
+      loanInterest = r.interest;
+      expense.loan = r.paid;
+      if (loan.balance === 0) p.home!.loan = null;
+    }
+  } else expense.loan = 0;
+  expense.insurance = ((p.medicalPremium ?? 0) + (p.home?.fireInsured ? INSURANCE.firePremium : 0)) / m;
   return { income, expense, loanInterest };
 }
 
-/** その年の収入と支出の予定（年初とゲーム開始時に知らせる） */
-export function estimateYear(s: GameState): { income: Record<string, number>; expense: Record<string, number>; net: number } {
-  const { income, expense } = computeFlows(s, true);
-  const net = Object.values(income).reduce((a, b) => a + b, 0) - Object.values(expense).reduce((a, b) => a + b, 0);
-  return { income, expense, net };
+const sum = (items: Record<string, number>) => Object.values(items).reduce((a, b) => a + b, 0);
+
+/** 今月の収入と支出の予定 */
+export function estimateMonth(s: GameState): { income: Record<string, number>; expense: Record<string, number>; net: number } {
+  const { income, expense } = computeMonth(s, true);
+  return { income, expense, net: sum(income) - sum(expense) };
 }
 
-function settleYear(s: GameState) {
+function addFlows(target: Record<string, number>, items: Record<string, number>) {
+  for (const [k, v] of Object.entries(items)) target[k] = (target[k] ?? 0) + v;
+}
+
+/** 月末: 給料が入り、生活費などが出ていく。値段が少し動く。12月なら年末へ */
+function endMonth(s: GameState) {
   const p = s.player;
-  const { income, expense, loanInterest } = computeFlows(s, false);
-
-  const totalIncome = Object.values(income).reduce((a, b) => a + b, 0);
-  const totalExpense = Object.values(expense).reduce((a, b) => a + b, 0);
-  const net = totalIncome - totalExpense;
-  p.cash += net;
-  s.stats.investmentIncome += income.interest + income.bond + income.dividend + income.rent;
+  const { income, expense, loanInterest } = computeMonth(s, false);
+  const flows = s.yearFlows;
+  addFlows(flows.income, income);
+  addFlows(flows.expense, expense);
+  flows.loanPrincipal += expense.loan - loanInterest;
   s.stats.premiumsPaid += expense.insurance;
+  p.cash += sum(income) - sum(expense);
+  if (p.noIncomeMonths > 0) p.noIncomeMonths -= 1;
 
+  // お金が余ったら、まずカードローンの返済に回す（design.md 8章）
   if (p.cash > 0 && p.cardLoan > 0) {
     const repay = Math.min(p.cash, p.cardLoan);
     p.cardLoan -= repay;
     p.cash -= repay;
   }
+  coverShortfall(s);
+  flows.revaluation += updateMarketMonth(s);
 
-  let invested = 0;
-  if (net > 0 && p.cash > 0) invested = investByPolicy(s, Math.min(net, p.cash) * p.policy.investRatio);
+  s.lastRoll = null;
+  if (s.month >= MONTHS_PER_YEAR) {
+    endYear(s);
+    recordPrices(s, s.month);
+    return;
+  }
+  recordPrices(s, s.month);
+  s.month += 1;
+  s.phase = 'roll';
+}
 
-  const shortfall = coverShortfall(s);
-
-  const loanPrincipal = expense.loan - loanInterest;
-  s.lastSettlement = { age: p.age, income, expense, net, invested, loanPrincipal, ...shortfall } satisfies Settlement;
-  finalizeYear(s);
+function recordPrices(s: GameState, month: number) {
+  s.prices.push({
+    year: s.year,
+    month,
+    prices: { ...s.market.prices },
+    livingIndex: s.market.livingIndex,
+    realEstateIndex: s.market.realEstateIndex,
+    economy: s.market.economy,
+  });
 }
 
 /** お金が足りないときは、先に資産を売り、それでも足りない分だけカードローンで借りる（利息なし） */
-function coverShortfall(s: GameState): { sold: number; borrowed: number } {
+function coverShortfall(s: GameState) {
   const p = s.player;
+  if (p.cash >= 0) return;
   let sold = 0;
-  for (const id of ASSET_IDS) {
+  for (const id of sellOrder(s)) {
     if (p.cash >= 0) break;
     sold += sellAsset(s, id, -p.cash);
   }
-  if (sold > 0) log(s, 'shortfall.sell', { params: { amount: Math.round(sold) } });
-  let borrowed = 0;
+  if (sold > 0) log(s, 'shortfall.sell', { params: { amount: Math.round(sold) }, notice: true });
   if (p.cash < 0) {
-    borrowed = -p.cash;
+    const borrowed = -p.cash;
     p.cardLoan += borrowed;
     p.cash = 0;
-    log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) } });
+    s.yearFlows.borrowed += borrowed;
+    log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
   }
-  return { sold, borrowed };
+  s.yearFlows.sold += sold;
 }
 
-function finalizeYear(s: GameState) {
-  if (s.player.cardLoan > 0) addHappiness(s, DEBT_HAPPINESS, 'debt');
+// ---------------------------------------------------------------- 年末
+
+/** 年末: 利息と配当が入り、ニュースで相場が大きく動き、決算をまとめる */
+function endYear(s: GameState) {
+  const p = s.player;
+  const flows = s.yearFlows;
+  const yearly: Record<string, number> = {
+    interest: Math.max(0, p.cash) * s.market.depositRate,
+    bond: 0,
+    dividend: 0,
+  };
+  for (const id of ASSET_IDS) {
+    const a = ASSETS[id];
+    const v = assetValue(s, id) * a.incomeYield;
+    if (a.kind === 'bond') yearly.bond += v;
+    else if (a.kind === 'stock') yearly.dividend += v;
+  }
+  addFlows(flows.income, yearly);
+  p.cash += sum(yearly);
+  s.stats.investmentIncome += sum(yearly);
+
+  flows.revaluation += updateMarketYear(s).moved;
+  flows.net = sum(flows.income) - sum(flows.expense);
+  s.lastSettlement = structuredClone(flows);
+
   const worth = netWorth(s);
+  const prev = s.history.length ? s.history[s.history.length - 1].netWorth : START_CASH;
+  const investment = sum(yearly);
+  const work = sum(flows.income) - investment - (sum(flows.expense) - flows.loanPrincipal);
   s.history.push({
-    age: s.player.age,
+    year: s.year,
     netWorth: worth,
-    cash: s.player.cash,
-    assets: {
-      ...(Object.fromEntries(ASSET_IDS.map((id) => [id, assetValue(s, id)])) as Record<AssetId, number>),
-      realEstate: realEstateValue(s),
-    },
+    cash: p.cash,
+    assets: { ...Object.fromEntries(ASSET_IDS.map((id) => [id, assetValue(s, id)])), realEstate: realEstateValue(s) },
     debt: totalDebt(s),
-    happiness: s.player.happiness,
     economy: s.market.economy,
     newsId: s.newsId ?? '',
-    breakdown: breakdownOf(s, worth),
-    incomeTotal: s.lastSettlement ? Object.values(s.lastSettlement.income).reduce((a, b) => a + b, 0) : 0,
-    expenseTotal: s.lastSettlement ? Object.values(s.lastSettlement.expense).reduce((a, b) => a + b, 0) : 0,
+    breakdown: { work, investment, revaluation: flows.revaluation, other: worth - prev - work - investment - flows.revaluation },
+    incomeTotal: sum(flows.income),
+    expenseTotal: sum(flows.expense),
     market: {
       prices: { ...s.market.prices },
       realEstateIndex: s.market.realEstateIndex,
@@ -846,98 +709,99 @@ function finalizeYear(s: GameState) {
   s.phase = 'yearEnd';
 }
 
-/** 純資産が増えた・減った理由。合計がその年の純資産の増減と一致するよう、残りは「出来事など」に入れる */
-function breakdownOf(s: GameState, worth: number) {
-  const st = s.lastSettlement!;
-  const prev = s.history.length ? s.history[s.history.length - 1].netWorth : START_CASH;
-  const investment = st.income.interest + st.income.bond + st.income.dividend + st.income.rent;
-  const otherIncome = Object.values(st.income).reduce((a, b) => a + b, 0) - investment;
-  const spending = Object.values(st.expense).reduce((a, b) => a + b, 0) - st.loanPrincipal;
-  const work = otherIncome - spending;
-  const revaluation = s.marketChange
-    ? Object.values(s.marketChange.amounts).reduce((a, b) => a + b, 0)
-    : 0;
-  return { work, investment, revaluation, other: worth - prev - work - investment - revaluation };
-}
-
-/** 年末決算を見たあと、次の年へ。65歳なら終了 */
+/** 年末のニュースと決算を見たあと、次の年へ。最後の年なら終了 */
 export function nextYear(state: GameState): GameState {
   assertPhase(state, 'yearEnd');
   const s = clone(state);
-  if (s.player.age >= END_AGE) {
-    s.score = computeScore(s);
+  if (s.year >= s.years) {
+    s.result = computeResult(s);
     s.phase = 'finished';
     return s;
   }
+  const p = s.player;
   s.year += 1;
-  startYear(s);
+  s.month = 1;
+  s.yearFlows = emptyFlows(s.year);
+  s.yearMarket = newYearMarket(s);
+  growSalary(s);
+  if (p.spouse) {
+    p.spouse.halfThisYear = false;
+    if (p.spouse.work !== 'none') p.spouse.income *= 1 + BASE_INFLATION;
+    if (p.spouse.work === 'full') p.spouse.income *= 1 + SPOUSE.fullGrowth;
+  }
+  p.children.forEach((c) => ageChild(s, c));
+  if (p.jobId === 'athlete' && p.athleteRetireYear !== null && s.year >= p.athleteRetireYear) {
+    s.queue.push({ kind: 'athleteRetire' });
+  }
+  nextFromQueue(s);
   return s;
 }
 
-// ---------------------------------------------------------------- いつでもできる操作
-
-const ACTION_PHASES = new Set(['yearStart', 'decision', 'roll', 'yearEnd']);
-
-function assertCanAct(s: GameState) {
-  if (!ACTION_PHASES.has(s.phase)) throw new Error(`cannot act in phase ${s.phase}`);
+function nextFromQueue(s: GameState) {
+  const d = s.queue.shift();
+  if (d) startDecision(s, d, 'queue');
+  else {
+    s.decision = null;
+    s.decisionFrom = null;
+    s.phase = 'roll';
+  }
 }
+
+function growSalary(s: GameState) {
+  const p = s.player;
+  const job = JOBS[p.jobId];
+  // 物価に合わせて上がる分（design.md 7章）。昇給はこの上に乗る
+  p.salary *= 1 + BASE_INFLATION;
+  p.sideBusinessIncome *= 1 + BASE_INFLATION;
+  if (job.volatility > 0) {
+    const r = job.growth + job.volatility * (nextRandom(s) * 2 - 1);
+    p.salary *= 1 + r;
+    if (job.hitChance > 0 && nextRandom(s) < job.hitChance) {
+      p.salary *= job.hitMultiplier;
+      log(s, 'auto.hit', { notice: true });
+    }
+    p.salary = Math.min(job.maxSalary, Math.max(job.minSalary, p.salary));
+  } else {
+    p.salary *= 1 + job.growth;
+  }
+}
+
+/** 子どもが1つ年を取る。進学はルーレットで決まり、お知らせで見せる（design.md 5.2） */
+function ageChild(s: GameState, c: Child) {
+  if (c.independent) return;
+  c.age += 1;
+  if (c.age === 6) log(s, 'school.elementary', { notice: true });
+  if (c.age === 12) log(s, 'school.juniorHigh', { notice: true });
+  if (c.age === 15) {
+    const face = rollDie(s);
+    c.highSchool = faceResult(HIGH_SCHOOL_FACES, face);
+    log(s, `school.highSchool.${c.highSchool}`);
+    s.queue.push({ kind: 'notice', messageKey: `school.highSchool.${c.highSchool}`, params: { face } });
+  }
+  if (c.age === 18) {
+    const face = rollDie(s);
+    c.university = faceResult(UNIVERSITY_FACES, face);
+    log(s, `school.university.${c.university}`);
+    s.queue.push({ kind: 'notice', messageKey: `school.university.${c.university}`, params: { face } });
+  }
+  const independentAge = c.university === 'none' ? CHILD_INDEPENDENT_AGE_NO_UNIVERSITY : CHILD_INDEPENDENT_AGE;
+  if (c.age >= independentAge && c.university !== null) {
+    c.independent = true;
+    log(s, 'auto.childIndependent', { notice: true });
+  }
+}
+
+// ---------------------------------------------------------------- 売り買い（取引タイムは段階3.5の2で作る）
+
+const TRADE_PHASES = new Set(['roll', 'decision', 'yearEnd']);
 
 /** 金額分を買う（amount > 0）か売る（amount < 0） */
 export function trade(state: GameState, id: AssetId, amount: number): GameState {
-  assertCanAct(state);
+  if (!TRADE_PHASES.has(state.phase)) throw new Error(`cannot trade in phase ${state.phase}`);
+  if (!ASSETS[id]) throw new Error(`unknown asset: ${id}`);
   const s = clone(state);
   if (amount > 0) buyAsset(s, id, amount);
   else if (amount < 0) sellAsset(s, id, -amount);
-  return s;
-}
-
-export function changePolicy(state: GameState, policy: Policy): GameState {
-  assertCanAct(state);
-  if (!validatePolicy(policy)) throw new Error('invalid policy');
-  const s = clone(state);
-  s.player.policy = structuredClone(policy);
-  rebalance(s);
-  return s;
-}
-
-/** 売れるか（ローンを返して現金がマイナスにならないか） */
-export function canSellProperty(s: GameState, propertyId: number): boolean {
-  const x = s.player.properties.find((q) => q.id === propertyId);
-  if (!x) return false;
-  const proceeds = x.value * (1 - REAL_ESTATE.sellFeeRate);
-  return s.player.cash + proceeds - (x.loan?.balance ?? 0) >= 0;
-}
-
-export function sellProperty(state: GameState, propertyId: number): GameState {
-  assertCanAct(state);
-  if (!canSellProperty(state, propertyId)) throw new Error('cannot sell property');
-  const s = clone(state);
-  const p = s.player;
-  const x = p.properties.find((q) => q.id === propertyId)!;
-  const proceeds = x.value * (1 - REAL_ESTATE.sellFeeRate);
-  addCash(s, proceeds - (x.loan?.balance ?? 0), `realEstate.sell.${x.use}`);
-  p.properties = p.properties.filter((q) => q.id !== propertyId);
-  return s;
-}
-
-export function prepay(state: GameState, propertyId: number, amount: number): GameState {
-  assertCanAct(state);
-  const s = clone(state);
-  const x = s.player.properties.find((q) => q.id === propertyId);
-  if (!x || !x.loan) throw new Error('no loan');
-  const paid = prepayLoan(x.loan, Math.min(amount, s.player.cash));
-  s.player.cash -= paid;
-  if (x.loan.balance === 0) x.loan = null;
-  log(s, 'loan.prepay', { cash: -paid });
-  return s;
-}
-
-export function cancelInsurance(state: GameState, which: 'medical' | 'fire'): GameState {
-  assertCanAct(state);
-  const s = clone(state);
-  if (which === 'medical') s.player.medicalPremium = null;
-  else s.player.properties.forEach((x) => (x.fireInsured = false));
-  log(s, `insurance.${which}.cancel`);
   return s;
 }
 

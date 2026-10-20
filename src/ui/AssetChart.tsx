@@ -1,19 +1,11 @@
 import { ASSET_IDS } from '../data/assets';
 import type { YearRecord } from '../game/types';
 import { formatMoney, t } from '../i18n';
+import { colorOf, yearTickStep } from './chartColors';
 
-type SeriesKey = 'deposit' | (typeof ASSET_IDS)[number] | 'realEstate';
+const SERIES_KEYS = ['deposit', ...ASSET_IDS, 'realEstate'];
 
-const SERIES: { key: SeriesKey; color: string }[] = [
-  { key: 'deposit', color: '#7cc6fe' },
-  { key: 'bond', color: '#2ec4b6' },
-  { key: 'gold', color: '#ffd166' },
-  { key: 'fund', color: '#4d96ff' },
-  { key: 'stock', color: '#9b5de5' },
-  { key: 'realEstate', color: '#f9a03f' },
-];
-
-const valueOf = (r: YearRecord, key: SeriesKey) => (key === 'deposit' ? Math.max(0, r.cash) : r.assets[key]);
+const valueOf = (r: YearRecord, key: string) => (key === 'deposit' ? Math.max(0, r.cash) : r.assets[key] ?? 0);
 
 /** 「1億」「5,000万」のような、目盛りに使う区切りのよい値 */
 function niceStep(max: number): number {
@@ -29,23 +21,24 @@ export function AssetChart({ history }: { history: YearRecord[] }) {
   const W = 640;
   const H = 260;
   const pad = { l: 74, r: 14, t: 12, b: 26 };
-  const totals = history.map((r) => SERIES.reduce((a, s) => a + valueOf(r, s.key), 0));
+  const totals = history.map((r) => SERIES_KEYS.reduce((a, k) => a + valueOf(r, k), 0));
   const minNet = Math.min(0, ...history.map((r) => r.netWorth), ...history.map((r) => -r.debt));
-  const step = niceStep(Math.max(1, ...totals, ...history.map((r) => r.netWorth)) - minNet);
-  const top = Math.ceil(Math.max(1, ...totals, ...history.map((r) => r.netWorth)) / step) * step;
+  const maxV = Math.max(1, ...totals, ...history.map((r) => r.netWorth));
+  const step = niceStep(maxV - minNet);
+  const top = Math.ceil(maxV / step) * step;
   const bottom = Math.floor(minNet / step) * step;
   const n = history.length;
   const x = (i: number) => (n === 1 ? (pad.l + W - pad.r) / 2 : pad.l + (i / (n - 1)) * (W - pad.l - pad.r));
   const y = (v: number) => pad.t + ((top - v) / (top - bottom || 1)) * (H - pad.t - pad.b);
 
-  const layers: { key: SeriesKey; color: string; d: string }[] = [];
+  const layers: { key: string; d: string }[] = [];
   const base = history.map(() => 0);
-  for (const s of SERIES) {
-    const upper = history.map((r, i) => base[i] + valueOf(r, s.key));
+  for (const key of SERIES_KEYS) {
+    const upper = history.map((r, i) => base[i] + valueOf(r, key));
     if (upper.every((v, i) => v === base[i])) continue;
-    const top = upper.map((v, i) => `${x(i)},${y(v)}`);
+    const topLine = upper.map((v, i) => `${x(i)},${y(v)}`);
     const bot = base.map((v, i) => `${x(i)},${y(v)}`).reverse();
-    layers.push({ key: s.key, color: s.color, d: `M${top.join('L')}L${bot.join('L')}Z` });
+    layers.push({ key, d: `M${topLine.join('L')}L${bot.join('L')}Z` });
     upper.forEach((v, i) => (base[i] = v));
   }
   const ticks: number[] = [];
@@ -53,6 +46,7 @@ export function AssetChart({ history }: { history: YearRecord[] }) {
   const netLine = history.map((r, i) => `${i ? 'L' : 'M'}${x(i)},${y(r.netWorth)}`).join('');
   const debtLine = history.map((r, i) => `${i ? 'L' : 'M'}${x(i)},${y(-r.debt)}`).join('');
   const hasDebt = history.some((r) => r.debt > 0);
+  const tick = yearTickStep(n);
 
   return (
     <div>
@@ -66,23 +60,23 @@ export function AssetChart({ history }: { history: YearRecord[] }) {
           </g>
         ))}
         {layers.map((l) => (
-          <path key={l.key} d={l.d} fill={l.color} fillOpacity="0.85" />
+          <path key={l.key} d={l.d} fill={colorOf(l.key)} fillOpacity="0.85" />
         ))}
         {hasDebt && <path d={debtLine} fill="none" stroke="var(--bad)" strokeWidth="2" strokeDasharray="5 4" />}
         <path d={netLine} fill="none" stroke="var(--text)" strokeWidth="2.5" />
         {history
-          .filter((r) => r.age % 10 === 0 || history.length < 8)
+          .filter((r) => r.year % tick === 0 || r.year === 1)
           .map((r) => (
-            <text key={r.age} x={x(history.indexOf(r))} y={H - 7} textAnchor="middle" fontSize="11" fill="var(--text-sub)">
-              {t('hud.age', { age: r.age })}
+            <text key={r.year} x={x(history.indexOf(r))} y={H - 7} textAnchor="middle" fontSize="11" fill="var(--text-sub)">
+              {t('hud.year', { year: r.year })}
             </text>
           ))}
       </svg>
       <div className="legend">
-        {SERIES.map((s) => (
-          <span key={s.key}>
-            <i style={{ background: s.color }} />
-            {t(`asset.${s.key}`)}
+        {layers.map((l) => (
+          <span key={l.key}>
+            <i style={{ background: colorOf(l.key) }} />
+            {t(`asset.${l.key}`)}
           </span>
         ))}
         <span>

@@ -1,21 +1,20 @@
 import type { LogEntry } from '../game/types';
 import { has, t } from '../i18n';
 
-/** 記録1件を、画面に出す短い名前にする（例: 「海外旅行」「結婚」） */
+/** 記録1件を、画面に出す短い名前にする（例: 「旅行」「結婚した」） */
 export function logLabel(entry: LogEntry): string {
-  const key = entry.key;
-  if (has(`label.${key}`)) return t(`label.${key}`);
-  if (has(`log.${key}`)) return t(`log.${key}`);
+  const { key, params } = entry;
+  if (has(`label.${key}`)) return t(`label.${key}`, params);
+  if (has(`log.${key}`)) return t(`log.${key}`, params);
   if (key.startsWith('event.')) {
     const [, id, suffix] = key.split('.');
     const base = t(`event.${id}.title`);
-    const extra = suffix && has(`label.${id}.${suffix}`) ? t(`label.${id}.${suffix}`) : '';
-    return base + extra;
+    return suffix && has(`label.suffix.${suffix}`) ? base + t(`label.suffix.${suffix}`, params) : base;
   }
   return key;
 }
 
-/** お金や幸福ポイントが動いた記録だけ */
-export function movingEntries(entries: LogEntry[]): LogEntry[] {
-  return entries.filter((e) => (e.cash && Math.round(e.cash) !== 0) || (e.happiness && e.happiness !== 0));
+/** お金が動いた記録と、お知らせの記録だけ */
+export function visibleEntries(entries: LogEntry[]): LogEntry[] {
+  return entries.filter((e) => (e.cash !== undefined && Math.round(e.cash * 10) !== 0) || e.notice);
 }

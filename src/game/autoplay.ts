@@ -1,93 +1,54 @@
 // コンピューターが自動で遊ぶ仕組み。釣り合いの確認とテストに使う。
 
-import { POLICY_PRESETS, type PolicyPresetId } from '../data/assets';
-import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from './engine';
+import { JOBS } from '../data/jobs';
+import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, roll, trade } from './engine';
 import type { DecisionOption, GameState, JobId } from './types';
 
 export interface Strategy {
-  /** 結婚するか: always = 必ずする、never = しない、random = 半々 */
-  marriage: 'always' | 'never' | 'random';
+  /** 年末に、預金のうち生活費の半年分を残して、投資信託を買う割合（0なら投資しない） */
+  investRate: number;
   /** ギャンブルをする確率 */
   gambleChance: number;
-  /** お金を使う選択肢（旅行、趣味など）を選ぶ確率 */
-  spendChance: number;
+  /** 家を買えるときに買う確率 */
+  homeChance: number;
 }
 
-export const DEFAULT_STRATEGY: Strategy = { marriage: 'random', gambleChance: 0.3, spendChance: 0.5 };
+export const DEFAULT_STRATEGY: Strategy = { investRate: 0.5, gambleChance: 0.3, homeChance: 0.4 };
 
-/**
- * 決定の選び方。人間らしく、お金に余裕がないときは使わず、余裕があるときは楽しむ。
- * 乱数は Math.random ではなく、シード値から作った専用の乱数を使う。
- */
+/** 決定の選び方。人間らしく、お金に余裕がないときは使わない */
 function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy, rand: () => number): string {
   const enabled = options.filter((o) => o.enabled);
   const d = s.decision!;
   const cash = s.player.cash;
-  const skip = enabled.find((o) => o.id === 'skip' || o.id === 'decline');
-  const others = enabled.filter((o) => o !== skip);
+  const skip = enabled.find((o) => o.id === 'skip');
   const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
-  /** 支払いが預金の3分の1以下なら、余裕があるとみなす */
-  const affordable = (o: DecisionOption) => (o.cash ?? 0) >= 0 || -(o.cash ?? 0) * 3 <= cash;
 
   switch (d.kind) {
-    case 'marriage': {
-      if (enabled.length <= 1) return enabled[0].id;
-      const marry = strategy.marriage === 'always' || (strategy.marriage === 'random' && rand() < 0.5);
-      if (!marry) return 'decline';
-      const work = rand() < 0.6 ? 'full' : 'none';
-      const size = cash > 1000 && rand() < 0.3 ? 'large' : 'small';
-      return (enabled.find((o) => o.id === `marry:${work}:${size}`) ?? others[0] ?? enabled[0]).id;
-    }
-    case 'school':
-    case 'university': {
-      // 私立は、手元に余裕があるときだけ選ぶ
-      const rich = cash > 1000;
-      return pick(enabled.filter((o) => rich || o.id !== 'private')).id;
-    }
     case 'gamble': {
       if (rand() >= strategy.gambleChance) return 'skip';
-      const bets = others.filter((o) => Number(o.params?.bet) <= (cash > 200 ? 10 : 1));
+      const bets = enabled.filter((o) => o.id !== 'skip' && Number(o.params?.bet) <= (cash > 200 ? 10 : 1));
       return bets.length ? pick(bets).id : 'skip';
-    }
-    case 'insurance': {
-      const medical = enabled.find((o) => o.id === 'medical');
-      if (medical && s.player.age <= 40 && rand() < 0.6) return medical.id;
-      const fire = enabled.find((o) => o.id === 'fire' || o.id === 'both');
-      if (fire && rand() < 0.7) return fire.id;
-      return 'skip';
     }
     case 'realEstate': {
       const home = enabled.find((o) => o.id === 'homeLoan');
-      if (home && s.player.age >= 28 && s.player.age <= 45 && rand() < 0.4 && affordable(home)) return home.id;
-      const rental = enabled.find((o) => o.id === 'rentalLoan');
-      if (rental && rand() < 0.15 && affordable(rental)) return rental.id;
+      // 頭金と諸費用を払っても、預金が半分以上残るときだけ買う
+      if (home && rand() < strategy.homeChance && -(home.cash ?? 0) * 2 <= cash) return home.id;
       return 'skip';
     }
-    case 'athleteRetire':
-      return pick(enabled).id;
+    case 'event': {
+      if (d.eventId === 'jobChange') {
+        const better = enabled.filter((o) => Number(o.params?.salary ?? 0) > s.player.salary * 1.1);
+        return better.length && rand() < 0.5 ? pick(better).id : skip!.id;
+      }
+      if (d.eventId === 'sideBusiness') {
+        const t = enabled.find((o) => o.id === 'try');
+        return t && cash > 500 && rand() < 0.3 ? t.id : 'skip';
+      }
+      return enabled[0].id;
+    }
     default:
-      break;
+      return pick(enabled).id;
   }
-
-  if (d.eventId === 'jobChange') {
-    const better = others.filter((o) => Number(o.params?.salary ?? 0) > s.player.salary * 1.1);
-    return better.length && rand() < 0.5 ? pick(better).id : (skip ?? enabled[0]).id;
-  }
-  if (d.eventId === 'birth') {
-    return others.length && rand() < 0.6 ? (others.find((o) => o.id !== 'birthLeave' || rand() < 0.3) ?? others[0]).id : (skip ?? enabled[0]).id;
-  }
-  // 「見送る」がある出来事: 余裕があり、楽しめるものだけを、ときどき選ぶ
-  if (skip) {
-    const fun = others.filter((o) => (o.happiness ?? 0) > 0 && affordable(o));
-    return fun.length && rand() < strategy.spendChance ? pick(fun).id : skip.id;
-  }
-  // どちらにも良い面と悪い面がある選択: 幸福を選ぶか、お金を選ぶか
-  if (enabled.length > 1) {
-    const byHappiness = [...enabled].sort((a, b) => (b.happiness ?? 0) - (a.happiness ?? 0))[0];
-    const byCash = [...enabled].sort((a, b) => (b.cash ?? 0) - (a.cash ?? 0))[0];
-    return (rand() < 0.5 && affordable(byHappiness) ? byHappiness : byCash).id;
-  }
-  return enabled[0].id;
 }
 
 function makeRand(seed: number) {
@@ -100,29 +61,42 @@ function makeRand(seed: number) {
   };
 }
 
+/** 年末に、余ったお金で投資信託を買う */
+function investAtYearEnd(s: GameState, strategy: Strategy): GameState {
+  if (strategy.investRate <= 0) return s;
+  const buffer = (s.history.at(-1)?.expenseTotal ?? 0) / 2;
+  const amount = Math.floor((s.player.cash - buffer) * strategy.investRate);
+  return amount >= 1 ? trade(s, 'fund', amount) : s;
+}
+
+/** 遊んだ回数の記録（テンポの確認に使う）。popups は、ポップアップで止まった回数 */
+export interface PlayCounts {
+  turns: number;
+  popups: number;
+}
+
 export function playGame(
   seed: number,
   jobId: JobId,
-  policyId: PolicyPresetId,
+  years = 20,
   strategy: Strategy = DEFAULT_STRATEGY,
+  counts: PlayCounts = { turns: 0, popups: 0 },
 ): GameState {
+  if (!JOBS[jobId]) throw new Error(`unknown job: ${jobId}`);
   const rand = makeRand(seed);
-  let s = createGame(seed);
-  s = chooseJob(s, jobId);
-  s = setPolicy(s, POLICY_PRESETS[policyId]);
-  for (let guard = 0; guard < 10000; guard++) {
+  let s = chooseJob(chooseYears(createGame(seed), years), jobId);
+  for (let guard = 0; guard < 100000; guard++) {
     switch (s.phase) {
-      case 'yearStart':
-        s = continueYear(s);
-        break;
       case 'roll':
         s = roll(s);
+        counts.turns += 1;
         break;
       case 'decision':
+        counts.popups += 1;
         s = choose(s, pickOption(s, getOptions(s), strategy, rand));
         break;
       case 'yearEnd':
-        s = nextYear(s);
+        s = nextYear(investAtYearEnd(s, strategy));
         break;
       case 'finished':
         return s;

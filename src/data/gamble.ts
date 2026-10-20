@@ -1,4 +1,4 @@
-// ギャンブルマス。design.md 3.5
+// ギャンブルマス。design.md 3.7
 // 戻ってくる金額の平均（還元率）は概算。出典の確認は後回しのタスク。
 
 export type GambleId = 'lottery' | 'horse' | 'pachinko';
@@ -49,5 +49,3 @@ export const GAMBLES: Record<GambleId, GambleDef> = {
 export const GAMBLE_IDS: GambleId[] = ['lottery', 'horse', 'pachinko'];
 export const GAMBLE_BETS = [1, 10, 100];
 
-/** 大当たり（賭け金の100倍以上）の幸福ポイント */
-export const GAMBLE_JACKPOT_HAPPINESS = 5;
