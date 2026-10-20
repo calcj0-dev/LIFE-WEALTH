@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { END_AGE } from './data/rules';
-import { choose, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from './game/engine';
+import { choose, continueYear, createGame, nextYear, roll, setPolicy } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -13,15 +13,12 @@ import { MoneyDelta } from './ui/Delta';
 import { Toasts } from './ui/Toasts';
 import { Result } from './ui/Result';
 import { AssetManager } from './ui/AssetManager';
-import { describeDecision } from './ui/decisionText';
 import { BudgetCard, JobRoulette, PolicySetup } from './ui/Setup';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
-/** 「OK」だけの出来事を、自動で進めるまでの時間（ミリ秒） */
-const AUTO_OK_MS = 1600;
 /** ふつうの年のニュースと決算を、自動で進めるまでの時間（ミリ秒） */
 const AUTO_YEAR_MS = 1200;
 /** 画面の上のお知らせを出しておく時間（ミリ秒） */
@@ -33,12 +30,6 @@ interface Note {
   money?: number;
 }
 
-/** 選択肢のない出来事（「OK」だけ）は、画面を止めずに進める（design.md 2.2） */
-function isAutoDecision(s: GameState): boolean {
-  if (s.phase !== 'decision' || s.decisionFrom !== 'square') return false;
-  const options = getOptions(s);
-  return options.length === 1 && options[0].id === 'ok';
-}
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -51,8 +42,6 @@ export function App() {
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showManager, setShowManager] = useState(false);
-  /** 自動で進めた出来事の見出し（少しのあいだ画面に出す） */
-  const [banner, setBanner] = useState<string | null>(null);
   /** 画面の上のお知らせ（ふつうの年のニュースと決算） */
   const [notes, setNotes] = useState<Note[]>([]);
   /** 見返し用: 今年のニュース、去年の決算 */
@@ -97,15 +86,6 @@ export function App() {
     }
   }, [game, busyNow, paused]);
 
-  useEffect(() => {
-    if (!game || busyNow || !isAutoDecision(game)) return;
-    setBanner(describeDecision(game).title);
-    const id = window.setTimeout(() => {
-      setBanner(null);
-      setGame(choose(game, 'ok'));
-    }, AUTO_OK_MS);
-    return () => clearTimeout(id);
-  }, [game, busyNow]);
 
   const setGame = (s: GameState | null) => {
     if (!s || s.phase === 'setupJob') setLastYearEnd(null);
@@ -194,7 +174,6 @@ export function App() {
           />
         </div>
         <Toasts log={game.log} />
-        {banner && <div className="banner">{banner}</div>}
         {notes.length > 0 && (
           <div className="notes" aria-live="polite">
             {notes.map((n) => (
@@ -214,7 +193,7 @@ export function App() {
         {!busy && !paused && game.phase === 'yearStart' && isImportantNews(game) && (
           <NewsModal s={game} onNext={() => setGame(continueYear(game))} onOpenManager={() => setShowManager(true)} />
         )}
-        {!busy && !paused && game.phase === 'decision' && !isAutoDecision(game) && (
+        {!busy && !paused && game.phase === 'decision' && (
           <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
         {!busy && !paused && game.phase === 'yearEnd' && isNotableYearEnd(game, game.player.age >= END_AGE) && (
