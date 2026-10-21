@@ -1,7 +1,7 @@
 // ゲームの進行。画面（React）には依存しない。1ターン＝1ヶ月（design.md 2章）。
 // どの関数も、受け取った状態を書き換えずに、新しい状態を返す。
 
-import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, START_PRICE, zeroHoldings } from '../data/assets';
+import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, zeroHoldings } from '../data/assets';
 import { BOARD } from '../data/board';
 import { CARDS, CARDS_BY_ID, HAND_MAX } from '../data/cards';
 import { INVEST_TALKS, INVEST_TALKS_BY_ID, TALK_AMOUNTS } from '../data/investTalks';
@@ -19,6 +19,7 @@ import {
   LIVING_COST,
   MARRIAGE,
   MAX_CHILDREN,
+  MONTHS_PER_TURN,
   MONTHS_PER_YEAR,
   REAL_ESTATE,
   ROULETTE_MAX,
@@ -35,6 +36,7 @@ import {
 import {
   assetValue,
   buyAsset,
+  buyShares,
   createLoan,
   financialAssets,
   netWorth,
@@ -43,10 +45,11 @@ import {
   realEstateValue,
   sellAsset,
   sellOrder,
+  sellShares,
   totalDebt,
 } from './finance';
 import { newYearMarket, shockPrice, updateMarketMonth, updateMarketYear } from './market';
-import { BIG_EVENTS, BIG_EVENTS_BY_ID, monthlyChance } from '../data/bigEvents';
+import { BIG_EVENTS, BIG_EVENTS_BY_ID, turnChance } from '../data/bigEvents';
 import { nextRandom, pickWeighted, randomInt } from './rng';
 import { computeResult } from './score';
 import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, Settlement, SpouseWork } from './types';
@@ -85,12 +88,19 @@ const emptyFlows = (year: number): Settlement => ({
 
 // ---------------------------------------------------------------- 開始
 
-export function createGame(seed: number): GameState {
+/** 1ターンの月数として使える数（12を割り切れる数） */
+const VALID_MONTHS_PER_TURN = [1, 2, 3, 4, 6, 12];
+
+/** ゲームを作る。monthsPerTurn を渡すと、1ターンの月数を変えられる（試すとき用。design.md 0.1） */
+export function createGame(seed: number, options: { monthsPerTurn?: number } = {}): GameState {
+  const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
+  if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
   const s: GameState = {
-    saveVersion: 2,
+    saveVersion: 3,
     seed,
     rngState: seed >>> 0,
     years: DEFAULT_YEARS,
+    monthsPerTurn,
     year: 1,
     month: 1,
     phase: 'setupYears',
@@ -101,6 +111,7 @@ export function createGame(seed: number): GameState {
       athleteRetireYear: null,
       cash: START_CASH,
       holdings: zeroHoldings(),
+      cost: zeroHoldings(),
       saving: zeroHoldings(),
       savingPaused: false,
       married: false,
@@ -117,7 +128,7 @@ export function createGame(seed: number): GameState {
       talks: [],
     },
     market: {
-      prices: Object.fromEntries(ASSET_IDS.map((id) => [id, START_PRICE])),
+      prices: Object.fromEntries(ASSET_IDS.map((id) => [id, ASSETS[id].startPrice])),
       depositRate: START_DEPOSIT_RATE,
       economy: 'normal',
       realEstateIndex: 1,
@@ -495,13 +506,16 @@ export function getOptions(s: GameState): DecisionOption[] {
       return s.player.hand.map((card, i) => ({ id: `discard:${i}`, key: 'option.discard', params: { card }, enabled: true }));
     case 'stock':
       return [
-        ...STOCK_SQUARE.amounts.map((amount) => ({
-          id: `buy:${amount}`,
-          key: 'option.stock.buy',
-          params: { amount },
-          enabled: canAfford(s, amount),
-          cash: -amount,
-        })),
+        ...STOCK_SQUARE.shares.map((shares) => {
+          const amount = shares * stockSquarePrice(s, d.assetId!);
+          return {
+            id: `buy:${shares}`,
+            key: 'option.stock.buy',
+            params: { shares, amount: Math.round(amount) },
+            enabled: canAfford(s, amount),
+            cash: -amount,
+          };
+        }),
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     case 'athleteRetire':
@@ -513,6 +527,12 @@ export function getOptions(s: GameState): DecisionOption[] {
       }));
   }
 }
+
+/** 株のマスで買える値段（1株、割引のあと） */
+export const stockSquarePrice = (s: GameState, id: AssetId) => s.market.prices[id] * (1 - STOCK_SQUARE.discount);
+
+/** 1年のターン数 */
+export const turnsPerYear = (s: GameState) => MONTHS_PER_YEAR / s.monthsPerTurn;
 
 /** 医療保険の保険料（年）。入る年が遅いほど高い */
 export function medicalPremiumAt(year: number): number {
@@ -617,9 +637,9 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
       if (optionId === 'skip') log(s, 'stock.skip', { params: { asset: d.assetId! } });
       else {
         const id = d.assetId!;
-        const amount = Number(optionId.slice(4));
-        buyAsset(s, id, amount, s.market.prices[id] * (1 - STOCK_SQUARE.discount));
-        log(s, 'stock.buy', { params: { asset: id, amount }, notice: true });
+        const shares = Number(optionId.slice(4));
+        const spent = buyShares(s, id, shares, stockSquarePrice(s, id));
+        log(s, 'stock.buy', { params: { asset: id, shares, amount: Math.round(spent) }, notice: true });
       }
       return null;
     case 'athleteRetire':
@@ -737,14 +757,14 @@ function educationCost(s: GameState): number {
 }
 
 /**
- * 1ヶ月分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（画面の「今月の家計」に使う）。
- * 金額のデータは1年分なので、12で割る。
+ * 1ターン分の収入と支出を計算する。dryRun なら状態を変えずに予定だけを返す（画面の「今月の家計」に使う）。
+ * 金額のデータは1年分なので、1年のターン数で割る。
  */
 function computeMonth(s: GameState, dryRun: boolean) {
   const p = s.player;
   const income: Record<string, number> = {};
   const expense: Record<string, number> = {};
-  const m = MONTHS_PER_YEAR;
+  const m = turnsPerYear(s);
 
   income.salary = employed(s) ? p.salary / m : 0;
   income.spouse = p.spouse ? (p.spouse.income * (p.spouse.halfThisYear ? 0.5 : 1)) / m : 0;
@@ -756,11 +776,15 @@ function computeMonth(s: GameState, dryRun: boolean) {
   let loanInterest = 0;
   const loan = p.home?.loan;
   if (loan) {
-    if (dryRun) expense.loan = Math.min(loan.payment, loan.balance * (1 + loan.rate / 12));
+    if (dryRun) expense.loan = Math.min(loan.payment * s.monthsPerTurn, loan.balance * (1 + loan.rate / 12));
     else {
-      const r = payLoanMonth(loan);
-      loanInterest = r.interest;
-      expense.loan = r.paid;
+      // 住宅ローンは毎月返すので、1ターンの月数だけ返す
+      expense.loan = 0;
+      for (let i = 0; i < s.monthsPerTurn; i++) {
+        const r = payLoanMonth(loan);
+        loanInterest += r.interest;
+        expense.loan += r.paid;
+      }
       if (loan.balance === 0) p.home!.loan = null;
     }
   } else expense.loan = 0;
@@ -778,20 +802,21 @@ export function estimateMonth(s: GameState): {
   saving: number;
 } {
   const { income, expense } = computeMonth(s, true);
-  return { income, expense, net: sum(income) - sum(expense), saving: sum(s.player.saving) };
+  return { income, expense, net: sum(income) - sum(expense), saving: sum(s.player.saving) * s.monthsPerTurn };
 }
 
 /** 積み立て。預金が足りない月や、借金がある月は、自動で休む（借金はしない。design.md 6.3） */
 function accumulate(s: GameState) {
   const p = s.player;
-  const total = sum(p.saving);
+  // 積み立ての金額は「毎月○万円」なので、1ターンの月数分をまとめて買う
+  const total = sum(p.saving) * s.monthsPerTurn;
   if (total <= 0) return;
   if (p.cash < total || p.cardLoan > 0) {
     if (!p.savingPaused) log(s, 'saving.pause', { notice: true });
     p.savingPaused = true;
     return;
   }
-  for (const id of ASSET_IDS) if (p.saving[id] > 0) buyAsset(s, id, p.saving[id]);
+  for (const id of ASSET_IDS) if (p.saving[id] > 0) buyAsset(s, id, p.saving[id] * s.monthsPerTurn);
   s.stats.savingTotal += total;
   if (p.savingPaused) log(s, 'saving.resume', { notice: true });
   p.savingPaused = false;
@@ -811,7 +836,7 @@ function endMonth(s: GameState) {
   flows.loanPrincipal += expense.loan - loanInterest;
   s.stats.premiumsPaid += expense.insurance;
   p.cash += sum(income) - sum(expense);
-  if (p.noIncomeMonths > 0) p.noIncomeMonths -= 1;
+  p.noIncomeMonths = Math.max(0, p.noIncomeMonths - s.monthsPerTurn);
 
   // お金が余ったら、まずカードローンの返済に回す（design.md 8章）
   if (p.cash > 0 && p.cardLoan > 0) {
@@ -826,13 +851,13 @@ function endMonth(s: GameState) {
   coverShortfall(s);
 
   s.cardUsed = false;
-  if (s.month >= MONTHS_PER_YEAR) {
+  if (s.month + s.monthsPerTurn > MONTHS_PER_YEAR) {
     endYear(s);
     recordPrices(s, s.month);
     return;
   }
   recordPrices(s, s.month);
-  s.month += 1;
+  s.month += s.monthsPerTurn;
   s.phase = 'roll';
 }
 
@@ -875,7 +900,7 @@ function coverShortfall(s: GameState) {
  */
 export function maybeBigEvent(s: GameState): number {
   for (const ev of BIG_EVENTS) {
-    if (nextRandom(s) < monthlyChance(ev)) return applyBigEvent(s, ev.id);
+    if (nextRandom(s) < turnChance(ev, s.monthsPerTurn)) return applyBigEvent(s, ev.id);
   }
   return 0;
 }
@@ -1110,10 +1135,26 @@ function assertCanTrade(s: GameState) {
   if (!canTrade(s)) throw new Error(`cannot trade in phase ${s.phase}`);
 }
 
-/** 金額分を買う（amount > 0）か売る（amount < 0） */
+/** 株を shares 株買う（shares > 0）か売る（shares < 0）。株は1株単位（design.md 6.1） */
+export function tradeShares(state: GameState, id: AssetId, shares: number): GameState {
+  assertCanTrade(state);
+  if (ASSETS[id]?.unit !== 'share') throw new Error(`not a share asset: ${id}`);
+  const s = clone(state);
+  if (shares > 0) {
+    const spent = buyShares(s, id, shares);
+    if (spent > 0) log(s, 'trade.buyShares', { params: { asset: id, shares: Math.round(spent / s.market.prices[id]), amount: Math.round(spent) } });
+  } else if (shares < 0) {
+    const gained = sellShares(s, id, -shares);
+    if (gained > 0) log(s, 'trade.sellShares', { params: { asset: id, shares: Math.round(gained / s.market.prices[id]), amount: Math.round(gained) } });
+  }
+  return s;
+}
+
+/** 金額分を買う（amount > 0）か売る（amount < 0）。投資信託・ゴールド・国債（1万円単位） */
 export function trade(state: GameState, id: AssetId, amount: number): GameState {
   assertCanTrade(state);
   if (!ASSETS[id]) throw new Error(`unknown asset: ${id}`);
+  if (ASSETS[id].unit === 'share') throw new Error(`use tradeShares for ${id}`);
   const s = clone(state);
   if (amount > 0) {
     const spent = buyAsset(s, id, amount);

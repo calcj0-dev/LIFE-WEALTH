@@ -63,3 +63,6 @@ export const BIG_EVENTS_BY_ID: Record<string, BigEventDef> = Object.fromEntries(
 
 /** 1ヶ月あたりに起きる確率 */
 export const monthlyChance = (e: BigEventDef) => 1 / (e.everyYears * 12);
+
+/** 1ターン（months ヶ月）あたりに起きる確率 */
+export const turnChance = (e: BigEventDef, months: number) => 1 - Math.pow(1 - monthlyChance(e), months);

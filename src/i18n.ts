@@ -22,10 +22,9 @@ const MONEY_PARAMS = new Set(['cost', 'salary', 'price', 'bet', 'premium', 'spen
 export function formatMoney(man: number): string {
   if (currentLang === 'ja') {
     const sign = man < 0 ? '−' : '';
-    // 1万円より小さい金額は「5千円」のように千円単位で出す
-    if (Math.abs(man) < 0.05) return '0円';
-    if (Math.abs(man) < 0.95) return `${sign}${Math.round(Math.abs(man) * 10)}千円`;
+    // 千円以下は扱わない。金額はすべて万円単位で出す（design.md 0.1）
     const v = Math.round(Math.abs(man));
+    if (v === 0) return '0万円';
     if (v >= 10000) {
       const oku = Math.floor(v / 10000);
       const rest = v % 10000;

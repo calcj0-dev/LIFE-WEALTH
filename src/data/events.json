@@ -1,7 +1,7 @@
 {
   "_note": "マスで起きる出来事。design.md 5.1。金額は万円。size は small（小）・medium（中）・large（大）。when は起きる条件、weightBy は職業ごとの起きやすさ、choice は選ぶ出来事",
   "events": [
-    { "id": "points", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": 0.5 }] },
+    { "id": "points", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": 1 }] },
     { "id": "flea", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": 2 }] },
     { "id": "prize", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": 3 }] },
     { "id": "eatOut", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": -1 }] },

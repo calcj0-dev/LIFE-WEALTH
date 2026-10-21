@@ -1,13 +1,13 @@
 // 値動きのチャートと年利の実績の表。ゲーム開始時を0%として、値上がりだけを見せる（配当・利息は含めない）。
 // チャートは毎月の価格、表は1年ごとの値上がり率。
 
-import { ASSET_IDS, START_DEPOSIT_RATE, START_PRICE } from '../data/assets';
+import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE } from '../data/assets';
 import type { PricePoint, YearRecord } from '../game/types';
-import { formatSigned, t } from '../i18n';
+import { formatMoney, formatSigned, t } from '../i18n';
 import { colorOf, yearTickStep } from './chartColors';
 
 const KEYS = [...ASSET_IDS, 'realEstate', 'living'];
-const START: Record<string, number> = { ...Object.fromEntries(ASSET_IDS.map((id) => [id, START_PRICE])), realEstate: 1, living: 1 };
+const START: Record<string, number> = { ...Object.fromEntries(ASSET_IDS.map((id) => [id, ASSETS[id].startPrice])), realEstate: 1, living: 1 };
 
 const nameOf = (key: string) => t(key === 'living' ? 'prices.living' : `asset.${key}`);
 
@@ -89,6 +89,72 @@ export function PriceChart({ points }: { points: PricePoint[] }) {
         </span>
       </div>
       <p className="muted">{t('prices.note')}</p>
+    </div>
+  );
+}
+
+/**
+ * 1つの銘柄の値段のグラフ（取引タイムの「チャート」ボタンで開く。design.md 2.1）。
+ * 株は1株の値段、ほかは1口の値段を、ゲームの始めからの割合（％）で出す。avgCost を渡すと、買った平均の値段を点線で出す
+ */
+export function AssetPriceChart({ points, id, avgCost }: { points: PricePoint[]; id: string; avgCost?: number }) {
+  if (points.length < 2) return <p className="muted">{t('history.empty')}</p>;
+  const W = 560;
+  const H = 180;
+  const pad = { l: 64, r: 12, t: 10, b: 24 };
+  const share = ASSETS[id].unit === 'share';
+  const values = points.map((p) => p.prices[id]);
+  // 株は値段（万円）、ほかは始めからの値上がり（％）で見せる
+  const toY = (price: number) => (share ? price : price / START[id] - 1);
+  const ys = values.map(toY);
+  const avgY = avgCost !== undefined ? toY(avgCost) : undefined;
+  const all = avgY !== undefined ? [...ys, avgY] : ys;
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const span = hi - lo || Math.abs(hi) || 1;
+  const top = hi + span * 0.1;
+  const bottom = lo - span * 0.1;
+  const n = points.length;
+  const x = (i: number) => pad.l + (i / (n - 1)) * (W - pad.l - pad.r);
+  const y = (v: number) => pad.t + ((top - v) / (top - bottom || 1)) * (H - pad.t - pad.b);
+  const label = (v: number) => (share ? formatMoney(v) : pct(v));
+  const years = Math.ceil((n - 1) / 12);
+  const tick = yearTickStep(years);
+  return (
+    <div className="asset-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={t('trade.chartTitle', { name: t(`asset.${id}`) })}>
+        {[top, (top + bottom) / 2, bottom].map((v, i) => (
+          <g key={i}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="var(--line)" />
+            <text x={pad.l - 6} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--text-sub)">
+              {label(v)}
+            </text>
+          </g>
+        ))}
+        <path d={ys.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join('')} fill="none" stroke={colorOf(id)} strokeWidth="2.5" />
+        {avgY !== undefined && (
+          <line x1={pad.l} x2={W - pad.r} y1={y(avgY)} y2={y(avgY)} stroke="var(--text)" strokeWidth="1.5" strokeDasharray="6 4" />
+        )}
+        {points.map((p, i) =>
+          p.month === 12 && p.year % tick === 0 ? (
+            <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--text-sub)">
+              {t('hud.year', { year: p.year })}
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <div className="legend">
+        <span>
+          <i style={{ background: colorOf(id), height: 3 }} />
+          {t(share ? 'trade.chartPrice' : 'trade.chartRate')}
+        </span>
+        {avgY !== undefined && (
+          <span>
+            <i style={{ background: 'var(--text)', height: 2 }} />
+            {t('trade.chartCost', { amount: share ? formatMoney(avgCost!) : pct(avgY) })}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

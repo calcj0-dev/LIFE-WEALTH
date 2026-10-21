@@ -219,14 +219,18 @@ function movePrice(s: GameState, id: AssetId, rate: number): number {
   return moved;
 }
 
-/** 月末の小さな値動き。平均の伸びと景気の上乗せは、12ヶ月で1年分になるように毎月少しずつ出す。動いた金額の合計を返す */
+/**
+ * ターンの終わりの小さな値動き。平均の伸びと景気の上乗せは、1年で1年分になるように、ターンごとに少しずつ出す。
+ * 1ターンの月数（s.monthsPerTurn）に合わせて大きさを変える。動いた金額の合計を返す
+ */
 export function updateMarketMonth(s: GameState): number {
   const e = s.market.economy;
+  const share = s.monthsPerTurn / 12;
   let moved = 0;
   for (const id of ASSET_IDS) {
     const a = ASSETS[id];
-    const drift = Math.pow(1 + a.meanReturn + CORRECTION[id] + a.drift[e], 1 / 12) - 1;
-    const noise = a.volatility * Math.sqrt(MONTHLY_VOLATILITY_SHARE / 12) * randomNormal(s);
+    const drift = Math.pow(1 + a.meanReturn + CORRECTION[id] + a.drift[e], share) - 1;
+    const noise = a.volatility * Math.sqrt(MONTHLY_VOLATILITY_SHARE * share) * randomNormal(s);
     moved += movePrice(s, id, clamp(drift + noise, MONTH_LIMIT));
   }
   return moved;

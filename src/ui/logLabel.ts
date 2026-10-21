@@ -16,5 +16,5 @@ export function logLabel(entry: LogEntry): string {
 
 /** お金が動いた記録と、お知らせの記録だけ */
 export function visibleEntries(entries: LogEntry[]): LogEntry[] {
-  return entries.filter((e) => (e.cash !== undefined && Math.round(e.cash * 10) !== 0) || e.notice);
+  return entries.filter((e) => (e.cash !== undefined && Math.round(e.cash) !== 0) || e.notice);
 }

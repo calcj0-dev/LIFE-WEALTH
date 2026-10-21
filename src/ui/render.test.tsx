@@ -6,11 +6,11 @@ import { playGame } from '../game/autoplay';
 import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
-import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './Feed';
+import { FeedPanel } from './Feed';
 import { Hud, SidePanel } from './GameScreen';
 import { LedgerTable, NetWorthTable } from './Ledger';
 import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
-import { PriceChart, ReturnTable } from './PriceCharts';
+import { AssetPriceChart, PriceChart, ReturnTable } from './PriceCharts';
 import { Result } from './Result';
 import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
 import { SavingSetup, TradeModal } from './Trade';
@@ -70,8 +70,6 @@ describe('画面', () => {
       } else if (s.phase === 'yearEnd') {
         const html = [
           renderToString(<NewsModal s={s} onNext={noop} />),
-          renderToString(<AutoPopup onClose={noop}><NewsBrief s={s} /></AutoPopup>),
-          renderToString(<AutoPopup onClose={noop}><YearEndBrief s={s} /></AutoPopup>),
           renderToString(<YearEndModal s={s} onNext={noop} />),
           renderToString(<NetWorthTable s={s} />),
           renderToString(<Hud s={s} />),
@@ -99,6 +97,10 @@ describe('画面', () => {
     expect(table).toContain('これまでの年平均（20年）');
     expect(table.match(/<tr/g)!.length).toBe(1 + 1 + 20);
     expect(renderToString(<PriceChart points={[]} />)).toContain('1年目');
+    const it = renderToString(<AssetPriceChart points={s.prices} id="it" avgCost={20} />);
+    expect(it).toContain('<path');
+    expect(it).toContain('買った平均の値段（20万円）');
+    expect(renderToString(<AssetPriceChart points={s.prices} id="fund" />)).toContain('ゲームの始めからの値動き');
   });
   it('結果画面に、最後の純資産が出る', () => {
     const s = playGame(11, 'engineer', 10);

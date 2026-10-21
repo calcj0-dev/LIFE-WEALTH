@@ -2,7 +2,7 @@
 // 使い方: npm run simulate
 
 import { writeFileSync } from 'node:fs';
-import { ASSET_IDS } from '../src/data/assets';
+import { ASSETS, ASSET_IDS } from '../src/data/assets';
 import { JOB_IDS } from '../src/data/jobs';
 import { playGame, type PlayCounts, type Strategy } from '../src/game/autoplay';
 import type { GameState, JobId } from '../src/game/types';
@@ -146,7 +146,8 @@ const priceNames: Record<string, string> = {
 const long = rows.filter((r) => r.years === 40);
 const assetLines = [...ASSET_IDS, 'realEstate', 'living']
   .map((k) => {
-    const cagr = long.map((r) => Math.pow(r.prices[k], 1 / 40) - 1);
+    const start = ASSETS[k]?.startPrice ?? 1;
+    const cagr = long.map((r) => Math.pow(r.prices[k] / start, 1 / 40) - 1);
     return `| ${priceNames[k] ?? k} | ${(pct(cagr, 0.5) * 100).toFixed(1)}% | ${(pct(cagr, 0.1) * 100).toFixed(1)}% 〜 ${(pct(cagr, 0.9) * 100).toFixed(1)}% |`;
   })
   .join('\n');

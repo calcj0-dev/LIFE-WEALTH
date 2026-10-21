@@ -30,6 +30,7 @@ import {
   sellHome,
   setSaving,
   trade,
+  tradeShares,
 } from './engine';
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
@@ -348,8 +349,10 @@ describe('株のマスと取引タイム', () => {
     const id = s.decision!.assetId!;
     expect(ASSETS[id].kind).toBe('stock');
     const price = s.market.prices[id];
-    s = choose(s, 'buy:10');
-    expect(s.player.holdings[id]).toBeCloseTo(10 / (price * (1 - STOCK_SQUARE.discount)), 6);
+    expect(getOptions(s).map((o) => o.id)).toEqual(['buy:1', 'buy:3', 'buy:10', 'skip']);
+    s = choose(s, 'buy:1');
+    expect(s.player.holdings[id]).toBe(1);
+    expect(s.player.cost[id]).toBeCloseTo(price * (1 - STOCK_SQUARE.discount), 6);
   });
   it('売り買いできるのは年末の取引タイムだけ', () => {
     expect(() => trade(started(), 'fund', 10)).toThrow();
@@ -373,6 +376,63 @@ describe('株のマスと取引タイム', () => {
   });
 });
 
+describe('株は1株単位、買った額を覚える', () => {
+  it('株の最初の値段は、IT株20万円、食品株10万円、エネルギー株15万円、銀行株10万円', () => {
+    const s = started();
+    expect([s.market.prices.it, s.market.prices.food, s.market.prices.energy, s.market.prices.bank]).toEqual([20, 10, 15, 10]);
+    expect(ASSETS.fund.unit).toBe('amount');
+    expect(ASSETS.it.unit).toBe('share');
+  });
+  it('株は1株単位で売り買いし、金額では売り買いできない', () => {
+    const y = toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } });
+    const s = tradeShares(y, 'it', 3);
+    expect(s.player.holdings.it).toBe(3);
+    expect(s.player.cost.it).toBeCloseTo(3 * y.market.prices.it, 6);
+    expect(() => trade(y, 'it', 10)).toThrow();
+    const sold = tradeShares(s, 'it', -1);
+    expect(sold.player.holdings.it).toBe(2);
+    // 売った割合（3株のうち1株）の分だけ、買った額が減る
+    expect(sold.player.cost.it).toBeCloseTo((s.player.cost.it * 2) / 3, 6);
+  });
+  it('お金が足りないときは、株も1株単位で売る', () => {
+    let s = tradeShares(toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } }), 'it', 10);
+    s = { ...s, phase: 'roll', player: { ...s.player, cash: -30 } };
+    s = settle(roll(s));
+    expect(Number.isInteger(s.player.holdings.it)).toBe(true);
+    expect(s.player.cash).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('1ターンの月数', () => {
+  it('3ヶ月にすると、1年は4ターンで、1ターンの給料は3ヶ月分になる', () => {
+    let s = setSaving(chooseJob(chooseYears(createGame(1, { monthsPerTurn: 3 }), 20), 'employee'), { fund: 2 });
+    expect(estimateMonth(s).income.salary).toBeCloseTo(250 / 4, 6);
+    expect(estimateMonth(s).saving).toBe(6);
+    let turns = 0;
+    while (s.phase !== 'yearEnd') {
+      s = settle(roll(s));
+      turns++;
+    }
+    expect(turns).toBe(4);
+    expect(s.stats.savingTotal).toBe(2 * 12);
+    s = settle(nextYear(s));
+    expect([s.year, s.month]).toEqual([2, 1]);
+  });
+  it('3ヶ月でも、最後まで遊べる', () => {
+    let s = setSaving(chooseJob(chooseYears(createGame(2, { monthsPerTurn: 3 }), 10), 'engineer'), { fund: 2 });
+    while (s.phase !== 'finished') {
+      if (s.phase === 'roll') s = settle(roll(s));
+      else if (s.phase === 'decision') s = settle(s);
+      else if (s.phase === 'yearEnd') s = settle(nextYear(s));
+    }
+    expect(s.history).toHaveLength(10);
+    expect(s.prices).toHaveLength(10 * 4 + 1);
+  });
+  it('12を割り切れない月数は使えない', () => {
+    expect(() => createGame(1, { monthsPerTurn: 5 })).toThrow();
+  });
+});
+
 describe('相場', () => {
   it('長い目で見ると、銘柄ごとの平均の値上がりに近くなる', () => {
     const years = 50;
@@ -387,7 +447,7 @@ describe('相場', () => {
         updateMarketYear(s);
         s.yearMarket = newYearMarket(s);
       }
-      for (const id of ASSET_IDS) rates[id].push(Math.pow(s.market.prices[id], 1 / years) - 1);
+      for (const id of ASSET_IDS) rates[id].push(Math.pow(s.market.prices[id] / ASSETS[id].startPrice, 1 / years) - 1);
     }
     for (const id of ASSET_IDS) {
       const sorted = [...rates[id]].sort((a, b) => a - b);

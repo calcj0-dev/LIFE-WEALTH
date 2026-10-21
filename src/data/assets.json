@@ -1,5 +1,5 @@
 {
-  "_note": "運用する資産（銘柄）。design.md 6.1。並び順は、お金が足りないときに売る順番（株は持っている額が多い順）。drift は景気による値動きの上乗せ（年）",
+  "_note": "運用する資産（銘柄）。design.md 6.1。並び順は、お金が足りないときに売る順番（株は持っている額が多い順）。drift は景気による値動きの上乗せ（年）。unit は売り買いの単位（amount: 1万円単位の金額、share: 1株単位）。startPrice は最初の値段（万円。amount の銘柄は1口の値段）",
   "assets": [
     {
       "id": "bond",
@@ -8,7 +8,13 @@
       "volatility": 0.03,
       "incomeYield": 0.015,
       "accumulate": false,
-      "drift": { "boom": -0.01, "normal": 0, "recession": 0.01 }
+      "drift": {
+        "boom": -0.01,
+        "normal": 0,
+        "recession": 0.01
+      },
+      "unit": "amount",
+      "startPrice": 1
     },
     {
       "id": "gold",
@@ -17,7 +23,13 @@
       "volatility": 0.15,
       "incomeYield": 0,
       "accumulate": true,
-      "drift": { "boom": -0.02, "normal": 0, "recession": 0.05 }
+      "drift": {
+        "boom": -0.02,
+        "normal": 0,
+        "recession": 0.05
+      },
+      "unit": "amount",
+      "startPrice": 1
     },
     {
       "id": "fund",
@@ -26,7 +38,13 @@
       "volatility": 0.18,
       "incomeYield": 0,
       "accumulate": true,
-      "drift": { "boom": 0.03, "normal": 0, "recession": -0.05 }
+      "drift": {
+        "boom": 0.03,
+        "normal": 0,
+        "recession": -0.05
+      },
+      "unit": "amount",
+      "startPrice": 1
     },
     {
       "id": "it",
@@ -35,7 +53,13 @@
       "volatility": 0.35,
       "incomeYield": 0.01,
       "accumulate": false,
-      "drift": { "boom": 0.06, "normal": 0, "recession": -0.12 }
+      "drift": {
+        "boom": 0.06,
+        "normal": 0,
+        "recession": -0.12
+      },
+      "unit": "share",
+      "startPrice": 20
     },
     {
       "id": "food",
@@ -44,7 +68,13 @@
       "volatility": 0.15,
       "incomeYield": 0.02,
       "accumulate": false,
-      "drift": { "boom": 0.02, "normal": 0, "recession": -0.03 }
+      "drift": {
+        "boom": 0.02,
+        "normal": 0,
+        "recession": -0.03
+      },
+      "unit": "share",
+      "startPrice": 10
     },
     {
       "id": "energy",
@@ -53,7 +83,13 @@
       "volatility": 0.25,
       "incomeYield": 0.03,
       "accumulate": false,
-      "drift": { "boom": 0.03, "normal": 0, "recession": -0.06 }
+      "drift": {
+        "boom": 0.03,
+        "normal": 0,
+        "recession": -0.06
+      },
+      "unit": "share",
+      "startPrice": 15
     },
     {
       "id": "bank",
@@ -62,7 +98,13 @@
       "volatility": 0.25,
       "incomeYield": 0.03,
       "accumulate": false,
-      "drift": { "boom": 0.05, "normal": 0, "recession": -0.1 }
+      "drift": {
+        "boom": 0.05,
+        "normal": 0,
+        "recession": -0.1
+      },
+      "unit": "share",
+      "startPrice": 10
     }
   ]
 }
