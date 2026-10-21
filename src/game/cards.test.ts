@@ -12,6 +12,7 @@ import {
   chooseYears,
   closeTrade,
   createGame,
+  dismissBigEvent,
   getOptions,
   nextYear,
   openTradeCard,
@@ -70,6 +71,7 @@ describe('カード', () => {
     while (s.phase !== 'yearEnd') {
       s = roll(farBonus(s));
       while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+      if (s.bigEvent) s = dismissBigEvent(s);
     }
     const before = s.player.hand.length;
     s = nextYear(s);

@@ -1102,3 +1102,37 @@ button.small {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* ---------------- 大きなイベント（design.md 5.3） */
+
+.big-event {
+  text-align: center;
+  border: 6px solid var(--yellow);
+}
+.big-event-crash,
+.big-event-earthquake,
+.big-event-bankFailure,
+.big-event-inflationShock {
+  border-color: #ff6b6b;
+}
+.big-event-surge,
+.big-event-inheritance {
+  border-color: #2ec4b6;
+}
+.big-event-icon {
+  font-size: 64px;
+  line-height: 1;
+  animation: big-event-pop 0.5s ease-out;
+}
+.big-event h2 {
+  font-size: 30px;
+  margin: 6px 0;
+}
+@keyframes big-event-pop {
+  from {
+    transform: scale(0.3);
+  }
+  to {
+    transform: scale(1);
+  }
+}

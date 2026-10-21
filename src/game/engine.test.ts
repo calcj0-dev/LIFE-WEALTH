@@ -14,6 +14,7 @@ import { has } from '../i18n';
 import { playGame } from './autoplay';
 import {
   canSellHome,
+  dismissBigEvent,
   choose,
   chooseJob,
   chooseYears,
@@ -32,6 +33,7 @@ import {
 } from './engine';
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { maybeBigEvent } from './engine';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20, job = 'employee', saving: Record<string, number> = {}): GameState {
@@ -40,7 +42,9 @@ function started(seed = 1, years = 20, job = 'employee', saving: Record<string, 
 
 /** 決定を、いちばん上の選べる選択肢で進める */
 function settle(s: GameState): GameState {
+  if (s.bigEvent) s = dismissBigEvent(s);
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+  if (s.bigEvent) s = dismissBigEvent(s);
   return s;
 }
 
@@ -376,7 +380,10 @@ describe('相場', () => {
     for (let seed = 1; seed <= 1000; seed++) {
       const s = createGame(seed);
       for (let y = 0; y < years; y++) {
-        for (let m = 0; m < 12; m++) updateMarketMonth(s);
+        for (let m = 0; m < 12; m++) {
+          updateMarketMonth(s);
+          maybeBigEvent(s);
+        }
         updateMarketYear(s);
         s.yearMarket = newYearMarket(s);
       }

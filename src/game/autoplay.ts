@@ -8,6 +8,7 @@ import {
   chooseYears,
   closeTrade,
   createGame,
+  dismissBigEvent,
   getOptions,
   nextYear,
   openTradeCard,
@@ -126,6 +127,7 @@ export function playGame(
   let s = chooseJob(chooseYears(createGame(seed), years), jobId);
   s = setSaving(s, strategy.saving ? { fund: recommendedSaving(s) } : {});
   for (let guard = 0; guard < 100000; guard++) {
+    if (s.bigEvent) s = dismissBigEvent(s);
     switch (s.phase) {
       case 'roll':
         s = rollWithCards(s);

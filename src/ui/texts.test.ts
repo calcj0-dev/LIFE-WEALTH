@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
 import { describeDecision } from './decisionText';
@@ -16,6 +16,11 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
   let n = seed;
   const rand = () => ((n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
   while (s.phase !== 'finished') {
+    if (s.bigEvent) {
+      keys.add(`bigEvent.${s.bigEvent.id}.title`).add(`bigEvent.${s.bigEvent.id}.text`);
+      s = dismissBigEvent(s);
+      continue;
+    }
     if (s.phase === 'roll') s = roll(s);
     else if (s.phase === 'decision') {
       const d = s.decision!;
