@@ -1,7 +1,22 @@
 // コンピューターが自動で遊ぶ仕組み。釣り合いの確認とテストに使う。
 
 import { JOBS } from '../data/jobs';
-import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, recommendedSaving, roll, setSaving, trade } from './engine';
+import {
+  bonusDistance,
+  choose,
+  chooseJob,
+  chooseYears,
+  closeTrade,
+  createGame,
+  getOptions,
+  nextYear,
+  openTradeCard,
+  recommendedSaving,
+  roll,
+  setSaving,
+  trade,
+} from './engine';
+import { HAND_MAX } from '../data/cards';
 import type { DecisionOption, GameState, JobId } from './types';
 
 export interface Strategy {
@@ -68,6 +83,22 @@ function makeRand(seed: number) {
   };
 }
 
+/** カードを使って、ボーナスマスにぴったり止まるようにねらう。使わないときは、ふつうにルーレットを回す */
+function rollWithCards(s: GameState): GameState {
+  const hand = s.player.hand;
+  const dist = bonusDistance(s);
+  const exact = hand.indexOf('exact');
+  if (exact >= 0 && dist >= 1 && dist <= 6) return roll(s, { index: exact, exact: dist });
+  const dash = hand.indexOf('dash');
+  if (dash >= 0 && dist >= 7 && dist <= 12) return roll(s, { index: dash });
+  const superDash = hand.indexOf('superDash');
+  if (superDash >= 0 && dist >= 10 && dist <= 18) return roll(s, { index: superDash });
+  // 手札がいっぱいなら、取引カードを使って枠を空ける
+  const tradeCard = hand.indexOf('trade');
+  if (tradeCard >= 0 && hand.length >= HAND_MAX) return roll(closeTrade(openTradeCard(s, tradeCard)));
+  return roll(s);
+}
+
 /** 年末に、余ったお金で投資信託を買う */
 function investAtYearEnd(s: GameState, strategy: Strategy): GameState {
   if (strategy.investRate <= 0) return s;
@@ -96,7 +127,7 @@ export function playGame(
   for (let guard = 0; guard < 100000; guard++) {
     switch (s.phase) {
       case 'roll':
-        s = roll(s);
+        s = rollWithCards(s);
         counts.turns += 1;
         break;
       case 'decision':

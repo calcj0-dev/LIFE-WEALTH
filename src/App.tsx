@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, createGame, nextYear, roll } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, nextYear, openTradeCard, roll } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -12,6 +12,7 @@ import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
 import { Toasts } from './ui/Toasts';
 import { SavingSetup, TradeModal } from './ui/Trade';
+import { CardHand, cardIcon } from './ui/Cards';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -26,6 +27,8 @@ export function App() {
   const [movingPos, setMovingPos] = useState<number | null>(null);
   /** 出たばかりの出目（ルーレットが回っている間も表示する） */
   const [spinValue, setSpinValue] = useState<number | null>(null);
+  /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
+  const [moveLabel, setMoveLabel] = useState<string | null>(null);
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
@@ -76,20 +79,43 @@ export function App() {
     timers.current.push(window.setTimeout(fn, ms));
   };
 
+  /** 駒を1マスずつ動かしてから、新しい状態にする */
+  const move = (next: GameState) => {
+    next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
+    later(() => {
+      setMovingPos(null);
+      setGame(next);
+    }, STEP_MS * (next.lastPath.length + 1));
+  };
+
   const spin = () => {
-    if (!game || game.phase !== 'roll' || spinning) return;
+    if (!game || game.phase !== 'roll' || spinning || game.tradeOpen) return;
     const next = roll(game);
+    setMoveLabel(null);
     setSpinValue(next.lastRoll);
     setSpinning(true);
     setOverview(false);
     later(() => {
       setSpinning(false);
-      next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
-      later(() => {
-        setMovingPos(null);
-        setGame(next);
-      }, STEP_MS * (next.lastPath.length + 1));
+      move(next);
     }, SPIN_MS);
+  };
+
+  /** 移動のカードを使って進む。ルーレットは回さず、出目を見せてすぐ動く */
+  const moveWithCard = (index: number, exact?: number) => {
+    if (!game || game.phase !== 'roll' || busy) return;
+    const next = roll(game, { index, exact });
+    setOverview(false);
+    setSpinValue(next.lastRoll);
+    setMoveLabel(
+      t('cards.moved', {
+        icon: cardIcon(next.lastCard!),
+        dice: next.lastDice.join(' + '),
+        n: next.lastRoll!,
+      }),
+    );
+    setMovingPos(game.player.position);
+    move(next);
   };
 
   let screen: React.ReactNode;
@@ -125,7 +151,7 @@ export function App() {
         <Hud s={game} />
         <div className="game-body">
           <div className="board-area">
-            <Board position={movingPos ?? game.player.position} overview={overview} />
+            <Board position={movingPos ?? game.player.position} overview={overview} bonus={game.bonusSquare} />
             <div className="board-toolbar">
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
                 {t(overview ? 'board.follow' : 'board.overview')}
@@ -134,8 +160,15 @@ export function App() {
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
-              canSpin={game.phase === 'roll' && !busy}
+              canSpin={game.phase === 'roll' && !busy && !game.tradeOpen}
               onSpin={spin}
+              resultLabel={moveLabel ?? undefined}
+            />
+            <CardHand
+              s={game}
+              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
+              onMove={moveWithCard}
+              onTrade={(i) => setGame(openTradeCard(game, i))}
             />
           </div>
           <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
@@ -157,6 +190,7 @@ export function App() {
         {ready && !autoView && newsStep && isImportantNews(game) && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
         {ready && !autoView && settleStep && isNotableYearEnd(game) && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
+        {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>
     );
   }

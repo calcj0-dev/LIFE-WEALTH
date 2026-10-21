@@ -75,7 +75,18 @@ export function SavingSetup({ s, onDone }: { s: GameState; onDone: (next: GameSt
 
 // ---------------------------------------------------------------- 取引タイム
 
-export function TradeModal({ s, onChange, onDone }: { s: GameState; onChange: (next: GameState) => void; onDone: () => void }) {
+export function TradeModal({
+  s,
+  onChange,
+  onDone,
+  card,
+}: {
+  s: GameState;
+  onChange: (next: GameState) => void;
+  onDone: () => void;
+  /** 取引カードで開いたとき */
+  card?: boolean;
+}) {
   const [unit, setUnit] = useState(TRADE.amounts[1]);
   const p = s.player;
   const rates = s.marketChange?.rates;
@@ -83,8 +94,8 @@ export function TradeModal({ s, onChange, onDone }: { s: GameState; onChange: (n
   return (
     <div className="overlay">
       <div className="modal wide trade-modal">
-        <h2>{t('trade.title', { year: s.year })}</h2>
-        <p className="muted">{t('trade.lead')}</p>
+        <h2>{card ? t('trade.cardTitle', { year: s.year, month: s.month }) : t('trade.title', { year: s.year })}</h2>
+        <p className="muted">{t(card ? 'trade.cardLead' : 'trade.lead')}</p>
         <p className="summary-line">{t('trade.deposit', { amount: p.cash })}</p>
 
         <div className="card">
@@ -183,7 +194,7 @@ export function TradeModal({ s, onChange, onDone }: { s: GameState; onChange: (n
         )}
 
         <div className="options">
-          <button onClick={onDone}>{t('trade.done')}</button>
+          <button onClick={onDone}>{t(card ? 'trade.cardDone' : 'trade.done')}</button>
         </div>
       </div>
     </div>

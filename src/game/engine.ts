@@ -3,11 +3,13 @@
 
 import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, START_PRICE, zeroHoldings } from '../data/assets';
 import { BOARD } from '../data/board';
+import { CARDS, CARDS_BY_ID, HAND_MAX } from '../data/cards';
 import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSize } from '../data/events';
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, type GambleId } from '../data/gamble';
 import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_YEAR, JOBS, JOB_IDS, salaryAtYear } from '../data/jobs';
 import {
   BIRTH,
+  BONUS,
   CHILD_INDEPENDENT_AGE,
   CHILD_INDEPENDENT_AGE_NO_UNIVERSITY,
   EDUCATION_COST,
@@ -109,6 +111,7 @@ export function createGame(seed: number): GameState {
       sideBusinessTried: false,
       position: 0,
       lap: 0,
+      hand: [],
     },
     market: {
       prices: Object.fromEntries(ASSET_IDS.map((id) => [id, START_PRICE])),
@@ -120,6 +123,11 @@ export function createGame(seed: number): GameState {
     },
     newsId: null,
     lastRoll: null,
+    lastDice: [],
+    lastCard: null,
+    cardUsed: false,
+    tradeOpen: false,
+    bonusSquare: 0,
     lastPath: [],
     decision: null,
     queue: [],
@@ -136,6 +144,7 @@ export function createGame(seed: number): GameState {
   };
   s.yearMarket = newYearMarket(s);
   recordPrices(s, 0);
+  placeBonus(s);
   return s;
 }
 
@@ -193,10 +202,26 @@ export function rollJob(state: GameState): GameState {
 
 // ---------------------------------------------------------------- 移動とマス
 
-export function roll(state: GameState): GameState {
+/** ルーレットを回して進む。移動のカード（ダッシュ、スーパーダッシュ、ぴったり）を使うときは card を渡す（design.md 3.9） */
+export function roll(state: GameState, card?: { index: number; exact?: number }): GameState {
   assertPhase(state, 'roll');
+  if (state.tradeOpen) throw new Error('trade time is open');
   const s = clone(state);
-  const steps = rollDie(s);
+  let dice: number[];
+  s.lastCard = null;
+  if (card) {
+    const id = takeCard(s, card.index);
+    const def = CARDS_BY_ID[id];
+    if (def.kind === 'trade') throw new Error('use openTradeCard for the trade card');
+    if (def.kind === 'exact') {
+      if (!card.exact || !Number.isInteger(card.exact) || card.exact < 1 || card.exact > ROULETTE_MAX) throw new Error('invalid exact');
+      dice = [card.exact];
+    } else dice = Array.from({ length: def.dice ?? 1 }, () => rollDie(s));
+    s.lastCard = id;
+    log(s, 'card.use', { params: { card: id } });
+  } else dice = [rollDie(s)];
+  const steps = dice.reduce((a, b) => a + b, 0);
+  s.lastDice = dice;
   s.lastRoll = steps;
   s.lastPath = [];
   let pos = s.player.position;
@@ -210,6 +235,62 @@ export function roll(state: GameState): GameState {
   s.player.position = pos;
   handleSquare(s);
   return s;
+}
+
+// ---------------------------------------------------------------- カードとボーナスマス（design.md 3.9、3.10）
+
+/** カードを1枚もらう。lucky ならラッキーカードマスの出やすさで選ぶ */
+function gainCard(s: GameState, lucky: boolean) {
+  const card = pickWeighted(s, CARDS, (c) => (lucky ? c.luckyWeight : c.weight))!;
+  s.player.hand.push(card.id);
+  log(s, lucky ? 'card.getLucky' : 'card.get', { params: { card: card.id }, notice: true });
+}
+
+/** 手札からカードを取り出す */
+function takeCard(s: GameState, index: number): string {
+  if (s.cardUsed) throw new Error('a card was already used this turn');
+  const id = s.player.hand[index];
+  if (!id) throw new Error(`no card at ${index}`);
+  s.player.hand.splice(index, 1);
+  s.cardUsed = true;
+  return id;
+}
+
+/** 取引カードを使い、その場で取引タイムを開く。閉じたあとはルーレットを回す */
+export function openTradeCard(state: GameState, index: number): GameState {
+  assertPhase(state, 'roll');
+  if (CARDS_BY_ID[state.player.hand[index]]?.kind !== 'trade') throw new Error('not a trade card');
+  const s = clone(state);
+  const id = takeCard(s, index);
+  s.tradeOpen = true;
+  log(s, 'card.use', { params: { card: id } });
+  return s;
+}
+
+/** 取引カードで開いた取引タイムを閉じる */
+export function closeTrade(state: GameState): GameState {
+  if (!state.tradeOpen) throw new Error('trade time is not open');
+  const s = clone(state);
+  s.tradeOpen = false;
+  return s;
+}
+
+/** 次のボーナスマスを決める。今いる場所から10〜40マス先。スタートと結婚マスには付けない */
+function placeBonus(s: GameState) {
+  for (let guard = 0; guard < 100; guard++) {
+    const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
+    const index = (s.player.position + ahead) % BOARD.length;
+    const type = BOARD[index].type;
+    if (type !== 'start' && type !== 'stopMarriage') {
+      s.bonusSquare = index;
+      return;
+    }
+  }
+}
+
+/** ボーナスマスまで、あと何マスか */
+export function bonusDistance(s: GameState): number {
+  return (s.bonusSquare - s.player.position + BOARD.length) % BOARD.length;
 }
 
 function startDecision(s: GameState, d: Decision, from: 'queue' | 'square') {
@@ -226,7 +307,18 @@ function handleSquare(s: GameState) {
     log(s, key, { notice: true });
     endMonth(s);
   };
+  // ボーナスマスに、ぴったり止まった（design.md 3.10）。そのマスの本来の出来事は起きない
+  if (p.position === s.bonusSquare) {
+    addCash(s, BONUS.amount, 'bonus.get');
+    placeBonus(s);
+    return endMonth(s);
+  }
   switch (square.type) {
+    case 'card':
+    case 'luckyCard':
+      gainCard(s, square.type === 'luckyCard');
+      if (p.hand.length > HAND_MAX) return startDecision(s, { kind: 'discard' }, 'square');
+      return endMonth(s);
     case 'start':
       return notice('square.start');
     case 'stopMarriage':
@@ -376,6 +468,8 @@ export function getOptions(s: GameState): DecisionOption[] {
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
+    case 'discard':
+      return s.player.hand.map((card, i) => ({ id: `discard:${i}`, key: 'option.discard', params: { card }, enabled: true }));
     case 'stock':
       return [
         ...STOCK_SQUARE.amounts.map((amount) => ({
@@ -479,6 +573,11 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
     case 'realEstate':
       if (optionId !== 'skip') buyHome(s, d.offerPrice!, optionId === 'homeLoan');
       return null;
+    case 'discard': {
+      const [card] = p.hand.splice(Number(optionId.slice(8)), 1);
+      log(s, 'card.discard', { params: { card } });
+      return null;
+    }
     case 'stock':
       if (optionId === 'skip') log(s, 'stock.skip', { params: { asset: d.assetId! } });
       else {
@@ -689,7 +788,7 @@ function endMonth(s: GameState) {
   coverShortfall(s);
   flows.revaluation += updateMarketMonth(s);
 
-  s.lastRoll = null;
+  s.cardUsed = false;
   if (s.month >= MONTHS_PER_YEAR) {
     endYear(s);
     recordPrices(s, s.month);
@@ -802,6 +901,9 @@ export function nextYear(state: GameState): GameState {
     if (p.spouse.work === 'full') p.spouse.income *= 1 + SPOUSE.fullGrowth;
   }
   p.children.forEach((c) => ageChild(s, c));
+  // 年末に、カードを1枚もらう（design.md 3.9）
+  gainCard(s, false);
+  if (p.hand.length > HAND_MAX) s.queue.push({ kind: 'discard' });
   if (p.jobId === 'athlete' && p.athleteRetireYear !== null && s.year >= p.athleteRetireYear) {
     s.queue.push({ kind: 'athleteRetire' });
   }
@@ -865,9 +967,9 @@ function ageChild(s: GameState, c: Child) {
 
 // ---------------------------------------------------------------- 取引タイム（design.md 2.1）
 
-/** 取引タイムを開けるか。今は年末だけ（取引カードは段階3.5の3で作る） */
+/** 取引タイムを開けるか。年末と、取引カードを使ったとき（design.md 2.1、3.9） */
 export function canTrade(s: GameState): boolean {
-  return s.phase === 'yearEnd';
+  return s.phase === 'yearEnd' || (s.phase === 'roll' && s.tradeOpen);
 }
 
 function assertCanTrade(s: GameState) {

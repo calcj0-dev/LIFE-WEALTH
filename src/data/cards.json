@@ -1,0 +1,10 @@
+{
+  "_note": "カード。design.md 3.9。kind は効果の種類（dice: サイコロを dice 個振る、exact: 1〜6の好きな数、trade: 取引タイムを開く）。weight はカードマス・年末で出やすさ、luckyWeight はラッキーカードマスでの出やすさ",
+  "handMax": 3,
+  "cards": [
+    { "id": "dash", "kind": "dice", "dice": 2, "weight": 35, "luckyWeight": 20 },
+    { "id": "superDash", "kind": "dice", "dice": 3, "weight": 10, "luckyWeight": 40 },
+    { "id": "exact", "kind": "exact", "weight": 25, "luckyWeight": 20 },
+    { "id": "trade", "kind": "trade", "weight": 30, "luckyWeight": 20 }
+  ]
+}
