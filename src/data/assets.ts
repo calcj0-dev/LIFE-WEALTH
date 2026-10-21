@@ -1,40 +1,68 @@
-import type { AssetId, Economy, Policy } from '../game/types';
+import type { AssetId, Economy } from '../game/types';
+import data from './assets.json';
+import { assertValid, checkFields, checkUniqueIds, isNumber, type Problems } from './validate';
+
+export type AssetKind = 'bond' | 'gold' | 'fund' | 'stock';
 
 export interface AssetDef {
   id: AssetId;
+  kind: AssetKind;
   /** 価格の平均の値上がり率（年） */
   meanReturn: number;
   /** 値動きの大きさ（年） */
   volatility: number;
   /** 毎年の収入の割合（利息・配当） */
   incomeYield: number;
-  /** 1口の最初の価格（万円） */
-  startPrice: number;
+  /** 毎月の積み立てができるか（段階3.5の2で使う） */
+  accumulate: boolean;
+  /** 景気による値動きの上乗せ（年） */
+  drift: Record<Economy, number>;
 }
 
-export const ASSETS: Record<AssetId, AssetDef> = {
-  bond: { id: 'bond', meanReturn: 0, volatility: 0.03, incomeYield: 0.015, startPrice: 1 },
-  gold: { id: 'gold', meanReturn: 0.04, volatility: 0.15, incomeYield: 0, startPrice: 1 },
-  fund: { id: 'fund', meanReturn: 0.06, volatility: 0.18, incomeYield: 0, startPrice: 1 },
-  stock: { id: 'stock', meanReturn: 0.05, volatility: 0.3, incomeYield: 0.025, startPrice: 1 },
-};
+const KINDS: AssetKind[] = ['bond', 'gold', 'fund', 'stock'];
+const ECONOMIES: Economy[] = ['boom', 'normal', 'recession'];
 
-/** お金が足りないときに売る順番でもある */
-export const ASSET_IDS: AssetId[] = ['bond', 'gold', 'fund', 'stock'];
+export function checkAssets(raw: unknown): Problems {
+  const list = (raw as { assets?: unknown }).assets;
+  if (!Array.isArray(list) || list.length === 0) return ['assets がありません'];
+  const problems: Problems = [];
+  list.forEach((a, i) => {
+    const where = `assets[${i}]`;
+    problems.push(
+      ...checkFields(where, a, { id: 'string', kind: 'string', meanReturn: 'number', volatility: 'number', incomeYield: 'number', accumulate: 'boolean', drift: 'object' }),
+    );
+    if (!KINDS.includes(a.kind)) problems.push(`${where}: kind は ${KINDS.join('・')} のどれかにします`);
+    if (isNumber(a.volatility) && a.volatility < 0) problems.push(`${where}: volatility がマイナスです`);
+    for (const e of ECONOMIES) if (!isNumber(a.drift?.[e])) problems.push(`${where}: drift.${e} がありません`);
+  });
+  problems.push(...checkUniqueIds('assets', list));
+  return problems;
+}
+
+assertValid('src/data/assets.json', checkAssets(data));
+
+export const ASSET_LIST: AssetDef[] = data.assets as AssetDef[];
+export const ASSETS: Record<AssetId, AssetDef> = Object.fromEntries(ASSET_LIST.map((a) => [a.id, a]));
+/** お金が足りないときに売る順番でもある（株は、持っている額が多い順に売る） */
+export const ASSET_IDS: AssetId[] = ASSET_LIST.map((a) => a.id);
+
+/** 資産ごとに0を入れたもの */
+export const zeroHoldings = (): Record<AssetId, number> => Object.fromEntries(ASSET_IDS.map((id) => [id, 0]));
+
+/** 価格は、どの銘柄も1口1万円から始める */
+export const START_PRICE = 1;
 
 export const START_DEPOSIT_RATE = 0.003;
 export const DEPOSIT_RATE_MIN = 0.001;
 export const DEPOSIT_RATE_MAX = 0.03;
 
-/** 景気による値動きの上乗せ（年） */
-export const ECONOMY_DRIFT: Record<Economy, Record<AssetId | 'realEstate', number>> = {
-  boom: { bond: -0.01, gold: -0.02, fund: 0.03, stock: 0.05, realEstate: 0.02 },
-  normal: { bond: 0, gold: 0, fund: 0, stock: 0, realEstate: 0 },
-  recession: { bond: 0.01, gold: 0.05, fund: -0.05, stock: -0.1, realEstate: -0.03 },
-};
-
+/** 景気による不動産の相場の値動きの上乗せ（年） */
+export const REAL_ESTATE_DRIFT: Record<Economy, number> = { boom: 0.02, normal: 0, recession: -0.03 };
 /** 不動産の相場の値動きの大きさ（年） */
 export const REAL_ESTATE_VOLATILITY = 0.05;
+
+/** 1年の値動きの大きさのうち、毎月の小さな動きで出す割合（残りは年末のニュースのとき）。design.md 7章 */
+export const MONTHLY_VOLATILITY_SHARE = 0.5;
 
 /** ニュースが景気を決めない年の、景気の移り変わりの確率 */
 export const ECONOMY_TRANSITION: Record<Economy, Record<Economy, number>> = {
@@ -42,34 +70,3 @@ export const ECONOMY_TRANSITION: Record<Economy, Record<Economy, number>> = {
   boom: { boom: 0.6, normal: 0.3, recession: 0.1 },
   recession: { boom: 0.1, normal: 0.4, recession: 0.5 },
 };
-
-export type PolicyPresetId = 'safe' | 'balanced' | 'aggressive';
-
-/** 銀行預金も含めた割合（合計100%）。投資方針の画面に見せる形 */
-export type Shares = Record<'deposit' | AssetId, number>;
-
-/** 割合（%）から投資方針を作る */
-export function policyFromShares(kind: Policy['kind'], shares: Shares): Policy {
-  const invested = 100 - shares.deposit;
-  const allocation = { bond: 0, gold: 0, fund: 0, stock: 0 };
-  if (invested > 0) for (const id of ASSET_IDS) allocation[id] = shares[id] / invested;
-  else allocation.fund = 1;
-  return { kind, investRatio: invested / 100, allocation };
-}
-
-/** 投資方針を、銀行預金も含めた割合（%）にする */
-export function sharesOf(policy: Policy): Shares {
-  const shares: Shares = { deposit: Math.round((1 - policy.investRatio) * 100), bond: 0, gold: 0, fund: 0, stock: 0 };
-  for (const id of ASSET_IDS) shares[id] = Math.round(policy.investRatio * policy.allocation[id] * 100);
-  return shares;
-}
-
-/** 自動投資の型（design.md 6.3） */
-export const POLICY_PRESETS: Record<PolicyPresetId, Policy> = {
-  safe: policyFromShares('safe', { deposit: 70, bond: 20, gold: 10, fund: 0, stock: 0 }),
-  balanced: policyFromShares('balanced', { deposit: 50, bond: 10, gold: 5, fund: 35, stock: 0 }),
-  aggressive: policyFromShares('aggressive', { deposit: 30, bond: 0, gold: 0, fund: 40, stock: 30 }),
-};
-
-/** 預金だけ（初期投資なし）。銀行預金100% */
-export const NO_INVEST_POLICY: Policy = policyFromShares('none', { deposit: 100, bond: 0, gold: 0, fund: 0, stock: 0 });

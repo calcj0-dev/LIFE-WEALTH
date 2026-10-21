@@ -2,21 +2,22 @@ import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Board } from '../board/Board';
 import { Roulette } from '../board/Roulette';
-import { POLICY_PRESETS } from '../data/assets';
 import { playGame } from '../game/autoplay';
-import { choose, chooseJob, continueYear, createGame, estimateYear, getOptions, nextYear, roll, setPolicy } from '../game/engine';
+import { choose, chooseJob, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
-import { Hud, SidePanel } from './GameScreen';
-import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
-import { Result } from './Result';
-import { PriceChart, ReturnTable } from './PriceCharts';
-import { BudgetCard, JobRoulette, PolicySetup } from './Setup';
-import { AssetManager } from './AssetManager';
 import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './Feed';
-import { HappinessList, LedgerTable, NetWorthTable } from './Ledger';
+import { Hud, SidePanel } from './GameScreen';
+import { LedgerTable, NetWorthTable } from './Ledger';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
+import { PriceChart, ReturnTable } from './PriceCharts';
+import { Result } from './Result';
+import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
 
 const noop = () => {};
+
+/** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth)(\.[a-zA-Z]+)+</;
 
 describe('画面', () => {
   it('タイトル画面にバージョンが出る', () => {
@@ -24,64 +25,68 @@ describe('画面', () => {
     expect(html).toContain('LIFE');
     expect(html).toMatch(/v\d+\.\d+\.\d+/);
   });
-  it('職業選択と投資方針の画面が描ける', () => {
-    const g = createGame(1);
+  it('年数を選ぶ画面に、10〜50年と遊ぶ時間の目安が出る', () => {
+    const html = renderToString(<YearsSetup onDone={noop} />);
+    for (const y of [10, 20, 30, 40, 50]) expect(html).toContain(`${y}年`);
+    expect(html).toContain('おすすめ');
+    expect(minutesFor(20)).toBe(30);
+  });
+  it('職業のルーレットと、スタート時の家計が描ける', () => {
+    const g = chooseYears(createGame(1), 20);
     expect(renderToString(<JobRoulette s={g} onDone={noop} />)).toContain('会社員');
     const athlete = chooseJob(g, 'athlete');
     expect(renderToString(<BudgetCard s={athlete} title="家計" />)).toContain('残る見込み');
-    const plan = estimateYear(athlete);
+    const plan = estimateMonth(athlete);
     expect(renderToString(<LedgerTable income={plan.income} expense={plan.expense} />)).toContain('職業の固定費');
-    const policy = renderToString(<PolicySetup doneLabel="始める" onDone={noop} />);
-    for (const name of ['預金だけ（初期投資なし）', '安全型', 'バランス型', '積極型', '手動']) expect(policy).toContain(name);
-    expect(policy).toContain('銀行預金50%');
-    expect(policy).not.toContain('投資に回す割合');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
-    let s: GameState = setPolicy(chooseJob(createGame(5), 'employee'), POLICY_PRESETS.balanced);
-    for (let year = 0; year < 44; year++) {
-      expect(renderToString(<NewsModal s={s} onNext={noop} />)).toContain('ニュース');
-      expect(renderToString(<NewsBrief s={s} />)).toContain('ニュース');
-      s = continueYear(s);
-      while (s.phase === 'decision') {
-        renderToString(<DecisionModal s={s} onChoose={noop} />);
-        s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
-      }
-      s = roll(s);
-      renderToString(<Board position={s.player.position} overview={false} />);
-      renderToString(<Board position={s.player.position} overview />);
-      renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
-      while (s.phase === 'decision') {
+    let s: GameState = chooseJob(chooseYears(createGame(5), 10), 'employee');
+    while (s.phase !== 'finished') {
+      if (s.phase === 'roll') {
+        s = roll(s);
+        renderToString(<Board position={s.player.position} overview={false} />);
+        renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
+      } else if (s.phase === 'decision') {
         const html = renderToString(<DecisionModal s={s} onChoose={noop} />);
-        expect(html).not.toMatch(/(event|option|square|marriage)\.[a-zA-Z]+\.?[a-zA-Z]*</);
+        expect(html).not.toMatch(RAW_KEY);
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+      } else if (s.phase === 'yearEnd') {
+        const html = [
+          renderToString(<NewsModal s={s} onNext={noop} />),
+          renderToString(<AutoPopup onClose={noop}><NewsBrief s={s} /></AutoPopup>),
+          renderToString(<AutoPopup onClose={noop}><YearEndBrief s={s} /></AutoPopup>),
+          renderToString(<YearEndModal s={s} onNext={noop} />),
+          renderToString(<NetWorthTable s={s} />),
+          renderToString(<Hud s={s} />),
+          renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenFeed={noop} />),
+          renderToString(<FeedPanel s={s} onClose={noop} />),
+          renderToString(<HistoryModal s={s} onClose={noop} />),
+        ].join('');
+        expect(html).toContain('年末のニュース');
+        expect(html).toContain('できごとの履歴');
+        expect(html).not.toMatch(RAW_KEY);
+        s = nextYear(s);
       }
-      renderToString(<Hud s={s} />);
-      expect(renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenManager={noop} onOpenFeed={noop} />)).toContain('できごとの履歴');
-      renderToString(<FeedPanel s={s} onClose={noop} />);
-      renderToString(<AutoPopup onClose={noop}><YearEndBrief s={s} /></AutoPopup>);
-      renderToString(<YearEndModal s={s} last={false} closeOnly onNext={noop} />);
-      renderToString(<AssetManager s={s} onChange={noop} onClose={noop} />);
-      renderToString(<HistoryModal s={s} onClose={noop} />);
-      const yearEnd = renderToString(<YearEndModal s={s} last={false} onNext={noop} />) + renderToString(<NetWorthTable s={s} />) + renderToString(<HappinessList s={s} />);
-      expect(yearEnd).not.toMatch(/>(event|auto|marriage|gamble|realEstate|insurance|shortfall|loan|job|school|university|debt)(\.[a-zA-Z]+)*</);
-      s = nextYear(s);
     }
     expect(s.phase).toBe('finished');
   });
   it('値動きのチャートと年利の表が描ける', () => {
-    const s = playGame(12, 'employee', 'balanced');
-    const chart = renderToString(<PriceChart history={s.history} />);
+    const s = playGame(12, 'employee', 20);
+    const chart = renderToString(<PriceChart points={s.prices} />);
     expect(chart).toContain('<path');
     expect(chart).toContain('物価');
+    expect(chart).toContain('IT株');
     const table = renderToString(<ReturnTable history={s.history} />);
-    expect(table).toContain('これまでの年平均（44年）');
-    expect(table.match(/<tr/g)!.length).toBe(1 + 1 + 44);
-    expect(renderToString(<PriceChart history={[]} />)).toContain('1年目');
+    expect(table).toContain('これまでの年平均（20年）');
+    expect(table.match(/<tr/g)!.length).toBe(1 + 1 + 20);
+    expect(renderToString(<PriceChart points={[]} />)).toContain('1年目');
   });
-  it('結果画面が描ける', () => {
-    const s = playGame(11, 'engineer', 'aggressive');
+  it('結果画面に、最後の純資産が出る', () => {
+    const s = playGame(11, 'engineer', 10);
     const html = renderToString(<Result s={s} onAgain={noop} />);
-    expect(html).toContain('ランク');
+    expect(html).toContain('最後の純資産');
+    expect(html).toContain('10年間の人生');
     expect(html).toContain('<path');
+    expect(html).not.toContain('ランク');
   });
 });

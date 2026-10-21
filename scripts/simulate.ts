@@ -1,51 +1,49 @@
-// 自動で何千回も遊ばせて、結果を docs/simulation.md にまとめる。
+// 自動で何百回も遊ばせて、結果を docs/simulation.md にまとめる。
 // 使い方: npm run simulate
 
 import { writeFileSync } from 'node:fs';
-import { POLICY_PRESETS, type PolicyPresetId } from '../src/data/assets';
+import { ASSET_IDS } from '../src/data/assets';
 import { JOB_IDS } from '../src/data/jobs';
-import { RANKS_BY_JOB } from '../src/data/rules';
-import { playGame, type Strategy } from '../src/game/autoplay';
+import { playGame, type PlayCounts, type Strategy } from '../src/game/autoplay';
 import type { GameState, JobId } from '../src/game/types';
 
-const SEEDS_PER_CASE = 60;
-const POLICIES = Object.keys(POLICY_PRESETS) as PolicyPresetId[];
-const MARRIAGE: Strategy['marriage'][] = ['always', 'never'];
+const SEEDS_PER_CASE = 40;
+const YEARS = [20, 40];
+const STRATEGIES: { id: string; name: string; strategy: Strategy }[] = [
+  { id: 'none', name: '投資しない', strategy: { investRate: 0, gambleChance: 0.3, homeChance: 0.4 } },
+  { id: 'invest', name: '余ったお金の半分を投資信託に', strategy: { investRate: 0.5, gambleChance: 0.3, homeChance: 0.4 } },
+];
 
 interface Row {
   job: JobId;
-  policy: PolicyPresetId;
-  marriage: Strategy['marriage'];
-  married: boolean;
-  children: number;
+  years: number;
+  strategy: string;
   netWorth: number;
-  happiness: number;
-  security: number;
-  total: number;
-  rank: string;
+  married: boolean;
+  marriedYear: number | null;
+  children: number;
+  home: boolean;
   hadDebt: boolean;
   finalDebt: number;
-  crisisYears: number;
+  popupsPerYear: number;
   gambleSpent: number;
   gambleReturned: number;
   prices: Record<string, number>;
 }
 
-function toRow(s: GameState, job: JobId, policy: PolicyPresetId, marriage: Strategy['marriage']): Row {
+function toRow(s: GameState, job: JobId, years: number, strategy: string, counts: PlayCounts): Row {
   return {
     job,
-    policy,
-    marriage,
+    years,
+    strategy,
+    netWorth: s.result!.netWorth,
     married: s.player.married,
+    marriedYear: s.log.find((l) => l.key === 'marriage.marry')?.year ?? null,
     children: s.player.children.length,
-    netWorth: s.score!.netWorth,
-    happiness: s.score!.happinessPoints,
-    security: s.score!.securityPoints,
-    total: s.score!.total,
-    rank: s.score!.rank,
+    home: s.player.home !== null,
     hadDebt: s.log.some((l) => l.key === 'shortfall.loan'),
     finalDebt: s.player.cardLoan,
-    crisisYears: s.history.filter((h) => h.newsId === 'crisis').length,
+    popupsPerYear: counts.popups / years,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
     prices: { ...s.market.prices, realEstate: s.market.realEstateIndex, living: s.market.livingIndex },
@@ -54,37 +52,27 @@ function toRow(s: GameState, job: JobId, policy: PolicyPresetId, marriage: Strat
 
 const rows: Row[] = [];
 let seed = 1;
-for (const job of JOB_IDS) {
-  for (const policy of POLICIES) {
-    for (const marriage of MARRIAGE) {
+for (const years of YEARS) {
+  for (const job of JOB_IDS) {
+    for (const st of STRATEGIES) {
       for (let i = 0; i < SEEDS_PER_CASE; i++) {
-        const s = playGame(seed++, job, policy, { marriage, gambleChance: 0.3, spendChance: 0.5 });
-        rows.push(toRow(s, job, policy, marriage));
+        const counts: PlayCounts = { turns: 0, popups: 0 };
+        const s = playGame(seed++, job, years, st.strategy, counts);
+        rows.push(toRow(s, job, years, st.id, counts));
       }
     }
   }
 }
 
-const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 const pct = (xs: number[], p: number) => {
   const sorted = [...xs].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? 0;
 };
 const man = (v: number) => `${Math.round(v).toLocaleString('ja-JP')}万円`;
-const pt = (v: number) => `${Math.round(v)}`;
+const rate = (group: Row[], f: (r: Row) => boolean) => `${Math.round((group.filter(f).length / Math.max(1, group.length)) * 100)}%`;
 
-function summary(label: string, group: Row[]) {
-  const w = group.map((r) => r.netWorth);
-  return `| ${label} | ${group.length} | ${man(pct(w, 0.1))} | ${man(pct(w, 0.5))} | ${man(pct(w, 0.9))} | ${pt(mean(group.map((r) => r.happiness)))} | ${pt(mean(group.map((r) => r.security)))} | ${pt(mean(group.map((r) => r.total)))} |`;
-}
-
-const head =
-  '| 区分 | 回数 | 純資産（下位10%） | 純資産（中央） | 純資産（上位10%） | 幸福ポイント（平均） | 老後の安心（平均） | 合計（平均） |\n| --- | --- | --- | --- | --- | --- | --- | --- |';
-
-const byKey = <K extends keyof Row>(key: K, values: Row[K][], label: (v: Row[K]) => string) =>
-  values.map((v) => summary(label(v), rows.filter((r) => r[key] === v))).join('\n');
-
-const jobNames: Record<JobId, string> = {
+const jobNames: Record<string, string> = {
   employee: '会社員',
   civil: '公務員',
   engineer: 'ITエンジニア',
@@ -92,96 +80,88 @@ const jobNames: Record<JobId, string> = {
   youtuber: 'YouTuber',
   freeter: 'フリーター',
 };
-const policyNames: Record<PolicyPresetId, string> = { safe: '安全型', balanced: 'バランス型', aggressive: '積極型' };
 
-const totals = rows.map((r) => r.total);
-const RANK_NAMES = ['S', 'A', 'B', 'C', 'D'];
-const rankLines = RANK_NAMES.map((rank) => {
-  const n = rows.filter((x) => x.rank === rank).length;
-  return `| ${rank} | ${Math.round((n / rows.length) * 100)}% |`;
-}).join('\n');
+function summary(label: string, group: Row[]) {
+  const w = group.map((r) => r.netWorth);
+  return `| ${label} | ${group.length} | ${man(pct(w, 0.1))} | ${man(pct(w, 0.5))} | ${man(pct(w, 0.9))} | ${rate(group, (r) => r.married)} | ${mean(group.map((r) => r.children)).toFixed(1)} | ${rate(group, (r) => r.home)} | ${rate(group, (r) => r.finalDebt > 0)} |`;
+}
 
-/** 職業ごとに、S が約5%、A までで約20%、B までで約50%、D が約20%になる基準点（10点単位） */
-const round10 = (v: number) => Math.round(v / 10) * 10;
-const thresholdLines = JOB_IDS.map((job) => {
-  const jobTotals = rows.filter((r) => r.job === job).map((r) => r.total);
-  const suggestion = [0.95, 0.8, 0.5, 0.2].map((q) => round10(pct(jobTotals, q))).join(' / ');
-  const current = RANKS_BY_JOB[job].slice(0, 4).map((r) => r.min).join(' / ');
-  return `| ${jobNames[job]} | ${suggestion} | ${current} |`;
-}).join('\n');
+const head =
+  '| 区分 | 回数 | 純資産（下位10%） | 純資産（中央） | 純資産（上位10%） | 結婚した | 子ども（平均） | 持ち家 | 借金が残った |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |';
 
+function section(years: number) {
+  const group = rows.filter((r) => r.years === years);
+  const byJob = JOB_IDS.map((j) => summary(jobNames[j] ?? j, group.filter((r) => r.job === j))).join('\n');
+  const byStrategy = STRATEGIES.map((st) => summary(st.name, group.filter((r) => r.strategy === st.id))).join('\n');
+  const employee = group.filter((r) => r.job === 'employee');
+  return `## ${years}年で遊んだ場合
+
+${head}
+${summary('全体', group)}
+
+### 職業ごと
+
+${head}
+${byJob}
+
+### 投資のしかたごと
+
+${head}
+${byStrategy}
+
+### 会社員の投資のしかたごと
+
+${head}
+${STRATEGIES.map((st) => summary(st.name, employee.filter((r) => r.strategy === st.id))).join('\n')}
+`;
+}
+
+const married = rows.filter((r) => r.marriedYear !== null);
 const spent = rows.reduce((a, r) => a + r.gambleSpent, 0);
 const returned = rows.reduce((a, r) => a + r.gambleReturned, 0);
-
 const priceNames: Record<string, string> = {
   bond: '国債（利息を除く）',
   gold: 'ゴールド',
   fund: '投資信託',
-  stock: '株式（配当を除く）',
+  it: 'IT株（配当を除く）',
+  food: '食品株（配当を除く）',
+  energy: 'エネルギー株（配当を除く）',
+  bank: '銀行株（配当を除く）',
   realEstate: '不動産の相場',
   living: '物価',
 };
-const assetLines = Object.entries(priceNames)
-  .map(([k, name]) => {
-    const cagr = rows.map((r) => Math.pow(r.prices[k], 1 / 44) - 1);
-    return `| ${name} | ${(pct(cagr, 0.5) * 100).toFixed(1)}% |`;
+const long = rows.filter((r) => r.years === 40);
+const assetLines = [...ASSET_IDS, 'realEstate', 'living']
+  .map((k) => {
+    const cagr = long.map((r) => Math.pow(r.prices[k], 1 / 40) - 1);
+    return `| ${priceNames[k] ?? k} | ${(pct(cagr, 0.5) * 100).toFixed(1)}% | ${(pct(cagr, 0.1) * 100).toFixed(1)}% 〜 ${(pct(cagr, 0.9) * 100).toFixed(1)}% |`;
   })
   .join('\n');
 
 const md = `# 自動シミュレーションの結果
 
-\`npm run simulate\` で作成。職業6 × 投資方針3 × 結婚（する／しない）2 × ${SEEDS_PER_CASE}回 = ${rows.length}回 遊ばせた結果。
-選択は自動（旅行や趣味などにお金を使う確率50%、ギャンブルをする確率30%）。
+\`npm run simulate\` で作成。年数（${YEARS.join('・')}年）× 職業${JOB_IDS.length} × 投資のしかた${STRATEGIES.length} × ${SEEDS_PER_CASE}回 = ${rows.length}回 遊ばせた結果。
+選択は自動（ギャンブルをする確率30%、家を買えるときに買う確率40%）。
+「投資しない」は銀行預金だけ。「余ったお金の半分を投資信託に」は、年末に生活費の半年分を残し、残りの半分で投資信託を買う（取引タイムは次の段階で作るので、ここでは自動で買わせている）。
 
-## 全体
+${YEARS.map(section).join('\n')}
+## 結婚
 
-${head}
-${summary('全体', rows)}
+- 結婚した年（中央）: ${pct(married.map((r) => r.marriedYear!), 0.5)}年目（早い10% ${pct(married.map((r) => r.marriedYear!), 0.1)}年目、遅い10% ${pct(married.map((r) => r.marriedYear!), 0.9)}年目）
 
-合計点の分布: 下位10% ${pt(pct(totals, 0.1))}、下位20% ${pt(pct(totals, 0.2))}、中央 ${pt(pct(totals, 0.5))}、上位20% ${pt(pct(totals, 0.8))}、上位5% ${pt(pct(totals, 0.95))}
+## テンポ
 
-## 職業ごと
-
-${head}
-${byKey('job', JOB_IDS, (j) => jobNames[j])}
-
-## 投資方針ごと
-
-${head}
-${byKey('policy', POLICIES, (p) => policyNames[p])}
-
-## 結婚する／しない
-
-${head}
-${summary('結婚した', rows.filter((r) => r.married))}
-${summary('結婚しなかった', rows.filter((r) => !r.married))}
-${summary('結婚して子どもがいる', rows.filter((r) => r.married && r.children > 0))}
-
-## ランクの分布
-
-| ランク | 割合 |
-| --- | --- |
-${rankLines}
-
-## 職業ごとのランクの基準
-
-S が約5%、A までで約20%、B までで約50%、D が約20%になる基準点（S / A / B / C の下限）。
-
-| 職業 | シミュレーションからの提案 | 今の基準（src/data/rules.ts） |
-| --- | --- | --- |
-${thresholdLines}
+- ポップアップで止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.popupsPerYear)).toFixed(1)}回（12ターンのうち。年末のニュースと決算は含まない）
 
 ## そのほか
 
-- カードローンを使ったことがある割合: ${Math.round((rows.filter((r) => r.hadDebt).length / rows.length) * 100)}%
-- 65歳でカードローンが残っていた割合: ${Math.round((rows.filter((r) => r.finalDebt > 0).length / rows.length) * 100)}%（残っていた人の中央値 ${man(pct(rows.filter((r) => r.finalDebt > 0).map((r) => r.finalDebt), 0.5) ?? 0)}、上位10% ${man(pct(rows.filter((r) => r.finalDebt > 0).map((r) => r.finalDebt), 0.9) ?? 0)}）
-- 金融危機が1回以上あった割合: ${Math.round((rows.filter((r) => r.crisisYears > 0).length / rows.length) * 100)}%
+- カードローンを使ったことがある割合: ${rate(rows, (r) => r.hadDebt)}
 - ギャンブルの還元率（実際の結果）: ${Math.round((returned / Math.max(1, spent)) * 100)}%
 
-## 資産ごとの実際の値上がり率（44年間の年平均、中央値）
+## 資産ごとの実際の値上がり率（40年の年平均）
 
-| 資産 | 年平均 |
-| --- | --- |
+| 資産 | 中央 | 下位10% 〜 上位10% |
+| --- | --- | --- |
 ${assetLines}
 `;
 

@@ -1,17 +1,20 @@
-// 金額の単位はすべて「万円」。
+// 金額の単位はすべて「万円」。1ターン＝1ヶ月（design.md 1章、2章）。
 
-export type JobId = 'employee' | 'civil' | 'engineer' | 'athlete' | 'youtuber' | 'freeter';
-/** 運用する資産。お金はすべて銀行預金（Player.cash）として持つ */
-export type AssetId = 'bond' | 'gold' | 'fund' | 'stock';
+/** 職業の番号。職業の一覧は src/data/jobs.json */
+export type JobId = string;
+/** 運用する資産（銘柄）の番号。一覧は src/data/assets.json。お金はすべて銀行預金（Player.cash）として持つ */
+export type AssetId = string;
 export type Economy = 'boom' | 'normal' | 'recession';
 export type SquareType =
   | 'start'
   | 'stopMarriage'
-  | 'life'
-  | 'good'
-  | 'bad'
+  | 'birth'
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'stock'
+  | 'investTalk'
   | 'gamble'
-  | 'insurance'
   | 'realEstate';
 
 export interface Square {
@@ -24,84 +27,68 @@ export interface Square {
   next: number[];
 }
 
-export type SchoolType = 'public' | 'private';
+export type HighSchoolType = 'public' | 'private';
 export type UniversityType = 'national' | 'private' | 'none';
 
 export interface Child {
+  /** 生まれた年を0歳とし、年末ごとに1つ上がる */
   age: number;
-  school: SchoolType;
-  /** 18歳で決める。決まるまでは null */
+  /** 15歳で決まる。決まるまでは null */
+  highSchool: HighSchoolType | null;
+  /** 18歳で決まる。決まるまでは null */
   university: UniversityType | null;
   independent: boolean;
 }
 
 export interface Loan {
   balance: number;
+  /** 金利（年） */
   rate: number;
-  yearsLeft: number;
-  /** 毎年の返済額（元金＋利息） */
+  monthsLeft: number;
+  /** 毎月の返済額（元金＋利息） */
   payment: number;
 }
 
-export interface Property {
-  id: number;
-  use: 'home' | 'rental';
+export interface Home {
   /** 今の相場での価値 */
   value: number;
   loan: Loan | null;
   fireInsured: boolean;
-  /** その年は空室で家賃が入らない */
-  vacant: boolean;
 }
 
 export type SpouseWork = 'full' | 'part' | 'none';
 
 export interface Spouse {
   work: SpouseWork;
+  /** 収入（年） */
   income: number;
-  /** 育休でその年の収入が半分 */
+  /** 育休で、その年の残りの収入が半分 */
   halfThisYear: boolean;
 }
 
-/** 投資方針の種類。safe・balanced・aggressive は自動投資の型 */
-export type PolicyKind = 'safe' | 'balanced' | 'aggressive' | 'manual' | 'none';
-
-export interface Policy {
-  kind?: PolicyKind;
-  /** 余ったお金のうち投資に回す割合（0〜1）。残りは銀行預金に残る */
-  investRatio: number;
-  /** 投資に回すお金の配分（合計1） */
-  allocation: Record<AssetId, number>;
-}
-
 export interface Player {
-  age: number;
   jobId: JobId;
-  /** ゲームの始めにルーレットで決まった職業（ランクの基準に使う） */
-  startJobId?: JobId;
+  /** 給料（手取り・年） */
   salary: number;
-  /** その年は給料が入らない（失業、重い病気） */
-  noIncomeThisYear: boolean;
-  /** 自宅で介護している年は給料が減る */
-  careAtHomeThisYear: boolean;
-  /** スポーツ選手が引退する年齢 */
-  athleteRetireAge: number | null;
+  /** 給料が入らない残りの月数（失業、重い病気） */
+  noIncomeMonths: number;
+  /** スポーツ選手が引退する年（何年目か） */
+  athleteRetireYear: number | null;
   /** 銀行預金。お金はすべてここに入り、利息がつく */
   cash: number;
   /** 資産ごとの保有口数。価格は market.prices */
   holdings: Record<AssetId, number>;
   married: boolean;
-  marriageDeclined: boolean;
   spouse: Spouse | null;
   children: Child[];
-  properties: Property[];
+  home: Home | null;
   cardLoan: number;
+  /** 医療保険の保険料（年）。入っていなければ null */
   medicalPremium: number | null;
-  hobby: boolean;
-  petYears: number | null;
+  /** 副業の収入（年） */
   sideBusinessIncome: number;
-  policy: Policy;
-  happiness: number;
+  /** 副業に挑戦したことがあるか（1回だけ） */
+  sideBusinessTried: boolean;
   position: number;
   lap: number;
 }
@@ -114,67 +101,79 @@ export interface Market {
   realEstateIndex: number;
   /** 物価（生活費にかかる、はじめは1） */
   livingIndex: number;
-  /** 給料の水準（毎年の物価の上昇に合わせて上がる、はじめは1）。古いセーブにはない */
-  wageIndex?: number;
+  /** 給料の水準（毎年の物価の上昇に合わせて上がる、はじめは1） */
+  wageIndex: number;
 }
 
 export interface LogEntry {
-  age: number;
+  year: number;
+  month: number;
   key: string;
   params?: Record<string, number | string>;
   cash?: number;
-  happiness?: number;
+  /** お金が動かなくても、画面の端にお知らせを出す */
+  notice?: boolean;
 }
 
+/** 1年分の収入と支出（毎月の分を足したもの） */
 export interface Settlement {
-  age: number;
+  year: number;
   income: Record<string, number>;
   expense: Record<string, number>;
   net: number;
-  invested: number;
   /** ローン返済のうち、元本（借金が減った分） */
   loanPrincipal: number;
   /** お金が足りず、売った資産の額 */
   sold: number;
   /** それでも足りず、借りた額 */
   borrowed: number;
+  /** 持っている資産と家の値動き（毎月の分と年末のニュースの分） */
+  revaluation: number;
 }
 
 export interface YearRecord {
-  age: number;
+  year: number;
   netWorth: number;
   cash: number;
   assets: Record<AssetId | 'realEstate', number>;
   debt: number;
-  happiness: number;
   economy: Economy;
   newsId: string;
   /** 純資産が増えた・減った理由 */
   breakdown: NetWorthBreakdown;
-  /** その年の収入と支出の合計（履歴に使う。古いセーブにはない） */
-  incomeTotal?: number;
-  expenseTotal?: number;
-  /** その年の価格（値動きのチャートと年利の表に使う。古いセーブにはない） */
-  market?: { prices: Record<AssetId, number>; realEstateIndex: number; livingIndex: number; depositRate: number };
+  incomeTotal: number;
+  expenseTotal: number;
+  /** その年の年末の価格（年利の表に使う） */
+  market: { prices: Record<AssetId, number>; realEstateIndex: number; livingIndex: number; depositRate: number };
+}
+
+/** 毎月の価格（値動きのチャートに使う） */
+export interface PricePoint {
+  year: number;
+  month: number;
+  prices: Record<AssetId, number>;
+  livingIndex: number;
+  realEstateIndex: number;
+  economy: Economy;
 }
 
 export interface NetWorthBreakdown {
   /** 働いて残したお金（給料など − 生活費などの支出。ローンは利息だけを支出に数える） */
   work: number;
-  /** 投資の収入（利息・配当・家賃） */
+  /** 投資の収入（利息・配当） */
   investment: number;
   /** 資産の値上がり・値下がり */
   revaluation: number;
-  /** 出来事など（マスの出来事、ギャンブル、不動産の売り買いの費用など） */
+  /** 出来事など（マスの出来事、ギャンブル、家の売り買いの費用など） */
   other: number;
 }
 
-/** 年初の値動き。ニュースの画面で、自分の資産がいくら動いたかを見せる */
+/** 年末のニュースによる値動き。ニュースの画面で、自分の資産がいくら動いたかを見せる */
 export interface MarketChange {
   prevEconomy: Economy;
-  /** 値動きの割合 */
+  /** その年の値動きの割合（1年分） */
   rates: Record<AssetId | 'realEstate', number>;
-  /** 自分の資産が動いた金額 */
+  /** 自分の資産が1年で動いた金額 */
   amounts: Record<AssetId | 'realEstate', number>;
 }
 
@@ -188,27 +187,24 @@ export interface Stats {
 
 export type DecisionKind =
   | 'marriage'
-  | 'life'
-  | 'good'
-  | 'bad'
+  | 'birth'
+  | 'event'
   | 'gamble'
-  | 'insurance'
   | 'realEstate'
-  | 'school'
-  | 'university'
   | 'athleteRetire'
   | 'notice';
 
 export interface Decision {
   kind: DecisionKind;
-  /** イベントの番号（life, good, bad など） */
+  /** 出来事の番号（event） */
   eventId?: string;
-  /** 子どもの番号（進学） */
-  childIndex?: number;
-  /** 不動産の売り出し価格 */
+  /** 家の売り出し価格 */
   offerPrice?: number;
   /** お知らせの文章の番号（notice） */
   messageKey?: string;
+  params?: Record<string, number | string>;
+  /** お知らせを出した元（notice のときに、どのマスかを見せる） */
+  fromSquare?: boolean;
 }
 
 export interface DecisionOption {
@@ -218,53 +214,56 @@ export interface DecisionOption {
   enabled: boolean;
   /** 選んだときにすぐ動くお金（分かるときだけ） */
   cash?: number;
-  /** 選んだときに動く幸福ポイント（分かるときだけ） */
-  happiness?: number;
 }
 
-export type Phase =
-  | 'setupJob'
-  | 'setupPolicy'
-  | 'yearStart'
-  | 'decision'
-  | 'roll'
-  | 'yearEnd'
-  | 'finished';
+export type Phase = 'setupYears' | 'setupJob' | 'roll' | 'decision' | 'yearEnd' | 'finished';
 
-export interface Score {
-  /** ランクの基準にした職業 */
-  jobId?: JobId;
-  happinessPoints: number;
-  securityPoints: number;
-  total: number;
-  rank: string;
+export interface GameResult {
   netWorth: number;
 }
 
 export interface GameState {
-  saveVersion: 1;
+  saveVersion: 2;
   seed: number;
   rngState: number;
-  /** 1〜44 */
+  /** 遊ぶ年数（10〜50） */
+  years: number;
+  /** 何年目か（1から） */
   year: number;
+  /** 何月か（1〜12） */
+  month: number;
   phase: Phase;
   player: Player;
   market: Market;
+  /** 最後の年末のニュース */
   newsId: string | null;
   lastRoll: number | null;
   /** 最後の移動で通ったマス */
   lastPath: number[];
   /** 今の決定 */
   decision: Decision | null;
-  /** これから行う決定（年初の進学など） */
+  /** これから行う決定（年の始めの進学のお知らせなど） */
   queue: Decision[];
-  /** 今の決定がどこから来たか */
-  decisionFrom: 'yearStart' | 'square' | null;
+  /** 今の決定がどこから来たか。square ならマスの出来事で、終わると月末に進む */
+  decisionFrom: 'queue' | 'square' | null;
+  /** 今年の収入と支出（毎月足していく） */
+  yearFlows: Settlement;
+  /** 最後の年末の決算 */
   lastSettlement: Settlement | null;
   history: YearRecord[];
+  prices: PricePoint[];
   log: LogEntry[];
   stats: Stats;
-  score: Score | null;
-  /** その年の年初の値動き */
-  marketChange?: MarketChange;
+  result: GameResult | null;
+  /** 今年の値動きの記録（年の始めの価格と、自分の資産が動いた金額） */
+  yearMarket: YearMarket;
+  /** 最後の年末の値動き */
+  marketChange: MarketChange | null;
+}
+
+export interface YearMarket {
+  startPrices: Record<AssetId, number>;
+  startRealEstateIndex: number;
+  /** 自分の資産が値動きで動いた金額 */
+  amounts: Record<AssetId | 'realEstate', number>;
 }

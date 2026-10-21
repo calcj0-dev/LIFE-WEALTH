@@ -8,22 +8,26 @@ import { t } from '../i18n';
 export const SQUARE_COLORS: Record<SquareType, string> = {
   start: '#ffb703',
   stopMarriage: '#ff6b9a',
-  life: '#4d96ff',
-  good: '#2ec4b6',
-  bad: '#ff6b6b',
+  birth: '#ff9fc2',
+  small: '#8ecae6',
+  medium: '#4d96ff',
+  large: '#3a0ca3',
+  stock: '#2ec4b6',
+  investTalk: '#ff6b6b',
   gamble: '#9b5de5',
-  insurance: '#00bbf9',
   realEstate: '#f9a03f',
 };
 
 export const SQUARE_ICONS: Record<SquareType, string> = {
   start: '🏁',
   stopMarriage: '💍',
-  life: '⭐',
-  good: '😊',
-  bad: '⚡',
+  birth: '👶',
+  small: '🪙',
+  medium: '⭐',
+  large: '🌟',
+  stock: '📈',
+  investTalk: '🗣️',
   gamble: '🎰',
-  insurance: '🛡️',
   realEstate: '🏠',
 };
 

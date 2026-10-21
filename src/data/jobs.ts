@@ -1,8 +1,10 @@
 import type { JobId } from '../game/types';
+import data from './jobs.json';
+import { assertValid, checkFields, checkUniqueIds, type Problems } from './validate';
 
 export interface JobDef {
   id: JobId;
-  /** 22歳の給料（手取り・年、万円） */
+  /** 1年目の給料（手取り・年、万円） */
   startSalary: number;
   /** 毎年の昇給率 */
   growth: number;
@@ -13,9 +15,9 @@ export interface JobDef {
   hitMultiplier: number;
   minSalary: number;
   maxSalary: number;
-  /** ライフイベント「失業」の起きやすさ（0なら起きない） */
+  /** 出来事「失業」の起きやすさ（0なら起きない） */
   unemploymentWeight: number;
-  /** ライフイベント「病気・けが」の起きやすさの倍率 */
+  /** 出来事「病気・けが」の起きやすさの倍率 */
   sicknessMultiplier: number;
   canBePromoted: boolean;
   /** 転職先に選べるか */
@@ -26,119 +28,51 @@ export interface JobDef {
   fixedCost: number;
 }
 
-/**
- * 職業のデータ。給料は手取り（年、万円）。
- * 国税庁「民間給与実態統計調査」令和6年分（正社員の平均給与 545万円、正社員以外 206万円、情報通信業 660万円。いずれも税込み）
- * を、手取りに直した水準に合わせて丸めた。スポーツ選手と YouTuber は統計がないので、仮の値。
- */
-export const JOBS: Record<JobId, JobDef> = {
-  employee: {
-    id: 'employee',
-    startSalary: 250,
-    growth: 0.01,
-    volatility: 0,
-    hitChance: 0,
-    hitMultiplier: 1,
-    minSalary: 0,
-    maxSalary: Infinity,
-    unemploymentWeight: 1,
-    sicknessMultiplier: 1,
-    canBePromoted: true,
-    canTransferTo: true,
-    livingRate: 1,
-    fixedCost: 10,
-  },
-  civil: {
-    id: 'civil',
-    startSalary: 240,
-    growth: 0.01,
-    volatility: 0,
-    hitChance: 0,
-    hitMultiplier: 1,
-    minSalary: 0,
-    maxSalary: Infinity,
-    unemploymentWeight: 0,
-    sicknessMultiplier: 1,
-    canBePromoted: true,
-    canTransferTo: true,
-    livingRate: 1,
-    fixedCost: 10,
-  },
-  engineer: {
-    id: 'engineer',
-    startSalary: 280,
-    growth: 0.015,
-    volatility: 0,
-    hitChance: 0,
-    hitMultiplier: 1,
-    minSalary: 0,
-    maxSalary: Infinity,
-    unemploymentWeight: 2,
-    sicknessMultiplier: 1,
-    canBePromoted: true,
-    canTransferTo: true,
-    livingRate: 1,
-    fixedCost: 20,
-  },
-  athlete: {
-    id: 'athlete',
-    startSalary: 500,
-    growth: 0,
-    volatility: 0.3,
-    hitChance: 0,
-    hitMultiplier: 1,
-    minSalary: 200,
-    maxSalary: 3000,
-    unemploymentWeight: 0,
-    sicknessMultiplier: 2,
-    canBePromoted: false,
-    canTransferTo: false,
-    livingRate: 1,
-    fixedCost: 100,
-  },
-  youtuber: {
-    id: 'youtuber',
-    startSalary: 150,
-    growth: 0.05,
-    volatility: 0.5,
-    hitChance: 0.05,
-    hitMultiplier: 3,
-    minSalary: 50,
-    maxSalary: 3000,
-    unemploymentWeight: 0,
-    sicknessMultiplier: 1,
-    canBePromoted: false,
-    canTransferTo: true,
-    livingRate: 1,
-    fixedCost: 30,
-  },
-  freeter: {
-    id: 'freeter',
-    startSalary: 170,
-    growth: 0.005,
-    volatility: 0,
-    hitChance: 0,
-    hitMultiplier: 1,
-    minSalary: 0,
-    maxSalary: Infinity,
-    unemploymentWeight: 1,
-    sicknessMultiplier: 1,
-    canBePromoted: false,
-    canTransferTo: true,
-    livingRate: 0.8,
-    fixedCost: 0,
-  },
-};
+const FIELDS = {
+  id: 'string',
+  startSalary: 'number',
+  growth: 'number',
+  volatility: 'number',
+  hitChance: 'number',
+  hitMultiplier: 'number',
+  minSalary: 'number',
+  unemploymentWeight: 'number',
+  sicknessMultiplier: 'number',
+  canBePromoted: 'boolean',
+  canTransferTo: 'boolean',
+  livingRate: 'number',
+  fixedCost: 'number',
+} as const;
 
-export const JOB_IDS: JobId[] = ['employee', 'civil', 'engineer', 'athlete', 'youtuber', 'freeter'];
+export function checkJobs(raw: unknown): Problems {
+  const d = raw as { jobs?: unknown; athleteRetireYear?: { min?: unknown; max?: unknown }; athleteNextJobs?: unknown };
+  if (!Array.isArray(d.jobs) || d.jobs.length === 0) return ['jobs がありません'];
+  const problems: Problems = [];
+  d.jobs.forEach((j, i) => {
+    problems.push(...checkFields(`jobs[${i}]`, j, FIELDS));
+    if (j.maxSalary !== null && typeof j.maxSalary !== 'number') problems.push(`jobs[${i}]: maxSalary は数か null にします`);
+  });
+  problems.push(...checkUniqueIds('jobs', d.jobs));
+  const ids = new Set(d.jobs.map((j: { id: string }) => j.id));
+  const r = d.athleteRetireYear;
+  if (!r || typeof r.min !== 'number' || typeof r.max !== 'number' || r.min > r.max) problems.push('athleteRetireYear が正しくありません');
+  if (!Array.isArray(d.athleteNextJobs) || d.athleteNextJobs.some((j) => !ids.has(j))) problems.push('athleteNextJobs に、ない職業があります');
+  return problems;
+}
 
-/** スポーツ選手の引退年齢の範囲 */
-export const ATHLETE_RETIRE_AGE = { min: 33, max: 37 };
+assertValid('src/data/jobs.json', checkJobs(data));
+
+export const JOB_LIST: JobDef[] = data.jobs.map((j) => ({ ...j, maxSalary: j.maxSalary ?? Infinity }));
+export const JOBS: Record<JobId, JobDef> = Object.fromEntries(JOB_LIST.map((j) => [j.id, j]));
+export const JOB_IDS: JobId[] = JOB_LIST.map((j) => j.id);
+
+/** スポーツ選手が引退する年（何年目か）の範囲 */
+export const ATHLETE_RETIRE_YEAR: { min: number; max: number } = data.athleteRetireYear;
 /** 引退後に選べる職業 */
-export const ATHLETE_NEXT_JOBS: JobId[] = ['employee', 'freeter', 'youtuber'];
+export const ATHLETE_NEXT_JOBS: JobId[] = data.athleteNextJobs;
 
-/** その職業の、ある年齢での給料の水準（転職先の給料に使う） */
-export function salaryAtAge(jobId: JobId, age: number): number {
+/** その職業の、ある年（何年目か）での給料の水準（転職先の給料に使う）。物価の分は含めない */
+export function salaryAtYear(jobId: JobId, year: number): number {
   const job = JOBS[jobId];
-  return job.startSalary * Math.pow(1 + job.growth, Math.max(0, age - 22));
+  return job.startSalary * Math.pow(1 + job.growth, Math.max(0, year - 1));
 }

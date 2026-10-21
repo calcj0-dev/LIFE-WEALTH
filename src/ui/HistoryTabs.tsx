@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { YearRecord } from '../game/types';
+import type { GameState } from '../game/types';
 import { t } from '../i18n';
 import { AssetChart } from './AssetChart';
 import { PriceChart, ReturnTable } from './PriceCharts';
@@ -7,7 +7,7 @@ import { PriceChart, ReturnTable } from './PriceCharts';
 const TABS = ['mine', 'prices', 'returns'] as const;
 
 /** 「わたしの資産」「値動きのチャート」「年利の実績」を切り替えて見る */
-export function HistoryTabs({ history }: { history: YearRecord[] }) {
+export function HistoryTabs({ s }: { s: GameState }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('mine');
   return (
     <div>
@@ -18,9 +18,9 @@ export function HistoryTabs({ history }: { history: YearRecord[] }) {
           </button>
         ))}
       </div>
-      {tab === 'mine' && <AssetChart history={history} />}
-      {tab === 'prices' && <PriceChart history={history} />}
-      {tab === 'returns' && <ReturnTable history={history} />}
+      {tab === 'mine' && <AssetChart history={s.history} />}
+      {tab === 'prices' && <PriceChart points={s.prices} />}
+      {tab === 'returns' && <ReturnTable history={s.history} />}
     </div>
   );
 }

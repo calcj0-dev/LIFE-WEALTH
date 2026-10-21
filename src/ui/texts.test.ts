@@ -1,52 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { POLICY_PRESETS } from '../data/assets';
+import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, continueYear, createGame, getOptions, nextYear, roll, setPolicy } from '../game/engine';
+import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, roll } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
+import { describeDecision } from './decisionText';
+import { logLabel } from './logLabel';
 
 /** ゲームを最後まで遊び、画面に出る文字の番号をすべて集める */
-function collectKeys(seed: number, jobIndex: number): Set<string> {
+function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; labels: Set<string> } {
   const keys = new Set<string>();
-  let s: GameState = setPolicy(chooseJob(createGame(seed), JOB_IDS[jobIndex % JOB_IDS.length]), POLICY_PRESETS.balanced);
+  const labels = new Set<string>();
+  let s: GameState = chooseJob(chooseYears(createGame(seed), 30), JOB_IDS[jobIndex % JOB_IDS.length]);
   let n = seed;
   const rand = () => ((n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
   while (s.phase !== 'finished') {
-    if (s.phase === 'yearStart') {
-      keys.add(`news.${s.newsId}.title`);
-      s = continueYear(s);
-    } else if (s.phase === 'roll') s = roll(s);
+    if (s.phase === 'roll') s = roll(s);
     else if (s.phase === 'decision') {
       const d = s.decision!;
-      if (d.kind === 'life' || d.kind === 'good' || d.kind === 'bad') {
-        keys.add(`event.${d.eventId}.title`);
-        keys.add(`event.${d.eventId}.text`);
-      } else if (d.kind === 'notice') {
-        keys.add(`${d.messageKey}.title`);
-      } else {
-        keys.add(`${d.kind}.title`);
-      }
+      if (d.kind === 'event') keys.add(`event.${d.eventId}.title`).add(`event.${d.eventId}.text`);
+      else if (d.kind === 'notice') keys.add(`${d.messageKey}.title`).add(`${d.messageKey}.text`);
+      else keys.add(`${d.kind}.title`).add(`${d.kind}.text`);
+      describeDecision(s);
       const opts = getOptions(s);
       opts.forEach((o) => keys.add(o.key));
       const enabled = opts.filter((o) => o.enabled);
       s = choose(s, enabled[Math.floor(rand() * enabled.length)].id);
     } else if (s.phase === 'yearEnd') {
+      keys.add(`news.${s.newsId}.title`);
       Object.keys(s.lastSettlement!.income).forEach((k) => keys.add(`settle.${k}`));
       Object.keys(s.lastSettlement!.expense).forEach((k) => keys.add(`settle.${k}`));
       s = nextYear(s);
     }
   }
-  return keys;
+  // 記録の名前が、番号のまま出ていないか
+  for (const l of s.log) labels.add(logLabel(l) === l.key ? l.key : '');
+  return { keys, labels };
 }
 
 describe('言語ファイル', () => {
   it('ゲーム中に出る文字が、すべて ja.json にある', () => {
     const keys = new Set<string>();
-    for (let seed = 1; seed <= 60; seed++) collectKeys(seed, seed).forEach((k) => keys.add(k));
+    const raw = new Set<string>();
+    for (let seed = 1; seed <= 24; seed++) {
+      const r = collectKeys(seed, seed);
+      r.keys.forEach((k) => keys.add(k));
+      r.labels.forEach((k) => k && raw.add(k));
+    }
     NEWS.forEach((n) => keys.add(`news.${n.id}.text`));
     JOB_IDS.forEach((j) => keys.add(`job.${j}`));
-    const missing = [...keys].filter((k) => !has(k));
-    expect(missing).toEqual([]);
+    BOARD.forEach((sq) => keys.add(`squareType.${sq.type}`));
+    expect([...keys].filter((k) => !has(k))).toEqual([]);
+    expect([...raw]).toEqual([]);
   });
 });
