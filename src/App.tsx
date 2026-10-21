@@ -101,21 +101,29 @@ export function App() {
     }, SPIN_MS);
   };
 
-  /** 移動のカードを使って進む。ルーレットは回さず、出目を見せてすぐ動く */
+  /** 移動のカードを使って進む。ダッシュとスーパーダッシュはルーレットを1回回し、ぴったりはすぐ動く */
   const moveWithCard = (index: number, exact?: number) => {
     if (!game || game.phase !== 'roll' || busy) return;
     const next = roll(game, { index, exact });
+    const face = next.lastFace!;
+    const times = next.lastRoll! / face;
     setOverview(false);
-    setSpinValue(next.lastRoll);
+    setSpinValue(face);
     setMoveLabel(
-      t('cards.moved', {
-        icon: cardIcon(next.lastCard!),
-        dice: next.lastDice.join(' + '),
-        n: next.lastRoll!,
-      }),
+      times > 1
+        ? t('cards.moved', { icon: cardIcon(next.lastCard!), face, times, n: next.lastRoll! })
+        : t('cards.movedExact', { icon: cardIcon(next.lastCard!), n: next.lastRoll! }),
     );
-    setMovingPos(game.player.position);
-    move(next);
+    if (exact !== undefined) {
+      setMovingPos(game.player.position);
+      move(next);
+      return;
+    }
+    setSpinning(true);
+    later(() => {
+      setSpinning(false);
+      move(next);
+    }, SPIN_MS);
   };
 
   let screen: React.ReactNode;

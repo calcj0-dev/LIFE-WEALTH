@@ -89,10 +89,11 @@ function rollWithCards(s: GameState): GameState {
   const dist = bonusDistance(s);
   const exact = hand.indexOf('exact');
   if (exact >= 0 && dist >= 1 && dist <= 6) return roll(s, { index: exact, exact: dist });
+  // ダッシュは出目の2倍、スーパーダッシュは3倍なので、ぴったり止まれる見込みがある距離のときに使う
   const dash = hand.indexOf('dash');
-  if (dash >= 0 && dist >= 7 && dist <= 12) return roll(s, { index: dash });
+  if (dash >= 0 && dist >= 7 && dist <= 12 && dist % 2 === 0) return roll(s, { index: dash });
   const superDash = hand.indexOf('superDash');
-  if (superDash >= 0 && dist >= 10 && dist <= 18) return roll(s, { index: superDash });
+  if (superDash >= 0 && dist >= 9 && dist <= 18 && dist % 3 === 0) return roll(s, { index: superDash });
   // 手札がいっぱいなら、取引カードを使って枠を空ける
   const tradeCard = hand.indexOf('trade');
   if (tradeCard >= 0 && hand.length >= HAND_MAX) return roll(closeTrade(openTradeCard(s, tradeCard)));

@@ -123,7 +123,7 @@ export function createGame(seed: number): GameState {
     },
     newsId: null,
     lastRoll: null,
-    lastDice: [],
+    lastFace: null,
     lastCard: null,
     cardUsed: false,
     tradeOpen: false,
@@ -202,12 +202,16 @@ export function rollJob(state: GameState): GameState {
 
 // ---------------------------------------------------------------- 移動とマス
 
-/** ルーレットを回して進む。移動のカード（ダッシュ、スーパーダッシュ、ぴったり）を使うときは card を渡す（design.md 3.9） */
+/**
+ * ルーレットを回して進む。移動のカード（ダッシュ、スーパーダッシュ、ぴったり）を使うときは card を渡す（design.md 3.9）。
+ * ダッシュとスーパーダッシュは、ルーレットを1回回して、出目の2倍・3倍進む
+ */
 export function roll(state: GameState, card?: { index: number; exact?: number }): GameState {
   assertPhase(state, 'roll');
   if (state.tradeOpen) throw new Error('trade time is open');
   const s = clone(state);
-  let dice: number[];
+  let face: number;
+  let times = 1;
   s.lastCard = null;
   if (card) {
     const id = takeCard(s, card.index);
@@ -215,13 +219,16 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
     if (def.kind === 'trade') throw new Error('use openTradeCard for the trade card');
     if (def.kind === 'exact') {
       if (!card.exact || !Number.isInteger(card.exact) || card.exact < 1 || card.exact > ROULETTE_MAX) throw new Error('invalid exact');
-      dice = [card.exact];
-    } else dice = Array.from({ length: def.dice ?? 1 }, () => rollDie(s));
+      face = card.exact;
+    } else {
+      face = rollDie(s);
+      times = def.times ?? 1;
+    }
     s.lastCard = id;
     log(s, 'card.use', { params: { card: id } });
-  } else dice = [rollDie(s)];
-  const steps = dice.reduce((a, b) => a + b, 0);
-  s.lastDice = dice;
+  } else face = rollDie(s);
+  const steps = face * times;
+  s.lastFace = face;
   s.lastRoll = steps;
   s.lastPath = [];
   let pos = s.player.position;

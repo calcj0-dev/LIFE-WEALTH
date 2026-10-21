@@ -75,13 +75,15 @@ describe('カード', () => {
     s = nextYear(s);
     expect(s.player.hand.length === before + 1 || s.decision?.kind === 'discard').toBe(true);
   });
-  it('ダッシュはサイコロ2個、スーパーダッシュは3個の合計で進む', () => {
-    const a = roll(farBonus(withHand(started(), ['dash'])), { index: 0 });
-    expect(a.lastDice).toHaveLength(2);
-    expect(a.lastRoll).toBe(a.lastDice[0] + a.lastDice[1]);
-    expect(a.player.hand).toHaveLength(0);
-    const b = roll(farBonus(withHand(started(), ['superDash'])), { index: 0 });
-    expect(b.lastDice).toHaveLength(3);
+  it('ダッシュは出目の2倍、スーパーダッシュは3倍進む（ルーレットは1回）', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const base = { ...started(), rngState: seed };
+      const a = roll(farBonus(withHand(base, ['dash'])), { index: 0 });
+      expect(a.lastRoll).toBe(a.lastFace! * 2);
+      expect(a.log.some((l) => l.key === 'card.use' && l.params?.card === 'dash')).toBe(true);
+      const b = roll(farBonus(withHand(base, ['superDash'])), { index: 0 });
+      expect(b.lastRoll).toBe(b.lastFace! * 3);
+    }
   });
   it('ぴったりは、選んだ数だけ進む', () => {
     for (let n = 1; n <= 6; n++) {

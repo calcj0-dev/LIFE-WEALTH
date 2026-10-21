@@ -252,8 +252,8 @@ export interface GameState {
   /** 最後の年末のニュース */
   newsId: string | null;
   lastRoll: number | null;
-  /** 最後の移動で出たサイコロの目（ダッシュなどで2個以上振ったときの内訳） */
-  lastDice: number[];
+  /** 最後の移動で出たルーレットの目。ダッシュなどで2倍・3倍にする前の数 */
+  lastFace: number | null;
   /** 最後の移動で使ったカード */
   lastCard: string | null;
   /** このターンにカードを使ったか（1ターン1枚まで） */
