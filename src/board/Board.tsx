@@ -10,6 +10,8 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
   stopMarriage: '#ff6b9a',
   birth: '#ff9fc2',
   small: '#8ecae6',
+  card: '#ffd166',
+  luckyCard: '#ffb703',
   medium: '#4d96ff',
   large: '#3a0ca3',
   stock: '#2ec4b6',
@@ -23,6 +25,8 @@ export const SQUARE_ICONS: Record<SquareType, string> = {
   stopMarriage: '💍',
   birth: '👶',
   small: '🪙',
+  card: '🃏',
+  luckyCard: '🍀',
   medium: '⭐',
   large: '🌟',
   stock: '📈',
@@ -108,11 +112,13 @@ function Decoration({ d }: { d: Deco }) {
 interface Props {
   /** 駒がいるマス */
   position: number;
+  /** ボーナスマスの目印が付いたマス */
+  bonus?: number;
   /** true なら盤面全体を映す。false なら駒の周りを拡大して追いかける */
   overview: boolean;
 }
 
-export function Board({ position, overview }: Props) {
+export function Board({ position, overview, bonus }: Props) {
   const here = BOARD[position];
   const fit = Math.min(VIEW.width / BOARD_WORLD.width, VIEW.height / BOARD_WORLD.height);
   const scale = overview ? fit : FOLLOW_SCALE;
@@ -137,6 +143,14 @@ export function Board({ position, overview }: Props) {
             <text y="12" textAnchor="middle" fontSize="34">
               {SQUARE_ICONS[sq.type]}
             </text>
+            {sq.id === bonus && (
+              <g>
+                <rect x={-SIZE / 2 - 6} y={-SIZE / 2 - 6} width={SIZE + 12} height={SIZE + 12} rx="20" fill="none" stroke="#ff4d6d" strokeWidth="6" strokeDasharray="10 6" />
+                <text y={-SIZE / 2 - 12} textAnchor="middle" fontSize="20" fontWeight="900" fill="#ff4d6d">
+                  BONUS
+                </text>
+              </g>
+            )}
             {sq.type === 'start' && (
               <text y={-SIZE / 2 - 10} textAnchor="middle" fontSize="20" fontWeight="900" fill="#b36b00">
                 START

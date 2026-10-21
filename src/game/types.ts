@@ -10,6 +10,8 @@ export type SquareType =
   | 'stopMarriage'
   | 'birth'
   | 'small'
+  | 'card'
+  | 'luckyCard'
   | 'medium'
   | 'large'
   | 'stock'
@@ -95,6 +97,8 @@ export interface Player {
   sideBusinessTried: boolean;
   position: number;
   lap: number;
+  /** 手札のカード（カードの番号。design.md 3.9） */
+  hand: string[];
 }
 
 export interface Market {
@@ -198,6 +202,7 @@ export type DecisionKind =
   | 'gamble'
   | 'realEstate'
   | 'stock'
+  | 'discard'
   | 'athleteRetire'
   | 'notice';
 
@@ -247,6 +252,16 @@ export interface GameState {
   /** 最後の年末のニュース */
   newsId: string | null;
   lastRoll: number | null;
+  /** 最後の移動で出たルーレットの目。ダッシュなどで2倍・3倍にする前の数 */
+  lastFace: number | null;
+  /** 最後の移動で使ったカード */
+  lastCard: string | null;
+  /** このターンにカードを使ったか（1ターン1枚まで） */
+  cardUsed: boolean;
+  /** 取引カードで開いた取引タイムの間 */
+  tradeOpen: boolean;
+  /** ボーナスマスの目印が付いたマス（design.md 3.10） */
+  bonusSquare: number;
   /** 最後の移動で通ったマス */
   lastPath: number[];
   /** 今の決定 */

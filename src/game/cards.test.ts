@@ -1,0 +1,136 @@
+import { describe, expect, it } from 'vitest';
+import cardsJson from '../data/cards.json';
+import { BOARD } from '../data/board';
+import { HAND_MAX, checkCards } from '../data/cards';
+import { BONUS } from '../data/rules';
+import { has } from '../i18n';
+import { CARDS } from '../data/cards';
+import {
+  bonusDistance,
+  choose,
+  chooseJob,
+  chooseYears,
+  closeTrade,
+  createGame,
+  getOptions,
+  nextYear,
+  openTradeCard,
+  roll,
+  setSaving,
+  trade,
+} from './engine';
+import type { GameState } from './types';
+
+function started(seed = 1): GameState {
+  return setSaving(chooseJob(chooseYears(createGame(seed), 20), 'employee'), {});
+}
+
+const withHand = (s: GameState, hand: string[]): GameState => ({ ...s, player: { ...s.player, hand } });
+/** ボーナスマスを、届かない遠くに置く（ほかのテストのじゃまをしないように） */
+const farBonus = (s: GameState): GameState => ({ ...s, bonusSquare: (s.player.position + 50) % BOARD.length });
+
+describe('カード', () => {
+  it('cards.json にまちがいがなく、画面の文字がある', () => {
+    expect(checkCards(cardsJson)).toEqual([]);
+    expect(checkCards({ handMax: 0, cards: [{ id: 'x', kind: 'magic', weight: 1, luckyWeight: 1 }] }).length).toBe(2);
+    for (const c of CARDS) {
+      expect(has(`card.${c.id}`)).toBe(true);
+      expect(has(`card.${c.id}.text`)).toBe(true);
+    }
+  });
+  it('カードマスに止まると、カードが1枚もらえる', () => {
+    const index = BOARD.findIndex((sq) => sq.type === 'card');
+    for (let seed = 1; seed < 300; seed++) {
+      const base = farBonus(started());
+      const s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
+      if (s.player.position !== index) continue;
+      expect(s.player.hand).toHaveLength(1);
+      expect(s.log.some((l) => l.key === 'card.get')).toBe(true);
+      return;
+    }
+    throw new Error('not found');
+  });
+  it('手札が4枚になったら、1枚捨てる', () => {
+    const index = BOARD.findIndex((sq) => sq.type === 'card');
+    for (let seed = 1; seed < 300; seed++) {
+      const base = farBonus(withHand(started(), ['dash', 'dash', 'dash']));
+      let s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
+      if (s.player.position !== index) continue;
+      expect(s.decision?.kind).toBe('discard');
+      expect(getOptions(s)).toHaveLength(HAND_MAX + 1);
+      s = choose(s, 'discard:0');
+      expect(s.player.hand).toHaveLength(HAND_MAX);
+      expect(s.phase).toBe('roll');
+      return;
+    }
+    throw new Error('not found');
+  });
+  it('年末に、カードを1枚もらう', () => {
+    let s = started();
+    while (s.phase !== 'yearEnd') {
+      s = roll(farBonus(s));
+      while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+    }
+    const before = s.player.hand.length;
+    s = nextYear(s);
+    expect(s.player.hand.length === before + 1 || s.decision?.kind === 'discard').toBe(true);
+  });
+  it('ダッシュは出目の2倍、スーパーダッシュは3倍進む（ルーレットは1回）', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const base = { ...started(), rngState: seed };
+      const a = roll(farBonus(withHand(base, ['dash'])), { index: 0 });
+      expect(a.lastRoll).toBe(a.lastFace! * 2);
+      expect(a.log.some((l) => l.key === 'card.use' && l.params?.card === 'dash')).toBe(true);
+      const b = roll(farBonus(withHand(base, ['superDash'])), { index: 0 });
+      expect(b.lastRoll).toBe(b.lastFace! * 3);
+    }
+  });
+  it('ぴったりは、選んだ数だけ進む', () => {
+    for (let n = 1; n <= 6; n++) {
+      const s = roll(farBonus(withHand(started(), ['exact'])), { index: 0, exact: n });
+      expect(s.lastRoll).toBe(n);
+    }
+    expect(() => roll(withHand(started(), ['exact']), { index: 0, exact: 7 })).toThrow();
+  });
+  it('取引カードを使うと、その場で売り買いができ、閉じたらルーレットを回す', () => {
+    const base = withHand(started(), ['trade', 'dash']);
+    expect(() => trade(base, 'fund', 10)).toThrow();
+    let s = openTradeCard(base, 0);
+    expect(s.tradeOpen).toBe(true);
+    s = trade(s, 'fund', 10);
+    expect(s.player.holdings.fund).toBeGreaterThan(0);
+    expect(() => roll(s)).toThrow();
+    s = closeTrade(s);
+    // 1ターンに使えるカードは1枚まで
+    expect(() => roll(s, { index: 0 })).toThrow();
+    s = roll(s);
+    expect(s.player.hand).toEqual(['dash']);
+  });
+});
+
+describe('ボーナスマス', () => {
+  it('スタートと結婚マスには付かない。10〜40マス先に付く', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = started(seed);
+      const type = BOARD[s.bonusSquare].type;
+      expect(type).not.toBe('start');
+      expect(type).not.toBe('stopMarriage');
+      expect(bonusDistance(s)).toBeGreaterThanOrEqual(BONUS.minAhead);
+      expect(bonusDistance(s)).toBeLessThanOrEqual(BONUS.maxAhead);
+    }
+  });
+  it('ぴったり止まるとボーナスがもらえ、次のボーナスマスが決まる', () => {
+    const base = started();
+    const s0 = { ...base, bonusSquare: (base.player.position + 3) % BOARD.length };
+    const s = roll(withHand(s0, ['exact']), { index: 0, exact: 3 });
+    expect(s.log.some((l) => l.key === 'bonus.get' && l.cash === BONUS.amount)).toBe(true);
+    expect(s.bonusSquare).not.toBe(s0.bonusSquare);
+  });
+  it('通りすぎたときは、もらえない', () => {
+    const base = started();
+    const s0 = { ...base, bonusSquare: (base.player.position + 2) % BOARD.length };
+    const s = roll(withHand(s0, ['exact']), { index: 0, exact: 3 });
+    expect(s.log.some((l) => l.key === 'bonus.get')).toBe(false);
+    expect(s.bonusSquare).toBe(s0.bonusSquare);
+  });
+});

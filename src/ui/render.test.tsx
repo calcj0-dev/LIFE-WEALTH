@@ -14,11 +14,12 @@ import { PriceChart, ReturnTable } from './PriceCharts';
 import { Result } from './Result';
 import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
 import { SavingSetup, TradeModal } from './Trade';
+import { CardHand } from './Cards';
 
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
-const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel)(\.[a-zA-Z]+)+</;
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard)(\.[a-zA-Z]+)+</;
 
 describe('画面', () => {
   it('タイトル画面にバージョンが出る', () => {
@@ -50,8 +51,11 @@ describe('画面', () => {
     let s: GameState = setSaving(chooseJob(chooseYears(createGame(5), 10), 'employee'), { fund: 2, gold: 1 });
     while (s.phase !== 'finished') {
       if (s.phase === 'roll') {
+        const hand = renderToString(<CardHand s={s} canUse onMove={noop} onTrade={noop} />);
+        expect(hand).toContain('ボーナスマスまで');
+        expect(hand).not.toMatch(RAW_KEY);
         s = roll(s);
-        renderToString(<Board position={s.player.position} overview={false} />);
+        expect(renderToString(<Board position={s.player.position} overview={false} bonus={s.bonusSquare} />)).toContain('BONUS');
         renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
       } else if (s.phase === 'decision') {
         const html = renderToString(<DecisionModal s={s} onChoose={noop} />);

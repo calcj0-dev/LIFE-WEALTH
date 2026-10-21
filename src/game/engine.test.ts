@@ -373,7 +373,7 @@ describe('相場', () => {
   it('長い目で見ると、銘柄ごとの平均の値上がりに近くなる', () => {
     const years = 50;
     const rates: Record<string, number[]> = Object.fromEntries(ASSET_IDS.map((id) => [id, []]));
-    for (let seed = 1; seed <= 300; seed++) {
+    for (let seed = 1; seed <= 1000; seed++) {
       const s = createGame(seed);
       for (let y = 0; y < years; y++) {
         for (let m = 0; m < 12; m++) updateMarketMonth(s);

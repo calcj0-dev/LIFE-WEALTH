@@ -118,3 +118,10 @@ export const TRADE = {
   amounts: [1, 10, 50, 100],
   prepayUnit: 100,
 };
+
+/** ボーナスマス（design.md 3.10）。ぴったり止まるともらえる金額と、目印を付ける場所（何マス先か） */
+export const BONUS = {
+  amount: 30,
+  minAhead: 10,
+  maxAhead: 40,
+};

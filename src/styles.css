@@ -1057,3 +1057,48 @@ button.small {
   gap: 4px;
   justify-content: flex-end;
 }
+
+/* ---------------- 手札のカード（design.md 3.9） */
+
+.card-hand {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--surface);
+  border-radius: 14px;
+}
+.card-hand-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.bonus-distance {
+  color: #ff4d6d;
+}
+.card-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.game-card {
+  flex: 1 1 120px;
+  padding: 6px 8px;
+  border: 2px solid var(--yellow);
+  border-radius: 12px;
+  background: #fffaf0;
+  display: grid;
+  gap: 4px;
+}
+.game-card-name {
+  font-weight: 800;
+}
+.game-card-text {
+  font-size: 11px;
+}
+.exact-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

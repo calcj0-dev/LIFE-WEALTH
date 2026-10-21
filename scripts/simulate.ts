@@ -27,6 +27,9 @@ interface Row {
   hadDebt: boolean;
   finalDebt: number;
   popupsPerYear: number;
+  bonusPerYear: number;
+  bonusTotal: number;
+  cardsPerYear: number;
   gambleSpent: number;
   gambleReturned: number;
   prices: Record<string, number>;
@@ -45,6 +48,9 @@ function toRow(s: GameState, job: JobId, years: number, strategy: string, counts
     hadDebt: s.log.some((l) => l.key === 'shortfall.loan'),
     finalDebt: s.player.cardLoan,
     popupsPerYear: counts.popups / years,
+    bonusPerYear: s.log.filter((l) => l.key === 'bonus.get').length / years,
+    bonusTotal: s.log.filter((l) => l.key === 'bonus.get').reduce((a, l) => a + (l.cash ?? 0), 0),
+    cardsPerYear: s.log.filter((l) => l.key === 'card.use').length / years,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
     prices: { ...s.market.prices, realEstate: s.market.realEstateIndex, living: s.market.livingIndex },
@@ -153,6 +159,12 @@ ${YEARS.map(section).join('\n')}
 ## テンポ
 
 - ポップアップで止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.popupsPerYear)).toFixed(1)}回（12ターンのうち。年末のニュースと決算は含まない）
+- カードを使った回数: 1年あたり平均 ${mean(rows.map((r) => r.cardsPerYear)).toFixed(1)}回（自動プレイは、ボーナスマスをねらうときと、手札がいっぱいのときに使う）
+
+## ボーナスマス
+
+- ぴったり止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.bonusPerYear)).toFixed(1)}回
+- 20年でもらったボーナスの合計（中央）: ${man(pct(rows.filter((r) => r.years === 20).map((r) => r.bonusTotal), 0.5))}（純資産の中央 ${man(pct(rows.filter((r) => r.years === 20).map((r) => r.netWorth), 0.5))}）
 
 ## そのほか
 

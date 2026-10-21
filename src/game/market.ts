@@ -33,34 +33,59 @@ const volOf = (k: Key) => (k === 'realEstate' ? REAL_ESTATE_VOLATILITY : ASSETS[
 /**
  * 景気とニュースによる値動きの、長い目で見た平均と散らばりを計算する。
  * 設計書の「平均の値上がり」が、ゲーム全体の実際の年平均（複利）になるように補正するために使う。
+ *
+ * 金融危機のあとは不況が続くように、年ごとの動きはつながっている。そのつながりも含めた散らばりを、
+ * ゲームと同じ流れ（その年の景気の上乗せ → 年末のニュース → 次の年の景気）で、決まった乱数を使って何度も試して求める。
+ * ゲームの乱数は使わないので、どのゲームでも同じ補正になる。
  */
 function computeCorrection(): Record<Key, number> {
+  const PATHS = 2000;
+  const YEARS = 50;
+  let seed = 12345;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
   const total = NEWS.reduce((a, n) => a + n.weight, 0);
-  // 景気の分布（長い目で見て落ち着く分布）
-  let dist: Record<Economy, number> = { boom: 0, normal: 1, recession: 0 };
-  for (let i = 0; i < 500; i++) {
-    const next: Record<Economy, number> = { boom: 0, normal: 0, recession: 0 };
+  const pickNews = () => {
+    let r = rand() * total;
     for (const n of NEWS) {
-      const p = n.weight / total;
-      if (n.economy) next[n.economy] += p;
-      else for (const from of ECONOMIES) for (const to of ECONOMIES) next[to] += p * dist[from] * ECONOMY_TRANSITION[from][to];
+      r -= n.weight;
+      if (r < 0) return n;
     }
-    dist = next;
+    return NEWS[NEWS.length - 1];
+  };
+  const pickEconomy = (from: Economy): Economy => {
+    let r = rand();
+    for (const e of ECONOMIES) {
+      r -= ECONOMY_TRANSITION[from][e];
+      if (r < 0) return e;
+    }
+    return 'normal';
+  };
+
+  // 道のりごとに、景気とニュースによる上乗せの合計（YEARS年分）を集める
+  const sums: Record<Key, number[]> = Object.fromEntries(KEYS.map((k) => [k, []]));
+  for (let path = 0; path < PATHS; path++) {
+    let economy: Economy = 'normal';
+    const acc: Record<Key, number> = Object.fromEntries(KEYS.map((k) => [k, 0]));
+    for (let y = 0; y < YEARS; y++) {
+      const news = pickNews();
+      for (const k of KEYS) acc[k] += driftOf(k, economy) + (news.shocks[k] ?? 0);
+      economy = news.economy ?? pickEconomy(economy);
+    }
+    for (const k of KEYS) sums[k].push(acc[k]);
   }
+
   const result = {} as Record<Key, number>;
   for (const k of KEYS) {
-    let mean = 0;
-    let second = 0;
-    for (const e of ECONOMIES) {
-      for (const n of NEWS) {
-        const x = driftOf(k, e) + (n.shocks[k] ?? 0);
-        const p = dist[e] * (n.weight / total);
-        mean += p * x;
-        second += p * x * x;
-      }
-    }
-    // 平均の上乗せを打ち消し、値動きの散らばりで複利が目減りする分を足す
-    result[k] = -mean + (second - mean * mean + volOf(k) ** 2) / 2;
+    const xs = sums[k];
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const variance = xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length;
+    // 1年あたりの平均と散らばり。平均の上乗せを打ち消し、値動きの散らばりで複利が目減りする分を足す
+    result[k] = -mean / YEARS + (variance / YEARS + volOf(k) ** 2) / 2;
   }
   return result;
 }

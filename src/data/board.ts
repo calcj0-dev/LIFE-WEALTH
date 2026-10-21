@@ -5,7 +5,9 @@ export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
   stopMarriage: 1,
   birth: 2,
-  small: 34,
+  small: 22,
+  card: 10,
+  luckyCard: 2,
   medium: 12,
   large: 6,
   stock: 6,
@@ -32,7 +34,7 @@ function buildOrder(): SquareType[] {
 
   // 種類ごとに「盤面上の理想の位置」を等間隔に並べ、近い順に空きマスへ割り当てる
   const wanted: { type: SquareType; pos: number }[] = [];
-  const order: SquareType[] = ['small', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'birth'];
+  const order: SquareType[] = ['small', 'card', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'birth', 'luckyCard'];
   order.forEach((type, k) => {
     const n = SQUARE_COUNTS[type];
     for (let j = 0; j < n; j++) {
