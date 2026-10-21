@@ -78,6 +78,10 @@ export interface Player {
   cash: number;
   /** 資産ごとの保有口数。価格は market.prices */
   holdings: Record<AssetId, number>;
+  /** 毎月の積み立ての金額（投資信託とゴールドだけ。design.md 6.3） */
+  saving: Record<AssetId, number>;
+  /** 預金が足りず、積み立てを休んでいる */
+  savingPaused: boolean;
   married: boolean;
   spouse: Spouse | null;
   children: Child[];
@@ -183,6 +187,8 @@ export interface Stats {
   gambleReturned: number;
   premiumsPaid: number;
   insurancePaid: number;
+  /** 積み立てで買った金額の合計 */
+  savingTotal: number;
 }
 
 export type DecisionKind =
@@ -191,6 +197,7 @@ export type DecisionKind =
   | 'event'
   | 'gamble'
   | 'realEstate'
+  | 'stock'
   | 'athleteRetire'
   | 'notice';
 
@@ -200,6 +207,8 @@ export interface Decision {
   eventId?: string;
   /** 家の売り出し価格 */
   offerPrice?: number;
+  /** 株のマスで、割安に買える銘柄 */
+  assetId?: AssetId;
   /** お知らせの文章の番号（notice） */
   messageKey?: string;
   params?: Record<string, number | string>;
@@ -216,7 +225,7 @@ export interface DecisionOption {
   cash?: number;
 }
 
-export type Phase = 'setupYears' | 'setupJob' | 'roll' | 'decision' | 'yearEnd' | 'finished';
+export type Phase = 'setupYears' | 'setupJob' | 'setupSaving' | 'roll' | 'decision' | 'yearEnd' | 'finished';
 
 export interface GameResult {
   netWorth: number;

@@ -9,21 +9,44 @@ import { EVENTS, checkEvents } from '../data/events';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
 import { NEWS, checkNews } from '../data/news';
-import { BIRTH, MARRIAGE, YEAR_OPTIONS } from '../data/rules';
+import { BIRTH, MARRIAGE, STOCK_SQUARE, YEAR_OPTIONS } from '../data/rules';
 import { has } from '../i18n';
 import { playGame } from './autoplay';
-import { choose, chooseJob, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, trade } from './engine';
+import {
+  canSellHome,
+  choose,
+  chooseJob,
+  chooseYears,
+  createGame,
+  estimateMonth,
+  getOptions,
+  joinMedical,
+  medicalPremiumAt,
+  nextYear,
+  prepay,
+  recommendedSaving,
+  roll,
+  sellHome,
+  setSaving,
+  trade,
+} from './engine';
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
 import type { GameState } from './types';
 
-function started(seed = 1, years = 20, job = 'employee'): GameState {
-  return chooseJob(chooseYears(createGame(seed), years), job);
+function started(seed = 1, years = 20, job = 'employee', saving: Record<string, number> = {}): GameState {
+  return setSaving(chooseJob(chooseYears(createGame(seed), years), job), saving);
 }
 
 /** 決定を、いちばん上の選べる選択肢で進める */
 function settle(s: GameState): GameState {
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+  return s;
+}
+
+/** 年末まで進める */
+function toYearEnd(s: GameState): GameState {
+  while (s.phase !== 'yearEnd') s = settle(roll(s));
   return s;
 }
 
@@ -104,14 +127,14 @@ describe('お金の計算', () => {
     expect(paid).toBeLessThan(2700 * 1.2);
   });
   it('買ってすぐ売ると、金額は元に戻る', () => {
-    const s0 = trade(started(), 'fund', 30);
+    const s0 = trade({ ...started(), phase: 'yearEnd' }, 'fund', 30);
     const s1 = trade(s0, 'fund', -30);
     expect(s0.player.cash).toBeCloseTo(20, 6);
     expect(s1.player.cash).toBeCloseTo(50, 6);
     expect(s1.player.holdings.fund).toBeCloseTo(0, 6);
   });
   it('預金より多くは買えない', () => {
-    const s = trade(started(), 'gold', 10000);
+    const s = trade({ ...started(), phase: 'yearEnd' }, 'gold', 10000);
     expect(s.player.cash).toBeGreaterThanOrEqual(0);
   });
   it('今月の家計は、1年分の金額を12で割ったもの', () => {
@@ -124,8 +147,8 @@ describe('お金の計算', () => {
 
 describe('お金が足りないとき', () => {
   it('先に資産を売り、足りない分だけ利息なしで借りる', () => {
-    let s = trade(started(), 'bond', 40);
-    s = { ...s, player: { ...s.player, cash: -2000 } };
+    let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
+    s = { ...s, phase: 'roll', player: { ...s.player, cash: -2000 } };
     s = landOn(s, 1);
     s = settle(s);
     expect(s.player.holdings.bond).toBe(0);
@@ -276,6 +299,73 @@ describe('結婚と出産', () => {
     expect(s.player.children[0].age).toBe(15);
     expect(s.player.children[0].highSchool).not.toBeNull();
     expect(s.decision?.messageKey).toMatch(/^school\.highSchool\./);
+  });
+});
+
+describe('積み立て', () => {
+  it('毎月、決めた金額で投資信託を買う', () => {
+    const base = started(1, 20, 'employee', { fund: 3 });
+    let s: GameState = { ...base, player: { ...base.player, cash: 100 } };
+    s = settle(roll(s));
+    expect(s.stats.savingTotal).toBe(3);
+    expect(s.player.holdings.fund).toBeGreaterThan(0);
+  });
+  it('おすすめの金額は、毎月の手取りの1割（1万円単位）', () => {
+    expect(recommendedSaving(started())).toBe(2);
+  });
+  it('積み立てできるのは投資信託とゴールドだけ', () => {
+    const s = chooseJob(chooseYears(createGame(1), 20), 'employee');
+    expect(() => setSaving(s, { it: 1 })).toThrow();
+    expect(() => setSaving(s, { bond: 1 })).toThrow();
+    expect(() => setSaving(s, { fund: 1.5 })).toThrow();
+    expect(setSaving(s, { fund: 2, gold: 1 }).player.saving.gold).toBe(1);
+  });
+  it('預金が足りない月は、積み立てを休み、借金はしない', () => {
+    let s = started(1, 20, 'employee', { fund: 1000 });
+    s = settle(roll(s));
+    expect(s.player.savingPaused).toBe(true);
+    expect(s.stats.savingTotal).toBe(0);
+    expect(s.player.cardLoan).toBe(0);
+    expect(s.log.some((l) => l.key === 'saving.pause')).toBe(true);
+  });
+  it('取引タイムで金額を変えられる。年末以外は変えられない', () => {
+    const s = started();
+    expect(() => setSaving(s, { fund: 1 })).toThrow();
+    expect(setSaving(toYearEnd(s), { fund: 5 }).player.saving.fund).toBe(5);
+  });
+});
+
+describe('株のマスと取引タイム', () => {
+  it('株のマスでは、業種別の株を10%安く買える', () => {
+    const index = BOARD.findIndex((sq) => sq.type === 'stock');
+    const base = started();
+    let s = landOn({ ...base, player: { ...base.player, cash: 100 } }, index);
+    expect(s.decision?.kind).toBe('stock');
+    const id = s.decision!.assetId!;
+    expect(ASSETS[id].kind).toBe('stock');
+    const price = s.market.prices[id];
+    s = choose(s, 'buy:10');
+    expect(s.player.holdings[id]).toBeCloseTo(10 / (price * (1 - STOCK_SQUARE.discount)), 6);
+  });
+  it('売り買いできるのは年末の取引タイムだけ', () => {
+    expect(() => trade(started(), 'fund', 10)).toThrow();
+    expect(() => trade(toYearEnd(started()), 'fund', 10)).not.toThrow();
+  });
+  it('医療保険は取引タイムで入れる。保険料は入る年が遅いほど高い', () => {
+    const s = joinMedical(toYearEnd(started()));
+    expect(s.player.medicalPremium).toBe(medicalPremiumAt(1));
+    expect(medicalPremiumAt(11)).toBeCloseTo(medicalPremiumAt(1) + 2, 6);
+  });
+  it('繰り上げ返済でローンが減り、家を売ると賃貸に戻る', () => {
+    let s = toYearEnd(started());
+    s = { ...s, player: { ...s.player, cash: 500, home: { value: 3000, loan: { balance: 2000, rate: 0.01, monthsLeft: 400, payment: 6 }, fireInsured: true } } };
+    s = prepay(s, 100);
+    expect(s.player.home!.loan!.balance).toBeCloseTo(1900, 6);
+    expect(s.player.cash).toBeCloseTo(400, 6);
+    expect(canSellHome(s)).toBe(true);
+    s = sellHome(s);
+    expect(s.player.home).toBeNull();
+    expect(s.player.cash).toBeCloseTo(400 + 3000 * 0.97 - 1900, 6);
   });
 });
 

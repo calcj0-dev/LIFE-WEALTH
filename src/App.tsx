@@ -11,6 +11,7 @@ import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, 
 import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
 import { Toasts } from './ui/Toasts';
+import { SavingSetup, TradeModal } from './ui/Trade';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -30,8 +31,9 @@ export function App() {
   const [showFeed, setShowFeed] = useState(false);
   /** ふつうの年のニュースと決算を、自動で閉じるポップアップで見せている間 */
   const [autoView, setAutoView] = useState<'news' | 'yearEnd' | null>(null);
-  /** 年末のニュースを見た年。年末は「ニュース → 決算」の順に見せる */
+  /** 年末のニュースと決算を見た年。年末は「ニュース → 決算 → 取引タイム」の順に見せる（design.md 2.1） */
   const [newsSeenYear, setNewsSeenYear] = useState<number | null>(null);
+  const [settleSeenYear, setSettleSeenYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -40,14 +42,16 @@ export function App() {
   const paused = showHistory || showFeed;
   const yearEnd = game?.phase === 'yearEnd';
   const newsStep = yearEnd && newsSeenYear !== game!.year;
+  const settleStep = yearEnd && !newsStep && settleSeenYear !== game!.year;
+  const tradeStep = yearEnd && !newsStep && !settleStep;
 
   // ふつうの年のニュースと決算は、約3秒で自動で閉じるポップアップで見せてから進む（design.md 2.2）
   useEffect(() => {
     if (!game || !yearEnd || busy || paused || autoView) return;
     if (newsStep) {
       if (!isImportantNews(game)) setAutoView('news');
-    } else if (!isNotableYearEnd(game)) setAutoView('yearEnd');
-  }, [game, yearEnd, newsStep, busy, paused, autoView]);
+    } else if (settleStep && !isNotableYearEnd(game)) setAutoView('yearEnd');
+  }, [game, yearEnd, newsStep, settleStep, busy, paused, autoView]);
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
@@ -58,8 +62,14 @@ export function App() {
   const closeAuto = () => {
     if (!game) return;
     if (autoView === 'news') setNewsSeenYear(game.year);
-    if (autoView === 'yearEnd' && game.phase === 'yearEnd') setGame(nextYear(game));
+    if (autoView === 'yearEnd' && game.phase === 'yearEnd') afterSettlement(game);
     setAutoView(null);
+  };
+
+  /** 決算を見たあと。最後の年は取引タイムを出さずに結果へ */
+  const afterSettlement = (s: GameState) => {
+    if (s.year >= s.years) setGame(nextYear(s));
+    else setSettleSeenYear(s.year);
   };
 
   const later = (fn: () => void, ms: number) => {
@@ -104,6 +114,8 @@ export function App() {
     screen = <YearsSetup onDone={(years) => setGame(chooseYears(game, years))} />;
   } else if (game.phase === 'setupJob') {
     screen = <JobRoulette s={game} onDone={setGame} />;
+  } else if (game.phase === 'setupSaving') {
+    screen = <SavingSetup s={game} onDone={setGame} />;
   } else if (game.phase === 'finished') {
     screen = <Result s={game} onAgain={() => setGame(null)} />;
   } else {
@@ -143,9 +155,8 @@ export function App() {
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {ready && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
         {ready && !autoView && newsStep && isImportantNews(game) && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
-        {ready && !autoView && yearEnd && !newsStep && isNotableYearEnd(game) && (
-          <YearEndModal s={game} onNext={() => setGame(nextYear(game))} />
-        )}
+        {ready && !autoView && settleStep && isNotableYearEnd(game) && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
+        {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
       </div>
     );
   }

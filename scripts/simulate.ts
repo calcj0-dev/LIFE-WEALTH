@@ -7,11 +7,12 @@ import { JOB_IDS } from '../src/data/jobs';
 import { playGame, type PlayCounts, type Strategy } from '../src/game/autoplay';
 import type { GameState, JobId } from '../src/game/types';
 
-const SEEDS_PER_CASE = 40;
+const SEEDS_PER_CASE = 30;
 const YEARS = [20, 40];
 const STRATEGIES: { id: string; name: string; strategy: Strategy }[] = [
   { id: 'none', name: '投資しない', strategy: { investRate: 0, gambleChance: 0.3, homeChance: 0.4 } },
-  { id: 'invest', name: '余ったお金の半分を投資信託に', strategy: { investRate: 0.5, gambleChance: 0.3, homeChance: 0.4 } },
+  { id: 'saving', name: '積み立てだけ（おすすめの金額）', strategy: { investRate: 0, saving: true, gambleChance: 0.3, homeChance: 0.4 } },
+  { id: 'invest', name: '積み立て＋年末に余ったお金の半分を投資信託に', strategy: { investRate: 0.5, saving: true, gambleChance: 0.3, homeChance: 0.4 } },
 ];
 
 interface Row {
@@ -142,7 +143,7 @@ const md = `# 自動シミュレーションの結果
 
 \`npm run simulate\` で作成。年数（${YEARS.join('・')}年）× 職業${JOB_IDS.length} × 投資のしかた${STRATEGIES.length} × ${SEEDS_PER_CASE}回 = ${rows.length}回 遊ばせた結果。
 選択は自動（ギャンブルをする確率30%、家を買えるときに買う確率40%）。
-「投資しない」は銀行預金だけ。「余ったお金の半分を投資信託に」は、年末に生活費の半年分を残し、残りの半分で投資信託を買う（取引タイムは次の段階で作るので、ここでは自動で買わせている）。
+「投資しない」は銀行預金だけ。「積み立てだけ」は、投資信託を毎月おすすめの金額（手取りの1割）で積み立てる。「積み立て＋…」は、さらに年末の取引タイムで、生活費の半年分を残した残りの半分で投資信託を買う。株のマスでは、投資する遊び方のときだけ、ときどき株を買う。
 
 ${YEARS.map(section).join('\n')}
 ## 結婚
