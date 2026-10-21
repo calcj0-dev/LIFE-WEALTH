@@ -1,12 +1,14 @@
 // コンピューターが自動で遊ぶ仕組み。釣り合いの確認とテストに使う。
 
 import { JOBS } from '../data/jobs';
-import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, roll, trade } from './engine';
+import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, recommendedSaving, roll, setSaving, trade } from './engine';
 import type { DecisionOption, GameState, JobId } from './types';
 
 export interface Strategy {
   /** 年末に、預金のうち生活費の半年分を残して、投資信託を買う割合（0なら投資しない） */
   investRate: number;
+  /** 投資信託の積み立てを、おすすめの金額（手取りの1割）でするか */
+  saving?: boolean;
   /** ギャンブルをする確率 */
   gambleChance: number;
   /** 家を買えるときに買う確率 */
@@ -34,6 +36,11 @@ function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy,
       // 頭金と諸費用を払っても、預金が半分以上残るときだけ買う
       if (home && rand() < strategy.homeChance && -(home.cash ?? 0) * 2 <= cash) return home.id;
       return 'skip';
+    }
+    case 'stock': {
+      // 預金に余裕があれば、ときどき買う
+      const buy = enabled.find((o) => o.id !== 'skip' && -(o.cash ?? 0) * 5 <= cash);
+      return buy && strategy.investRate > 0 && rand() < 0.5 ? buy.id : 'skip';
     }
     case 'event': {
       if (d.eventId === 'jobChange') {
@@ -85,6 +92,7 @@ export function playGame(
   if (!JOBS[jobId]) throw new Error(`unknown job: ${jobId}`);
   const rand = makeRand(seed);
   let s = chooseJob(chooseYears(createGame(seed), years), jobId);
+  s = setSaving(s, strategy.saving ? { fund: recommendedSaving(s) } : {});
   for (let guard = 0; guard < 100000; guard++) {
     switch (s.phase) {
       case 'roll':

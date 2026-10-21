@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Board } from '../board/Board';
 import { Roulette } from '../board/Roulette';
 import { playGame } from '../game/autoplay';
-import { choose, chooseJob, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll } from '../game/engine';
+import { choose, chooseJob, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
 import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './Feed';
@@ -13,11 +13,12 @@ import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './Modals';
 import { PriceChart, ReturnTable } from './PriceCharts';
 import { Result } from './Result';
 import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
+import { SavingSetup, TradeModal } from './Trade';
 
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
-const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth)(\.[a-zA-Z]+)+</;
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel)(\.[a-zA-Z]+)+</;
 
 describe('画面', () => {
   it('タイトル画面にバージョンが出る', () => {
@@ -38,9 +39,15 @@ describe('画面', () => {
     expect(renderToString(<BudgetCard s={athlete} title="家計" />)).toContain('残る見込み');
     const plan = estimateMonth(athlete);
     expect(renderToString(<LedgerTable income={plan.income} expense={plan.expense} />)).toContain('職業の固定費');
+    const saving = renderToString(<SavingSetup s={athlete} onDone={noop} />);
+    expect(saving).toContain('積み立ての金額を決めよう');
+    expect(saving).toContain('投資信託');
+    expect(saving).toContain('ゴールド');
+    expect(saving).not.toContain('IT株');
+    expect(renderToString(<BudgetCard s={setSaving(athlete, { fund: 3 })} title="家計" />)).toContain('積み立てで毎月 3万円');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
-    let s: GameState = chooseJob(chooseYears(createGame(5), 10), 'employee');
+    let s: GameState = setSaving(chooseJob(chooseYears(createGame(5), 10), 'employee'), { fund: 2, gold: 1 });
     while (s.phase !== 'finished') {
       if (s.phase === 'roll') {
         s = roll(s);
@@ -61,7 +68,9 @@ describe('画面', () => {
           renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenFeed={noop} />),
           renderToString(<FeedPanel s={s} onClose={noop} />),
           renderToString(<HistoryModal s={s} onClose={noop} />),
+          renderToString(<TradeModal s={s} onChange={noop} onDone={noop} />),
         ].join('');
+        expect(html).toContain('取引タイム');
         expect(html).toContain('年末のニュース');
         expect(html).toContain('できごとの履歴');
         expect(html).not.toMatch(RAW_KEY);

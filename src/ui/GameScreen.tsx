@@ -71,6 +71,11 @@ export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOp
           <Row key={id} k={t(`asset.${id}`)} v={formatMoney(assetValue(s, id))} />
         ))}
         {p.home && <Row k={t('asset.realEstate')} v={formatMoney(realEstateValue(s))} />}
+        {ASSET_IDS.filter((id) => p.saving[id] > 0).map((id) => (
+          <div key={id} className={`muted${p.savingPaused ? ' minus' : ''}`}>
+            {t(p.savingPaused ? 'panel.saving.paused' : 'panel.saving', { name: t(`asset.${id}`), amount: p.saving[id] })}
+          </div>
+        ))}
         <button className="secondary history-button" style={{ marginTop: 8 }} onClick={onOpenHistory}>
           {t('history.open')}
         </button>

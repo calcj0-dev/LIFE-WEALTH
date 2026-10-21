@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, chooseYears, createGame, getOptions, nextYear, roll } from '../game/engine';
+import { choose, chooseJob, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
 import { describeDecision } from './decisionText';
@@ -12,7 +12,7 @@ import { logLabel } from './logLabel';
 function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; labels: Set<string> } {
   const keys = new Set<string>();
   const labels = new Set<string>();
-  let s: GameState = chooseJob(chooseYears(createGame(seed), 30), JOB_IDS[jobIndex % JOB_IDS.length]);
+  let s: GameState = setSaving(chooseJob(chooseYears(createGame(seed), 30), JOB_IDS[jobIndex % JOB_IDS.length]), { fund: 2 });
   let n = seed;
   const rand = () => ((n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
   while (s.phase !== 'finished') {
@@ -31,6 +31,9 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
       keys.add(`news.${s.newsId}.title`);
       Object.keys(s.lastSettlement!.income).forEach((k) => keys.add(`settle.${k}`));
       Object.keys(s.lastSettlement!.expense).forEach((k) => keys.add(`settle.${k}`));
+      // 取引タイムで、いろいろな操作をしてみる
+      if (s.year === 2) s = trade(trade(s, 'it', 10), 'it', -5);
+      if (s.year === 3 && s.player.medicalPremium === null) s = joinMedical(s);
       s = nextYear(s);
     }
   }

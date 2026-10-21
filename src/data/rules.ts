@@ -101,3 +101,20 @@ export const REAL_ESTATE = {
   agingRate: 0.01,
   loan: { rate: 0.01, years: 35 },
 };
+
+/** 株のマス（design.md 3.4）。割安に買える割合と、選べる金額 */
+export const STOCK_SQUARE = {
+  discount: 0.1,
+  amounts: [10, 30, 100],
+};
+
+/** 積み立て（design.md 6.3）。おすすめの金額は、毎月の手取りの1割 */
+export const SAVING = {
+  recommendRate: 0.1,
+};
+
+/** 取引タイム（design.md 2.1）。売り買いの金額の単位と、繰り上げ返済の単位 */
+export const TRADE = {
+  amounts: [1, 10, 50, 100],
+  prepayUnit: 100,
+};

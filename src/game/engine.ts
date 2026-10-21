@@ -19,9 +19,11 @@ import {
   MONTHS_PER_YEAR,
   REAL_ESTATE,
   ROULETTE_MAX,
+  SAVING,
   SPOUSE,
   SPOUSE_WORK_FACES,
   START_CASH,
+  STOCK_SQUARE,
   UNIVERSITY_FACES,
   YEAR_OPTIONS,
   DEFAULT_YEARS,
@@ -34,6 +36,7 @@ import {
   financialAssets,
   netWorth,
   payLoanMonth,
+  prepayLoan,
   realEstateValue,
   sellAsset,
   sellOrder,
@@ -94,6 +97,8 @@ export function createGame(seed: number): GameState {
       athleteRetireYear: null,
       cash: START_CASH,
       holdings: zeroHoldings(),
+      saving: zeroHoldings(),
+      savingPaused: false,
       married: false,
       spouse: null,
       children: [],
@@ -124,7 +129,7 @@ export function createGame(seed: number): GameState {
     history: [],
     prices: [],
     log: [],
-    stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0 },
+    stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0, savingTotal: 0 },
     result: null,
     yearMarket: { startPrices: {}, startRealEstateIndex: 1, amounts: {} },
     marketChange: null,
@@ -151,7 +156,30 @@ export function chooseJob(state: GameState, jobId: JobId): GameState {
   s.player.jobId = jobId;
   s.player.salary = JOBS[jobId].startSalary;
   s.player.athleteRetireYear = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_YEAR.min, ATHLETE_RETIRE_YEAR.max) : null;
-  s.phase = 'roll';
+  s.phase = 'setupSaving';
+  return s;
+}
+
+/** 積み立てのおすすめの金額（毎月の手取りの1割、1万円単位） */
+export function recommendedSaving(s: GameState): number {
+  return Math.max(1, Math.round((s.player.salary / MONTHS_PER_YEAR) * SAVING.recommendRate));
+}
+
+/** 積み立ての金額が正しいか（投資信託とゴールドだけ、1万円単位、0以上） */
+export function validSaving(saving: Record<AssetId, number>): boolean {
+  return Object.entries(saving).every(
+    ([id, v]) => !!ASSETS[id] && Number.isInteger(v) && v >= 0 && (v === 0 || ASSETS[id].accumulate),
+  );
+}
+
+/** 毎月の積み立ての金額を決める。ゲームの始めと、取引タイムで使う（design.md 6.3） */
+export function setSaving(state: GameState, saving: Record<AssetId, number>): GameState {
+  if (state.phase !== 'setupSaving') assertCanTrade(state);
+  if (!validSaving(saving)) throw new Error('invalid saving');
+  const s = clone(state);
+  s.player.saving = { ...zeroHoldings(), ...saving };
+  if (s.phase === 'setupSaving') s.phase = 'roll';
+  else log(s, 'saving.change', { params: { amount: sum(s.player.saving) } });
   return s;
 }
 
@@ -223,11 +251,13 @@ function handleSquare(s: GameState) {
       if (!ev) return notice('square.nothing');
       return startDecision(s, { kind: 'event', eventId: ev.id }, 'square');
     }
-    case 'stock':
-      // 株のマスは段階3.5の2で作る
-      return notice('square.stock.soon');
+    case 'stock': {
+      // 4業種のうち1つの株が、割安に買える（design.md 3.4）
+      const stocks = ASSET_IDS.filter((id) => ASSETS[id].kind === 'stock');
+      return startDecision(s, { kind: 'stock', assetId: stocks[randomInt(s, 0, stocks.length - 1)] }, 'square');
+    }
     case 'investTalk':
-      // 投資の話のマスは段階3.5の3で作る
+      // 投資の話のマスは段階3.5の5で作る
       return notice('square.investTalk.soon');
     case 'gamble':
       return startDecision(s, { kind: 'gamble' }, 'square');
@@ -346,6 +376,17 @@ export function getOptions(s: GameState): DecisionOption[] {
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
+    case 'stock':
+      return [
+        ...STOCK_SQUARE.amounts.map((amount) => ({
+          id: `buy:${amount}`,
+          key: 'option.stock.buy',
+          params: { amount },
+          enabled: canAfford(s, amount),
+          cash: -amount,
+        })),
+        { id: 'skip', key: 'option.skip', enabled: true },
+      ];
     case 'athleteRetire':
       return ATHLETE_NEXT_JOBS.map((j) => ({
         id: `job:${j}`,
@@ -437,6 +478,15 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
       return null;
     case 'realEstate':
       if (optionId !== 'skip') buyHome(s, d.offerPrice!, optionId === 'homeLoan');
+      return null;
+    case 'stock':
+      if (optionId === 'skip') log(s, 'stock.skip', { params: { asset: d.assetId! } });
+      else {
+        const id = d.assetId!;
+        const amount = Number(optionId.slice(4));
+        buyAsset(s, id, amount, s.market.prices[id] * (1 - STOCK_SQUARE.discount));
+        log(s, 'stock.buy', { params: { asset: id, amount }, notice: true });
+      }
       return null;
     case 'athleteRetire':
       changeJob(s, optionId.slice(4), true);
@@ -586,10 +636,31 @@ function computeMonth(s: GameState, dryRun: boolean) {
 
 const sum = (items: Record<string, number>) => Object.values(items).reduce((a, b) => a + b, 0);
 
-/** 今月の収入と支出の予定 */
-export function estimateMonth(s: GameState): { income: Record<string, number>; expense: Record<string, number>; net: number } {
+/** 今月の収入と支出の予定。saving は、そのほかに積み立てで買う金額 */
+export function estimateMonth(s: GameState): {
+  income: Record<string, number>;
+  expense: Record<string, number>;
+  net: number;
+  saving: number;
+} {
   const { income, expense } = computeMonth(s, true);
-  return { income, expense, net: sum(income) - sum(expense) };
+  return { income, expense, net: sum(income) - sum(expense), saving: sum(s.player.saving) };
+}
+
+/** 積み立て。預金が足りない月や、借金がある月は、自動で休む（借金はしない。design.md 6.3） */
+function accumulate(s: GameState) {
+  const p = s.player;
+  const total = sum(p.saving);
+  if (total <= 0) return;
+  if (p.cash < total || p.cardLoan > 0) {
+    if (!p.savingPaused) log(s, 'saving.pause', { notice: true });
+    p.savingPaused = true;
+    return;
+  }
+  for (const id of ASSET_IDS) if (p.saving[id] > 0) buyAsset(s, id, p.saving[id]);
+  s.stats.savingTotal += total;
+  if (p.savingPaused) log(s, 'saving.resume', { notice: true });
+  p.savingPaused = false;
 }
 
 function addFlows(target: Record<string, number>, items: Record<string, number>) {
@@ -614,6 +685,7 @@ function endMonth(s: GameState) {
     p.cardLoan -= repay;
     p.cash -= repay;
   }
+  accumulate(s);
   coverShortfall(s);
   flows.revaluation += updateMarketMonth(s);
 
@@ -791,17 +863,91 @@ function ageChild(s: GameState, c: Child) {
   }
 }
 
-// ---------------------------------------------------------------- 売り買い（取引タイムは段階3.5の2で作る）
+// ---------------------------------------------------------------- 取引タイム（design.md 2.1）
 
-const TRADE_PHASES = new Set(['roll', 'decision', 'yearEnd']);
+/** 取引タイムを開けるか。今は年末だけ（取引カードは段階3.5の3で作る） */
+export function canTrade(s: GameState): boolean {
+  return s.phase === 'yearEnd';
+}
+
+function assertCanTrade(s: GameState) {
+  if (!canTrade(s)) throw new Error(`cannot trade in phase ${s.phase}`);
+}
 
 /** 金額分を買う（amount > 0）か売る（amount < 0） */
 export function trade(state: GameState, id: AssetId, amount: number): GameState {
-  if (!TRADE_PHASES.has(state.phase)) throw new Error(`cannot trade in phase ${state.phase}`);
+  assertCanTrade(state);
   if (!ASSETS[id]) throw new Error(`unknown asset: ${id}`);
   const s = clone(state);
-  if (amount > 0) buyAsset(s, id, amount);
-  else if (amount < 0) sellAsset(s, id, -amount);
+  if (amount > 0) {
+    const spent = buyAsset(s, id, amount);
+    if (spent > 0) log(s, 'trade.buy', { params: { asset: id, amount: Math.round(spent) } });
+  } else if (amount < 0) {
+    const gained = sellAsset(s, id, -amount);
+    if (gained > 0) log(s, 'trade.sell', { params: { asset: id, amount: Math.round(gained) } });
+  }
+  return s;
+}
+
+export function joinMedical(state: GameState): GameState {
+  assertCanTrade(state);
+  if (state.player.medicalPremium !== null) throw new Error('already insured');
+  const s = clone(state);
+  s.player.medicalPremium = medicalPremiumAt(s.year);
+  log(s, 'insurance.medical.join', { params: { premium: s.player.medicalPremium } });
+  return s;
+}
+
+export function quitMedical(state: GameState): GameState {
+  assertCanTrade(state);
+  const s = clone(state);
+  s.player.medicalPremium = null;
+  log(s, 'insurance.medical.quit');
+  return s;
+}
+
+/** 火災・地震保険をやめられるか。住宅ローンが残っている間はやめられない（現実の住宅ローンと同じ） */
+export const canQuitFire = (s: GameState) => !!s.player.home?.fireInsured && !s.player.home.loan;
+
+/** 持ち家の火災・地震保険に入る（on）、やめる（off） */
+export function setFireInsurance(state: GameState, on: boolean): GameState {
+  assertCanTrade(state);
+  if (!state.player.home || (!on && !canQuitFire(state))) throw new Error('cannot change fire insurance');
+  const s = clone(state);
+  s.player.home!.fireInsured = on;
+  log(s, on ? 'insurance.fire.join' : 'insurance.fire.quit');
+  return s;
+}
+
+/** 住宅ローンの繰り上げ返済 */
+export function prepay(state: GameState, amount: number): GameState {
+  assertCanTrade(state);
+  if (!state.player.home?.loan) throw new Error('no loan');
+  const s = clone(state);
+  const home = s.player.home!;
+  const paid = prepayLoan(home.loan!, Math.max(0, Math.min(amount, s.player.cash)));
+  s.player.cash -= paid;
+  if (home.loan!.balance === 0) home.loan = null;
+  log(s, 'loan.prepay', { cash: -paid });
+  return s;
+}
+
+/** 家を売って手に入るお金（相場の値段 − 手数料 − 残りの住宅ローン） */
+export function homeSaleProceeds(s: GameState): number {
+  const home = s.player.home;
+  if (!home) return 0;
+  return home.value * (1 - REAL_ESTATE.sellFeeRate) - (home.loan?.balance ?? 0);
+}
+
+/** 家を売れるか（ローンを返して、預金がマイナスにならないか） */
+export const canSellHome = (s: GameState) => !!s.player.home && s.player.cash + homeSaleProceeds(s) >= 0;
+
+export function sellHome(state: GameState): GameState {
+  assertCanTrade(state);
+  if (!canSellHome(state)) throw new Error('cannot sell home');
+  const s = clone(state);
+  addCash(s, homeSaleProceeds(s), 'realEstate.sell');
+  s.player.home = null;
   return s;
 }
 

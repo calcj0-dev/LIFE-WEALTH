@@ -1004,3 +1004,56 @@ details summary {
 .panel-buttons .feed-button {
   font-weight: 800;
 }
+
+/* ---------------- 積み立てと取引タイム（design.md 2.1、6.3） */
+
+button.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.saving-editor {
+  display: grid;
+  gap: 8px;
+}
+.saving-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.saving-name {
+  min-width: 90px;
+  font-weight: 700;
+}
+.saving-amount {
+  min-width: 96px;
+  text-align: center;
+}
+.saving-line {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.trade-modal .card {
+  margin-bottom: 10px;
+}
+.trade-modal h4 {
+  margin: 0 0 6px;
+}
+.trade-units {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.trade-table td {
+  vertical-align: middle;
+}
+.trade-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
