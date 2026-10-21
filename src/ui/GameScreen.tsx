@@ -1,24 +1,23 @@
-import { ASSET_IDS } from '../data/assets';
+import { ASSETS, ASSET_IDS } from '../data/assets';
 import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
+import { AnimatedMoney } from './AnimatedMoney';
+import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
+/** 画面の上。何年目・純資産・景気・借金だけを出す。銀行預金と資産の内訳は右側に出す（design.md 0.1） */
 export function Hud({ s }: { s: GameState }) {
   const p = s.player;
   return (
     <div className="hud">
       <div className="hud-age">
-        {t('hud.date', { year: s.year, month: s.month })}
+        {dateLabel(s, s.year, s.month)}
         <span className="hud-years">{t('hud.years', { years: s.years })}</span>
       </div>
       <div className="hud-item">
-        <span className="label">{t('hud.deposit')}</span>
-        <span className="value">{formatMoney(p.cash)}</span>
-      </div>
-      <div className="hud-item">
         <span className="label">{t('hud.netWorth')}</span>
-        <span className="value">{formatMoney(netWorth(s))}</span>
+        <AnimatedMoney className="value" value={netWorth(s)} />
       </div>
       <div className="hud-item">
         <span className="label">{t('hud.economy')}</span>
@@ -34,13 +33,20 @@ export function Hud({ s }: { s: GameState }) {
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="kv">
       <span>{k}</span>
       <span className="v">{v}</span>
     </div>
   );
+}
+
+/** 銘柄の名前。株は株数も添える（例: IT株（ミライテック） 3株） */
+export function holdingName(s: GameState, id: string): string {
+  const name = t(`asset.${id}`);
+  if (ASSETS[id].unit !== 'share') return name;
+  return `${name} ${t('trade.sharesCount', { n: Math.round(s.player.holdings[id] ?? 0) })}`;
 }
 
 export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOpenHistory: () => void; onOpenFeed: () => void }) {
@@ -60,15 +66,10 @@ export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOp
         </button>
       </div>
       <div className="card">
-        <h4>{t('panel.job')}</h4>
-        <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />
-        {p.noIncomeMonths > 0 && <div className="minus">{t('panel.noIncome', { months: p.noIncomeMonths })}</div>}
-      </div>
-      <div className="card">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={formatMoney(p.cash)} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={p.cash} />} />
         {owned.map((id) => (
-          <Row key={id} k={t(`asset.${id}`)} v={formatMoney(assetValue(s, id))} />
+          <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}
         {p.home && <Row k={t('asset.realEstate')} v={formatMoney(realEstateValue(s))} />}
         {ASSET_IDS.filter((id) => p.saving[id] > 0).map((id) => (
@@ -80,6 +81,11 @@ export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOp
         <button className="secondary history-button" style={{ marginTop: 8 }} onClick={onOpenHistory}>
           {t('history.open')}
         </button>
+      </div>
+      <div className="card">
+        <h4>{t('panel.job')}</h4>
+        <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />
+        {p.noIncomeMonths > 0 && <div className="minus">{t('panel.noIncome', { months: p.noIncomeMonths })}</div>}
       </div>
       <div className="card">
         <h4>{t('panel.family')}</h4>

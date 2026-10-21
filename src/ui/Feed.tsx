@@ -1,71 +1,11 @@
-// ふつうの年のニュースと決算を見せる「自動で閉じるポップアップ」と、できごとの履歴のパネル（design.md 2.2）。
+// できごとの履歴のパネル（design.md 2.2）。
 
-import { useEffect, useState } from 'react';
-import { newsById } from '../game/market';
+import { useState } from 'react';
 import type { GameState, YearRecord } from '../game/types';
-import { formatMoney, t } from '../i18n';
+import { t } from '../i18n';
 import { MoneyDelta } from './Delta';
 import { MoneySummary } from './Ledger';
 import { logLabel, visibleEntries } from './logLabel';
-
-/** 自動で閉じるまでの時間（ミリ秒） */
-export const AUTO_POPUP_MS = 3000;
-
-/** 約3秒で自動で閉じるポップアップ。押せばすぐ閉じる */
-export function AutoPopup({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const id = window.setTimeout(onClose, AUTO_POPUP_MS);
-    return () => clearTimeout(id);
-    // onClose は表示のたびに変わらないよう呼び出し側で作る
-  }, []);
-  return (
-    <div className="overlay auto-overlay" onClick={onClose} role="dialog">
-      <div className="modal auto-popup">
-        {children}
-        <div className="auto-bar">
-          <div style={{ animationDuration: `${AUTO_POPUP_MS}ms` }} />
-        </div>
-        <div className="muted auto-hint">{t('auto.close')}</div>
-      </div>
-    </div>
-  );
-}
-
-/** ふつうの年のニュース（短く） */
-export function NewsBrief({ s }: { s: GameState }) {
-  const news = newsById(s.newsId!);
-  const amounts = s.marketChange?.amounts;
-  const total = amounts ? Object.values(amounts).reduce((a, b) => a + b, 0) : 0;
-  return (
-    <>
-      <div className="muted">{t('auto.news.heading', { year: s.year })}</div>
-      <h2>{t(`news.${news.id}.title`)}</h2>
-      <p>{t(`news.${news.id}.text`)}</p>
-      {Math.round(total) !== 0 && (
-        <p className="summary-line">
-          {t('news.table.mine')}: <MoneyDelta v={total} big />
-        </p>
-      )}
-    </>
-  );
-}
-
-/** ふつうの年の決算（短く） */
-export function YearEndBrief({ s }: { s: GameState }) {
-  const rec = s.history[s.history.length - 1];
-  const b = rec.breakdown;
-  const change = b.work + b.investment + b.revaluation + b.other;
-  return (
-    <>
-      <h2>{t('auto.yearEnd.heading', { year: rec.year })}</h2>
-      <MoneySummary income={rec.incomeTotal} expense={rec.expenseTotal} />
-      <div className="summary-row">
-        <span>{t('worth.line', { prev: formatMoney(rec.netWorth - change), now: formatMoney(rec.netWorth) })}</span>
-        <MoneyDelta v={change} big />
-      </div>
-    </>
-  );
-}
 
 // ---------------------------------------------------------------- できごとの履歴
 

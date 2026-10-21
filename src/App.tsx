@@ -5,9 +5,9 @@ import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, nextYear,
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
-import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './ui/Feed';
+import { FeedPanel } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
-import { DecisionModal, HistoryModal, NewsModal, YearEndModal, isImportantNews, isNotableYearEnd } from './ui/Modals';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
 import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
 import { Toasts } from './ui/Toasts';
@@ -33,8 +33,6 @@ export function App() {
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
-  /** ふつうの年のニュースと決算を、自動で閉じるポップアップで見せている間 */
-  const [autoView, setAutoView] = useState<'news' | 'yearEnd' | null>(null);
   /** 年末のニュースと決算を見た年。年末は「ニュース → 決算 → 取引タイム」の順に見せる（design.md 2.1） */
   const [newsSeenYear, setNewsSeenYear] = useState<number | null>(null);
   const [settleSeenYear, setSettleSeenYear] = useState<number | null>(null);
@@ -50,25 +48,10 @@ export function App() {
   const settleStep = yearEnd && !newsStep && settleSeenYear !== game!.year;
   const tradeStep = yearEnd && !newsStep && !settleStep;
 
-  // ふつうの年のニュースと決算は、約3秒で自動で閉じるポップアップで見せてから進む（design.md 2.2）
-  useEffect(() => {
-    if (!game || !yearEnd || busy || paused || autoView) return;
-    if (newsStep) {
-      if (!isImportantNews(game)) setAutoView('news');
-    } else if (settleStep && !isNotableYearEnd(game)) setAutoView('yearEnd');
-  }, [game, yearEnd, newsStep, settleStep, busy, paused, autoView]);
-
   const setGame = (s: GameState | null) => {
     setGameState(s);
     saveGame(s && s.phase !== 'finished' ? s : null);
     if (!s || s.phase === 'finished') setSaved(null);
-  };
-
-  const closeAuto = () => {
-    if (!game) return;
-    if (autoView === 'news') setNewsSeenYear(game.year);
-    if (autoView === 'yearEnd' && game.phase === 'yearEnd') afterSettlement(game);
-    setAutoView(null);
   };
 
   /** 決算を見たあと。最後の年は取引タイムを出さずに結果へ */
@@ -184,22 +167,16 @@ export function App() {
           <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
         <Toasts log={game.log} />
-        {autoView === 'news' && yearEnd && (
-          <AutoPopup onClose={closeAuto}>
-            <NewsBrief s={game} />
-          </AutoPopup>
-        )}
-        {autoView === 'yearEnd' && yearEnd && (
-          <AutoPopup onClose={closeAuto}>
-            <YearEndBrief s={game} />
-          </AutoPopup>
-        )}
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {!busy && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
-        {ready && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
-        {ready && !autoView && newsStep && isImportantNews(game) && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
-        {ready && !autoView && settleStep && isNotableYearEnd(game) && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
+        {ready && game.phase === 'decision' && (
+          // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
+          <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
+        )}
+        {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
+        {ready && newsStep && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
+        {ready && settleStep && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
         {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>

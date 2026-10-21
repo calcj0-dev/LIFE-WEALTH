@@ -78,8 +78,10 @@ export interface Player {
   athleteRetireYear: number | null;
   /** 銀行預金。お金はすべてここに入り、利息がつく */
   cash: number;
-  /** 資産ごとの保有口数。価格は market.prices */
+  /** 資産ごとの保有口数（株は株数）。価格は market.prices */
   holdings: Record<AssetId, number>;
+  /** 資産ごとの、買った額の合計（売ったら、売った割合の分だけ減らす） */
+  cost: Record<AssetId, number>;
   /** 毎月の積み立ての金額（投資信託とゴールドだけ。design.md 6.3） */
   saving: Record<AssetId, number>;
   /** 預金が足りず、積み立てを休んでいる */
@@ -245,11 +247,13 @@ export interface GameResult {
 }
 
 export interface GameState {
-  saveVersion: 2;
+  saveVersion: 3;
   seed: number;
   rngState: number;
   /** 遊ぶ年数（10〜50） */
   years: number;
+  /** 1ターンの月数（design.md 0.1） */
+  monthsPerTurn: number;
   /** 何年目か（1から） */
   year: number;
   /** 何月か（1〜12） */

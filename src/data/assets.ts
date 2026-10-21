@@ -17,6 +17,10 @@ export interface AssetDef {
   accumulate: boolean;
   /** 景気による値動きの上乗せ（年） */
   drift: Record<Economy, number>;
+  /** 売り買いの単位。amount: 1万円単位の金額、share: 1株単位（design.md 6.1） */
+  unit: 'amount' | 'share';
+  /** 最初の値段（万円）。amount の銘柄は1口の値段 */
+  startPrice: number;
 }
 
 const KINDS: AssetKind[] = ['bond', 'gold', 'fund', 'stock'];
@@ -29,10 +33,13 @@ export function checkAssets(raw: unknown): Problems {
   list.forEach((a, i) => {
     const where = `assets[${i}]`;
     problems.push(
-      ...checkFields(where, a, { id: 'string', kind: 'string', meanReturn: 'number', volatility: 'number', incomeYield: 'number', accumulate: 'boolean', drift: 'object' }),
+      ...checkFields(where, a, { id: 'string', kind: 'string', meanReturn: 'number', volatility: 'number', incomeYield: 'number', accumulate: 'boolean', drift: 'object', unit: 'string', startPrice: 'number' }),
     );
     if (!KINDS.includes(a.kind)) problems.push(`${where}: kind は ${KINDS.join('・')} のどれかにします`);
     if (isNumber(a.volatility) && a.volatility < 0) problems.push(`${where}: volatility がマイナスです`);
+    if (!['amount', 'share'].includes(a.unit)) problems.push(`${where}: unit は amount か share にします`);
+    if (isNumber(a.startPrice) && a.startPrice <= 0) problems.push(`${where}: startPrice は0より大きくします`);
+    if (a.unit === 'share' && a.accumulate) problems.push(`${where}: 1株単位の銘柄は積み立てできません`);
     for (const e of ECONOMIES) if (!isNumber(a.drift?.[e])) problems.push(`${where}: drift.${e} がありません`);
   });
   problems.push(...checkUniqueIds('assets', list));
@@ -49,8 +56,6 @@ export const ASSET_IDS: AssetId[] = ASSET_LIST.map((a) => a.id);
 /** 資産ごとに0を入れたもの */
 export const zeroHoldings = (): Record<AssetId, number> => Object.fromEntries(ASSET_IDS.map((id) => [id, 0]));
 
-/** 価格は、どの銘柄も1口1万円から始める */
-export const START_PRICE = 1;
 
 export const START_DEPOSIT_RATE = 0.003;
 export const DEPOSIT_RATE_MIN = 0.001;

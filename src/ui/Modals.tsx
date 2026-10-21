@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { ASSET_IDS } from '../data/assets';
+import { Roulette, SPIN_DURATION_MS } from '../board/Roulette';
 import { SQUARE_COLORS } from '../board/Board';
 import { getOptions } from '../game/engine';
 import { newsById } from '../game/market';
@@ -19,26 +21,9 @@ function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean
 
 // ---------------------------------------------------------------- 年末のニュース
 
-/** 大事なニュースの年か（金融危機、技術革新ブームなど）。大事な年だけポップアップで出す（design.md 2.2） */
+/** 大事なニュースの年か（金融危機、技術革新ブームなど）。ニュースの画面で強調する */
 export function isImportantNews(s: GameState): boolean {
   return !!s.newsId && !!newsById(s.newsId).important;
-}
-
-/** 大事な決算の年か。大事な年だけポップアップで出す（design.md 2.2） */
-export function isNotableYearEnd(s: GameState): boolean {
-  const st = s.lastSettlement!;
-  const rec = s.history[s.history.length - 1];
-  const b = rec.breakdown;
-  const change = b.work + b.investment + b.revaluation + b.other;
-  const prev = rec.netWorth - change;
-  // 借金や資産の売却は、始まった年だけ（続いている年は、お知らせだけにする）
-  const lastYear = (key: string) => s.log.some((l) => l.year === st.year - 1 && l.key === key);
-  const newBorrow = st.borrowed > 0 && !lastYear('shortfall.loan');
-  const newSell = st.sold > 0 && !lastYear('shortfall.sell') && !lastYear('shortfall.loan');
-  // 貯金の増え方ではなく、値動きやマスの出来事で大きく動いた年
-  const unusual = Math.abs(b.revaluation + b.other) > Math.max(500, Math.abs(prev) * 0.3);
-  const last = s.year >= s.years;
-  return last || newBorrow || newSell || unusual || st.year % 10 === 0;
 }
 
 export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () => void; closeOnly?: boolean }) {
@@ -101,11 +86,55 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
 
 // ---------------------------------------------------------------- マスの出来事
 
+/**
+ * ルーレットが回って止まる部品（結婚、出産、配偶者の働き方、子どもの進学。design.md 2.2）。
+ * faces の出目を順に回して見せ、全部止まったら onDone を呼ぶ
+ */
+export function RouletteReveal({ faces, onDone }: { faces: number[]; onDone: () => void }) {
+  const [index, setIndex] = useState(0);
+  const [spinning, setSpinning] = useState(false);
+  useEffect(() => {
+    if (index >= faces.length) {
+      onDone();
+      return;
+    }
+    // 描いたあとに回し始める（回る前の向きから、出目の向きへ動かすため）
+    const start = window.setTimeout(() => setSpinning(true), 50);
+    const stop = window.setTimeout(() => {
+      setSpinning(false);
+      setIndex((i) => i + 1);
+    }, SPIN_DURATION_MS + 400);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(stop);
+    };
+    // onDone は表示のたびに変わらないよう呼び出し側で作る
+  }, [index]);
+  return (
+    <div className="roulette-reveal">
+      {faces.map((face, i) => (
+        <Roulette key={i} value={i <= index ? face : null} spinning={i === index && spinning} canSpin={false} onSpin={() => {}} resultLabel={i < index ? t('roulette.face', { face }) : ' '} />
+      ))}
+    </div>
+  );
+}
+
 export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: string) => void }) {
   const { title, text, squareType } = describeDecision(s);
   const options = getOptions(s);
   const single = options.length === 1 ? options[0] : null;
-  const face = s.decision?.params?.face;
+  const params = s.decision?.params;
+  const faces = [params?.face, params?.workFace].filter((f): f is number => typeof f === 'number');
+  /** ルーレットが止まるまでは、結果の文章とボタンを隠す */
+  const [revealed, setRevealed] = useState(faces.length === 0);
+  if (faces.length > 0 && !revealed) {
+    return (
+      <Overlay>
+        <h2>{t('roulette.spinning')}</h2>
+        <RouletteReveal faces={faces} onDone={() => setRevealed(true)} />
+      </Overlay>
+    );
+  }
   return (
     <Overlay>
       {squareType && (
@@ -114,7 +143,15 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
         </span>
       )}
       <h2>{title}</h2>
-      {face !== undefined && <div className="die-face" aria-label={t('roulette.face', { face })}>{face}</div>}
+      {faces.length > 0 && (
+        <div className="die-faces">
+          {faces.map((f, i) => (
+            <div key={i} className="die-face" aria-label={t('roulette.face', { face: f })}>
+              {f}
+            </div>
+          ))}
+        </div>
+      )}
       <p>{text}</p>
       {single && single.cash !== undefined && (
         <p className="summary-line">

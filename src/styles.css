@@ -1136,3 +1136,90 @@ button.small {
     transform: scale(1);
   }
 }
+
+/* ---------------- 段階3.6（design.md 0.1） */
+
+/* 手札は、盤面の左下に重ねて出す（枠の外に隠れないように） */
+.board-area .card-hand {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 230px);
+  margin: 0;
+  box-shadow: var(--shadow);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+/* お金が動いたとき、数字を光らせて、動いた金額を浮かび上がらせる */
+.animated-money {
+  position: relative;
+  display: inline-block;
+  border-radius: 8px;
+  padding: 0 4px;
+}
+.animated-money.flash-up {
+  animation: money-flash-up 1.2s ease-out;
+}
+.animated-money.flash-down {
+  animation: money-flash-down 1.2s ease-out;
+}
+@keyframes money-flash-up {
+  0% {
+    background: rgba(46, 196, 182, 0.5);
+    color: #0f8a7e;
+  }
+  100% {
+    background: transparent;
+  }
+}
+@keyframes money-flash-down {
+  0% {
+    background: rgba(255, 107, 107, 0.5);
+    color: #c0392b;
+  }
+  100% {
+    background: transparent;
+  }
+}
+.money-float {
+  position: absolute;
+  right: 0;
+  top: -4px;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: money-float 1.4s ease-out forwards;
+}
+@keyframes money-float {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+}
+
+/* ポップアップの中のルーレット */
+.roulette-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.roulette-reveal .roulette {
+  position: static;
+  box-shadow: none;
+}
+.die-faces {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 取引タイムの銘柄のチャート */
+.asset-chart {
+  padding: 4px 0;
+}

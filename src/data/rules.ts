@@ -6,6 +6,13 @@ export const YEAR_OPTIONS = [10, 20, 30, 40, 50];
 export const DEFAULT_YEARS = 20;
 export const MONTHS_PER_YEAR = 12;
 
+/**
+ * 1ターンの月数（design.md 0.1、11章）。1・2・3・4・6・12 のどれか。
+ * 給料、生活費、積み立て、値動き、大きなイベントの起きやすさなどは、ここから計算する。
+ * 1ヶ月から変えるときは、DEFAULT_YEARS と BONUS の場所（minAhead、maxAhead）も見直す
+ */
+export const MONTHS_PER_TURN = 1;
+
 export const START_CASH = 50;
 
 /** ルーレットの出目は1〜6（design.md 3.8） */
@@ -105,7 +112,8 @@ export const REAL_ESTATE = {
 /** 株のマス（design.md 3.4）。割安に買える割合と、選べる金額 */
 export const STOCK_SQUARE = {
   discount: 0.1,
-  amounts: [10, 30, 100],
+  /** 選べる株数 */
+  shares: [1, 3, 10],
 };
 
 /** 積み立て（design.md 6.3）。おすすめの金額は、毎月の手取りの1割 */
@@ -115,7 +123,10 @@ export const SAVING = {
 
 /** 取引タイム（design.md 2.1）。売り買いの金額の単位と、繰り上げ返済の単位 */
 export const TRADE = {
+  /** 金額で売り買いする銘柄（投資信託・ゴールド・国債）の、1回の金額 */
   amounts: [1, 10, 50, 100],
+  /** 株の、1回の株数 */
+  shares: [1, 3, 10],
   prepayUnit: 100,
 };
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade, tradeShares } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
 import { describeDecision } from './decisionText';
@@ -38,7 +38,7 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
       Object.keys(s.lastSettlement!.income).forEach((k) => keys.add(`settle.${k}`));
       Object.keys(s.lastSettlement!.expense).forEach((k) => keys.add(`settle.${k}`));
       // 取引タイムで、いろいろな操作をしてみる
-      if (s.year === 2) s = trade(trade(s, 'it', 10), 'it', -5);
+      if (s.year === 2) s = tradeShares(tradeShares(trade(trade(s, 'fund', 10), 'fund', -5), 'it', 2), 'it', -1);
       if (s.year === 3 && s.player.medicalPremium === null) s = joinMedical(s);
       s = nextYear(s);
     }

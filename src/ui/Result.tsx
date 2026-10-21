@@ -1,6 +1,7 @@
 import type { GameState } from '../game/types';
 import { formatMoney, has, t } from '../i18n';
 import { HistoryTabs } from './HistoryTabs';
+import { dateLabel } from './dateLabel';
 import { logLabel } from './logLabel';
 
 /** 結果画面。最後の純資産を大きく出す（design.md 9章） */
@@ -41,7 +42,7 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
           <div className="timeline">
             {timeline.map((l, i) => (
               <div key={i} className="kv">
-                <span>{t('hud.date', { year: l.year, month: l.month })}</span>
+                <span>{dateLabel(s, l.year, l.month)}</span>
                 <span>{logLabel(l)}</span>
               </div>
             ))}
