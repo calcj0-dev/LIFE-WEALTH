@@ -48,7 +48,7 @@ import {
   sellShares,
   totalDebt,
 } from './finance';
-import { newYearMarket, shockPrice, updateMarketMonth, updateMarketYear } from './market';
+import { maybeNews, newYearMarket, shockPrice, updateMarketMonth, updateMarketYear } from './market';
 import { BIG_EVENTS, BIG_EVENTS_BY_ID, turnChance } from '../data/bigEvents';
 import { nextRandom, pickWeighted, randomInt } from './rng';
 import { computeResult } from './score';
@@ -84,6 +84,7 @@ const emptyFlows = (year: number): Settlement => ({
   sold: 0,
   borrowed: 0,
   revaluation: 0,
+  talks: [],
 });
 
 // ---------------------------------------------------------------- 開始
@@ -135,7 +136,6 @@ export function createGame(seed: number, options: { monthsPerTurn?: number } = {
       livingIndex: 1,
       wageIndex: 1,
     },
-    newsId: null,
     lastRoll: null,
     lastFace: null,
     lastCard: null,
@@ -153,9 +153,10 @@ export function createGame(seed: number, options: { monthsPerTurn?: number } = {
     log: [],
     stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0, savingTotal: 0, talkSpent: 0, talkReturned: 0 },
     result: null,
-    yearMarket: { startPrices: {}, startRealEstateIndex: 1, amounts: {} },
+    yearMarket: { startPrices: {}, startRealEstateIndex: 1, startEconomy: 'normal', amounts: {}, newsIds: [], economySet: false },
     marketChange: null,
     bigEvent: null,
+    newsEvent: null,
   };
   s.yearMarket = newYearMarket(s);
   recordPrices(s, 0);
@@ -225,6 +226,7 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   assertPhase(state, 'roll');
   if (state.tradeOpen) throw new Error('trade time is open');
   if (state.bigEvent) throw new Error('big event is showing');
+  if (state.newsEvent) throw new Error('news is showing');
   const s = clone(state);
   let face: number;
   let times = 1;
@@ -847,6 +849,10 @@ function endMonth(s: GameState) {
   accumulate(s);
   coverShortfall(s);
   flows.revaluation += updateMarketMonth(s);
+  // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
+  const newsMoved = maybeNews(s);
+  if (s.newsEvent) log(s, 'news.happened', { params: { news: s.newsEvent.id }, notice: true });
+  flows.revaluation += newsMoved;
   flows.revaluation += maybeBigEvent(s);
   coverShortfall(s);
 
@@ -957,6 +963,13 @@ export function triggerBigEvent(state: GameState, id: string): GameState {
   return s;
 }
 
+/** ニュースの画面を閉じる */
+export function dismissNews(state: GameState): GameState {
+  const s = clone(state);
+  s.newsEvent = null;
+  return s;
+}
+
 /** 大きなイベントの画面を閉じる */
 export function dismissBigEvent(state: GameState): GameState {
   const s = clone(state);
@@ -974,6 +987,7 @@ function resolveTalks(s: GameState) {
     const outcome = pickWeighted(s, def.outcomes, (o) => o.probability)!;
     const back = talk.amount * outcome.multiplier;
     s.stats.talkReturned += back;
+    s.yearFlows.talks.push({ id: talk.id, amount: talk.amount, back });
     const params = { amount: talk.amount, back: Math.abs(back) };
     if (back > talk.amount) {
       addCash(s, back, `talk.${talk.id}.win`, params);
@@ -1009,7 +1023,7 @@ function endYear(s: GameState) {
   p.cash += sum(yearly);
   s.stats.investmentIncome += sum(yearly);
 
-  flows.revaluation += updateMarketYear(s).moved;
+  flows.revaluation += updateMarketYear(s);
   flows.net = sum(flows.income) - sum(flows.expense);
   s.lastSettlement = structuredClone(flows);
 
@@ -1024,7 +1038,7 @@ function endYear(s: GameState) {
     assets: { ...Object.fromEntries(ASSET_IDS.map((id) => [id, assetValue(s, id)])), realEstate: realEstateValue(s) },
     debt: totalDebt(s),
     economy: s.market.economy,
-    newsId: s.newsId ?? '',
+    newsIds: [...s.yearMarket.newsIds],
     breakdown: { work, investment, revaluation: flows.revaluation, other: worth - prev - work - investment - flows.revaluation },
     incomeTotal: sum(flows.income),
     expenseTotal: sum(flows.expense),
@@ -1042,6 +1056,7 @@ function endYear(s: GameState) {
 export function nextYear(state: GameState): GameState {
   assertPhase(state, 'yearEnd');
   if (state.bigEvent) throw new Error('big event is showing');
+  if (state.newsEvent) throw new Error('news is showing');
   const s = clone(state);
   if (s.year >= s.years) {
     s.result = computeResult(s);

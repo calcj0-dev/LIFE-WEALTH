@@ -9,6 +9,7 @@ import {
   closeTrade,
   createGame,
   dismissBigEvent,
+  dismissNews,
   getOptions,
   nextYear,
   openTradeCard,
@@ -135,6 +136,7 @@ export function playGame(
   s = setSaving(s, strategy.saving ? { fund: recommendedSaving(s) } : {});
   for (let guard = 0; guard < 100000; guard++) {
     if (s.bigEvent) s = dismissBigEvent(s);
+    if (s.newsEvent) s = dismissNews(s);
     switch (s.phase) {
       case 'roll':
         s = rollWithCards(s);

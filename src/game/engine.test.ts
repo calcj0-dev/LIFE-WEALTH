@@ -15,6 +15,7 @@ import { playGame } from './autoplay';
 import {
   canSellHome,
   dismissBigEvent,
+  dismissNews,
   choose,
   chooseJob,
   chooseYears,
@@ -33,7 +34,8 @@ import {
   tradeShares,
 } from './engine';
 import { createLoan, netWorth, payLoanMonth } from './finance';
-import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { applyNews, maybeNews, newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { NEWS_PER_YEAR } from '../data/news';
 import { maybeBigEvent } from './engine';
 import type { GameState } from './types';
 
@@ -44,8 +46,10 @@ function started(seed = 1, years = 20, job = 'employee', saving: Record<string, 
 /** 決定を、いちばん上の選べる選択肢で進める */
 function settle(s: GameState): GameState {
   if (s.bigEvent) s = dismissBigEvent(s);
+  if (s.newsEvent) s = dismissNews(s);
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
   if (s.bigEvent) s = dismissBigEvent(s);
+  if (s.newsEvent) s = dismissNews(s);
   return s;
 }
 
@@ -73,7 +77,7 @@ describe('データ（JSON）', () => {
   });
   it('まちがいがあれば見つけられる', () => {
     expect(checkAssets({ assets: [{ id: 'x', kind: 'coin' }] }).length).toBeGreaterThan(0);
-    expect(checkNews({ news: [{ id: 'n', weight: 1, shocks: { noSuchAsset: 0.1 } }] })).toEqual([
+    expect(checkNews({ frequency: { count: 2, years: 1.5 }, news: [{ id: 'n', weight: 1, shocks: { noSuchAsset: 0.1 } }] })).toEqual([
       'news[0]: shocks の「noSuchAsset」という銘柄はありません',
     ]);
     expect(checkEvents({ events: [{ id: 'e', size: 'huge', weight: 1, effects: [{ t: 'magic' }], when: { age: 30 } }] }).length).toBe(3);
@@ -191,7 +195,7 @@ describe('ゲームの進行', () => {
     expect(s.month).toBe(12);
     s = settle(roll(s));
     expect(s.phase).toBe('yearEnd');
-    expect(s.newsId).not.toBeNull();
+    expect(s.lastSettlement).not.toBeNull();
     s = settle(nextYear(s));
     expect(s.year).toBe(2);
     expect(s.month).toBe(1);
@@ -433,6 +437,38 @@ describe('1ターンの月数', () => {
   });
 });
 
+describe('ニュース', () => {
+  it('1.5年に2回くらい、1年のどの月でもランダムに起きる', () => {
+    expect(NEWS_PER_YEAR).toBeCloseTo(2 / 1.5, 6);
+    let count = 0;
+    const months = new Set<number>();
+    const years = 30;
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = playGame(seed, 'employee', years);
+      const news = s.log.filter((l) => l.key === 'news.happened');
+      count += news.length;
+      news.forEach((l) => months.add(l.month));
+    }
+    const perYear = count / (20 * years);
+    expect(perYear).toBeGreaterThan(1.1);
+    expect(perYear).toBeLessThan(1.6);
+    expect(months.size).toBeGreaterThanOrEqual(10);
+  });
+  it('「平穏な一年」のニュースはない', () => {
+    expect(NEWS.some((n) => n.id === 'calm')).toBe(false);
+  });
+  it('ニュースが起きると、その月に値段と景気が動き、画面に出す内容が残る', () => {
+    const s = started();
+    const crisis = NEWS.find((n) => n.id === 'crisis')!;
+    const before = s.market.prices.fund;
+    applyNews(s, crisis);
+    expect(s.market.prices.fund).toBeCloseTo(before * (1 + crisis.shocks.fund!), 6);
+    expect(s.market.economy).toBe('recession');
+    expect(s.newsEvent?.id).toBe('crisis');
+    expect(() => roll(s)).toThrow();
+  });
+});
+
 describe('相場', () => {
   it('長い目で見ると、銘柄ごとの平均の値上がりに近くなる', () => {
     const years = 50;
@@ -442,6 +478,7 @@ describe('相場', () => {
       for (let y = 0; y < years; y++) {
         for (let m = 0; m < 12; m++) {
           updateMarketMonth(s);
+          maybeNews(s);
           maybeBigEvent(s);
         }
         updateMarketYear(s);

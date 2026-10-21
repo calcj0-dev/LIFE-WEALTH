@@ -1157,11 +1157,56 @@ button.small {
   border-radius: 8px;
   padding: 0 4px;
 }
-.animated-money.flash-up {
+/* 弱: 色が一瞬うすく変わるだけ。中: 光って金額が浮かぶ。強: 大きく光ってゆれ、金額も大きく浮かぶ（design.md 2.2） */
+.animated-money.flash-weak-up {
+  animation: money-weak-up 0.8s ease-out;
+}
+.animated-money.flash-weak-down {
+  animation: money-weak-down 0.8s ease-out;
+}
+.animated-money.flash-medium-up {
   animation: money-flash-up 1.2s ease-out;
 }
-.animated-money.flash-down {
+.animated-money.flash-medium-down {
   animation: money-flash-down 1.2s ease-out;
+}
+.animated-money.flash-strong-up {
+  animation: money-flash-up 1.6s ease-out, money-shake 0.5s ease-in-out;
+}
+.animated-money.flash-strong-down {
+  animation: money-flash-down 1.6s ease-out, money-shake 0.5s ease-in-out;
+}
+@keyframes money-weak-up {
+  0% {
+    color: #2ec4b6;
+  }
+}
+@keyframes money-weak-down {
+  0% {
+    color: #ff6b6b;
+  }
+}
+@keyframes money-shake {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  20% {
+    transform: translateX(-4px) scale(1.15);
+  }
+  40% {
+    transform: translateX(4px) scale(1.15);
+  }
+  60% {
+    transform: translateX(-3px) scale(1.1);
+  }
+  80% {
+    transform: translateX(3px) scale(1.05);
+  }
+}
+.money-float.strong {
+  font-size: 20px;
+  top: -12px;
 }
 @keyframes money-flash-up {
   0% {
@@ -1222,4 +1267,9 @@ button.small {
 /* 取引タイムの銘柄のチャート */
 .asset-chart {
   padding: 4px 0;
+}
+
+/* 年末の決算の、投資の話の結果 */
+.talk-results h4 {
+  margin: 0 0 4px;
 }

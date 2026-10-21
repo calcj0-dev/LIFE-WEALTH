@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Board } from '../board/Board';
 import { Roulette } from '../board/Roulette';
 import { playGame } from '../game/autoplay';
-import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, dismissNews, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
 import { FeedPanel } from './Feed';
@@ -15,12 +15,24 @@ import { Result } from './Result';
 import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
 import { SavingSetup, TradeModal } from './Trade';
 import { CardHand } from './Cards';
+import { moneyLevelOf } from './AnimatedMoney';
 import { BigEventModal } from './BigEvent';
 
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
 const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent)(\.[a-zA-Z]+)+</;
+
+describe('お金の光り方', () => {
+  it('ニュースと大きなイベントは強、マスの出来事や売り買いは中、それ以外は弱', () => {
+    const e = (key: string, extra = {}) => ({ year: 1, month: 1, key, ...extra });
+    expect(moneyLevelOf([e('news.happened', { notice: true })])).toBe('strong');
+    expect(moneyLevelOf([e('bigEvent.crash', { notice: true })])).toBe('strong');
+    expect(moneyLevelOf([e('event.travel', { cash: -15 })])).toBe('medium');
+    expect(moneyLevelOf([e('trade.buy')])).toBe('medium');
+    expect(moneyLevelOf([])).toBe('weak');
+  });
+});
 
 describe('画面', () => {
   it('タイトル画面にバージョンが出る', () => {
@@ -51,6 +63,13 @@ describe('画面', () => {
   it('1年の流れのどの場面も、エラーなく描ける', () => {
     let s: GameState = setSaving(chooseJob(chooseYears(createGame(5), 10), 'employee'), { fund: 2, gold: 1 });
     while (s.phase !== 'finished') {
+      if (s.newsEvent && !s.bigEvent) {
+        const html = renderToString(<NewsModal s={s} onNext={noop} />);
+        expect(html).toContain('のニュース');
+        expect(html).not.toMatch(RAW_KEY);
+        s = dismissNews(s);
+        continue;
+      }
       if (s.bigEvent) {
         expect(renderToString(<BigEventModal s={s} onClose={noop} />)).not.toMatch(RAW_KEY);
         s = dismissBigEvent(s);
@@ -69,8 +88,7 @@ describe('画面', () => {
         s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       } else if (s.phase === 'yearEnd') {
         const html = [
-          renderToString(<NewsModal s={s} onNext={noop} />),
-          renderToString(<YearEndModal s={s} onNext={noop} />),
+          renderToString(<YearEndModal s={s} onNext={noop} onTrade={noop} />),
           renderToString(<NetWorthTable s={s} />),
           renderToString(<Hud s={s} />),
           renderToString(<SidePanel s={s} onOpenHistory={noop} onOpenFeed={noop} />),
@@ -79,7 +97,7 @@ describe('画面', () => {
           renderToString(<TradeModal s={s} onChange={noop} onDone={noop} />),
         ].join('');
         expect(html).toContain('取引タイム');
-        expect(html).toContain('年末のニュース');
+        expect(html).toContain('決算');
         expect(html).toContain('できごとの履歴');
         expect(html).not.toMatch(RAW_KEY);
         s = nextYear(s);

@@ -47,6 +47,7 @@ export function t(key: string, params?: Record<string, number | string>): string
   if (typeof params.job === 'string') all.jobName = t(`job.${params.job}`);
   if (typeof params.asset === 'string') all.assetName = t(`asset.${params.asset}`);
   if (typeof params.card === 'string') all.cardName = t(`card.${params.card}`);
+  if (typeof params.news === 'string') all.newsTitle = t(`news.${params.news}.title`);
   for (const [name, value] of Object.entries(all)) {
     const shown = MONEY_PARAMS.has(name) && typeof value === 'number' ? formatMoney(value) : String(value);
     text = text.split(`{${name}}`).join(shown);

@@ -19,25 +19,24 @@ function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean
   );
 }
 
-// ---------------------------------------------------------------- 年末のニュース
+// ---------------------------------------------------------------- ニュース（1年のどの月でも起きる。design.md 7章）
 
-/** 大事なニュースの年か（金融危機、技術革新ブームなど）。ニュースの画面で強調する */
-export function isImportantNews(s: GameState): boolean {
-  return !!s.newsId && !!newsById(s.newsId).important;
+/** 大事なニュースか（金融危機、技術革新ブームなど）。ニュースの画面で強調する */
+export function isImportantNews(id: string): boolean {
+  return !!newsById(id).important;
 }
 
-export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () => void; closeOnly?: boolean }) {
-  const news = newsById(s.newsId!);
-  const change = s.marketChange;
-  const keys = [...ASSET_IDS, 'realEstate'];
-  const owned = change ? keys.filter((k) => Math.abs(change.amounts[k]) >= 0.5) : [];
-  const total = owned.reduce((a, k) => a + change!.amounts[k], 0);
+export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
+  const ev = s.newsEvent!;
+  const news = newsById(ev.id);
+  const keys = [...ASSET_IDS, 'realEstate'].filter((k) => Math.abs(ev.rates[k] ?? 0) >= 0.005);
+  const owned = keys.filter((k) => Math.abs(ev.amounts[k] ?? 0) >= 0.5);
   return (
     <Overlay>
-      <div className="muted">{t('news.heading', { year: s.year })}</div>
-      <h2>{t(`news.${news.id}.title`)}</h2>
+      <div className="muted">{t('news.heading', { year: ev.year, month: ev.month })}</div>
+      <h2>📰 {t(`news.${news.id}.title`)}</h2>
       <p>{t(`news.${news.id}.text`)}</p>
-      {change && (
+      {keys.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -50,8 +49,8 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
             {keys.map((k) => (
               <tr key={k}>
                 <td>{t(`asset.${k}`)}</td>
-                <td className={change.rates[k] >= 0 ? 'plus' : 'minus'}>{formatSigned(change.rates[k] * 100)}%</td>
-                <td>{owned.includes(k) ? <MoneyDelta v={change.amounts[k]} /> : '—'}</td>
+                <td className={ev.rates[k] >= 0 ? 'plus' : 'minus'}>{formatSigned(ev.rates[k] * 100)}%</td>
+                <td>{owned.includes(k) ? <MoneyDelta v={ev.amounts[k]} /> : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -59,26 +58,25 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
       )}
       {owned.length > 0 ? (
         <p className="summary-line">
-          {t('news.table.mine')}: <MoneyDelta v={total} big />
+          {t('news.table.mine')}: <MoneyDelta v={ev.moved} big />
         </p>
       ) : (
         <p className="muted">{t('news.noHoldings')}</p>
       )}
-      <p className="muted">
-        {t('news.economy', {
-          prev: t(`economy.${change?.prevEconomy ?? s.market.economy}`),
-          now: t(`economy.${s.market.economy}`),
-        })}
-        <br />
-        {t(`economy.${s.market.economy}.desc`)}
-      </p>
+      {news.economy && news.economy !== ev.prevEconomy && (
+        <p className="muted">
+          {t('news.economy', { prev: t(`economy.${ev.prevEconomy}`), now: t(`economy.${news.economy}`) })}
+          <br />
+          {t(`economy.${news.economy}.desc`)}
+        </p>
+      )}
       {news.important && (
         <p>
           <strong>{t('news.important')}</strong>
         </p>
       )}
       <div className="options">
-        <button onClick={onNext}>{t(closeOnly ? 'news.close' : 'news.next')}</button>
+        <button onClick={onNext}>{t('option.ok')}</button>
       </div>
     </Overlay>
   );
@@ -182,7 +180,8 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
 
 // ---------------------------------------------------------------- 年末の決算
 
-export function YearEndModal({ s, onNext, closeOnly }: { s: GameState; onNext: () => void; closeOnly?: boolean }) {
+/** 年末の決算。「取引タイムへ」と「次の年へ」のボタンを置く（design.md 2.1）。最後の年は「結果を見る」だけ */
+export function YearEndModal({ s, onNext, onTrade }: { s: GameState; onNext: () => void; onTrade?: () => void }) {
   const st = s.lastSettlement!;
   const rec = s.history[s.history.length - 1];
   const b = rec.breakdown;
@@ -202,13 +201,31 @@ export function YearEndModal({ s, onNext, closeOnly }: { s: GameState; onNext: (
         {st.sold > 0 && <div className="warning">{t('summary.sold', { amount: st.sold })}</div>}
         {st.borrowed > 0 && <div className="warning">{t('summary.borrowed', { amount: st.borrowed })}</div>}
       </div>
+      {st.talks.length > 0 && (
+        <div className="card talk-results">
+          <h4>{t('yearEnd.talks')}</h4>
+          {st.talks.map((r, i) => (
+            <div key={i} className="kv">
+              <span>{t(`talk.${r.id}.title`)}</span>
+              <span className={r.back >= r.amount ? 'plus' : 'minus'}>
+                {t(r.back < 0 ? 'yearEnd.talkDebt' : 'yearEnd.talkResult', { amount: r.amount, back: Math.abs(r.back) })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <Details>
         <LedgerTable income={st.income} expense={st.expense} />
         <h4 className="section-title">{t('worth.title')}</h4>
         <NetWorthTable s={s} />
       </Details>
       <div className="options">
-        <button onClick={onNext}>{t(closeOnly ? 'news.close' : last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
+        {!last && onTrade && (
+          <button className="secondary" onClick={onTrade}>
+            {t('yearEnd.trade')}
+          </button>
+        )}
+        <button onClick={onNext}>{t(last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
       </div>
     </Overlay>
   );

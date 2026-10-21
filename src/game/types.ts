@@ -139,8 +139,10 @@ export interface Settlement {
   sold: number;
   /** それでも足りず、借りた額 */
   borrowed: number;
-  /** 持っている資産と家の値動き（毎月の分と年末のニュースの分） */
+  /** 持っている資産と家の値動き（毎月の分と、ニュース・大きなイベントの分） */
   revaluation: number;
+  /** その年に結果が出た投資の話（元手と、戻った金額。借金になった分はマイナス） */
+  talks: { id: string; amount: number; back: number }[];
 }
 
 export interface YearRecord {
@@ -150,7 +152,8 @@ export interface YearRecord {
   assets: Record<AssetId | 'realEstate', number>;
   debt: number;
   economy: Economy;
-  newsId: string;
+  /** その年に起きたニュース */
+  newsIds: string[];
   /** 純資産が増えた・減った理由 */
   breakdown: NetWorthBreakdown;
   incomeTotal: number;
@@ -261,8 +264,6 @@ export interface GameState {
   phase: Phase;
   player: Player;
   market: Market;
-  /** 最後の年末のニュース */
-  newsId: string | null;
   lastRoll: number | null;
   /** 最後の移動で出たルーレットの目。ダッシュなどで2倍・3倍にする前の数 */
   lastFace: number | null;
@@ -297,6 +298,8 @@ export interface GameState {
   marketChange: MarketChange | null;
   /** 起きたばかりの大きなイベント。画面いっぱいに見せ、「OK」を押すまで止める（design.md 5.3） */
   bigEvent: BigEventResult | null;
+  /** 起きたばかりのニュース。ポップアップで見せ、「OK」を押すまで止める（design.md 7章） */
+  newsEvent: NewsEvent | null;
 }
 
 export interface BigEventResult {
@@ -311,9 +314,28 @@ export interface BigEventResult {
   covered: number;
 }
 
+/** ニュースが起きたときの値動き */
+export interface NewsEvent {
+  id: string;
+  /** 起きた年と月 */
+  year: number;
+  month: number;
+  prevEconomy: Economy;
+  /** 銘柄ごとの値動きの割合 */
+  rates: Record<AssetId | 'realEstate', number>;
+  /** 自分の資産が動いた金額 */
+  amounts: Record<AssetId | 'realEstate', number>;
+  moved: number;
+}
+
 export interface YearMarket {
   startPrices: Record<AssetId, number>;
   startRealEstateIndex: number;
+  startEconomy: Economy;
+  /** その年に起きたニュース */
+  newsIds: string[];
+  /** その年に、ニュースで景気が変わったか（変わらなければ、年末に確率で移り変わる） */
+  economySet: boolean;
   /** 自分の資産が値動きで動いた金額 */
   amounts: Record<AssetId | 'realEstate', number>;
 }

@@ -2,12 +2,12 @@ import { ASSETS, ASSET_IDS } from '../data/assets';
 import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
-import { AnimatedMoney } from './AnimatedMoney';
+import { AnimatedMoney, type MoneyLevel } from './AnimatedMoney';
 import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
 /** 画面の上。何年目・純資産・景気・借金だけを出す。銀行預金と資産の内訳は右側に出す（design.md 0.1） */
-export function Hud({ s }: { s: GameState }) {
+export function Hud({ s, level }: { s: GameState; level?: MoneyLevel }) {
   const p = s.player;
   return (
     <div className="hud">
@@ -17,7 +17,7 @@ export function Hud({ s }: { s: GameState }) {
       </div>
       <div className="hud-item">
         <span className="label">{t('hud.netWorth')}</span>
-        <AnimatedMoney className="value" value={netWorth(s)} />
+        <AnimatedMoney className="value" value={netWorth(s)} level={level} />
       </div>
       <div className="hud-item">
         <span className="label">{t('hud.economy')}</span>
@@ -49,7 +49,17 @@ export function holdingName(s: GameState, id: string): string {
   return `${name} ${t('trade.sharesCount', { n: Math.round(s.player.holdings[id] ?? 0) })}`;
 }
 
-export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOpenHistory: () => void; onOpenFeed: () => void }) {
+export function SidePanel({
+  s,
+  onOpenHistory,
+  onOpenFeed,
+  level,
+}: {
+  s: GameState;
+  onOpenHistory: () => void;
+  onOpenFeed: () => void;
+  level?: MoneyLevel;
+}) {
   const p = s.player;
   const family = p.married ? t(`panel.married.${p.spouse!.work}`) : t('panel.single');
   const insurance = [
@@ -67,7 +77,7 @@ export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOp
       </div>
       <div className="card">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={<AnimatedMoney value={p.cash} />} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={p.cash} level={level} />} />
         {owned.map((id) => (
           <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}

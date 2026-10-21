@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, nextYear, openTradeCard, roll } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -14,6 +14,7 @@ import { Toasts } from './ui/Toasts';
 import { SavingSetup, TradeModal } from './ui/Trade';
 import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
+import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -33,20 +34,25 @@ export function App() {
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
-  /** 年末のニュースと決算を見た年。年末は「ニュース → 決算 → 取引タイム」の順に見せる（design.md 2.1） */
-  const [newsSeenYear, setNewsSeenYear] = useState<number | null>(null);
-  const [settleSeenYear, setSettleSeenYear] = useState<number | null>(null);
+  /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
+  const [tradeYear, setTradeYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
+  /** 前に見た記録の数（お金が光る強さを、新しく増えた記録から決めるため） */
+  const seenLog = useRef(0);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const busy = spinning || movingPos !== null;
-  // 大きなイベントの画面を出している間も、ほかの画面は止める
-  const paused = showHistory || showFeed || !!game?.bigEvent;
+  // 大きなイベントやニュースの画面を出している間も、ほかの画面は止める
+  const paused = showHistory || showFeed || !!game?.bigEvent || !!game?.newsEvent;
   const yearEnd = game?.phase === 'yearEnd';
-  const newsStep = yearEnd && newsSeenYear !== game!.year;
-  const settleStep = yearEnd && !newsStep && settleSeenYear !== game!.year;
-  const tradeStep = yearEnd && !newsStep && !settleStep;
+  const tradeStep = yearEnd && tradeYear === game!.year;
+  const settleStep = yearEnd && !tradeStep;
+
+  const moneyLevel = useMemo(() => (game ? moneyLevelOf(game.log.slice(Math.min(seenLog.current, game.log.length))) : 'weak'), [game]);
+  useEffect(() => {
+    seenLog.current = game?.log.length ?? 0;
+  }, [game]);
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
@@ -54,11 +60,6 @@ export function App() {
     if (!s || s.phase === 'finished') setSaved(null);
   };
 
-  /** 決算を見たあと。最後の年は取引タイムを出さずに結果へ */
-  const afterSettlement = (s: GameState) => {
-    if (s.year >= s.years) setGame(nextYear(s));
-    else setSettleSeenYear(s.year);
-  };
 
   const later = (fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -141,7 +142,7 @@ export function App() {
     const ready = !busy && !paused;
     screen = (
       <div className="game">
-        <Hud s={game} />
+        <Hud s={game} level={moneyLevel} />
         <div className="game-body">
           <div className="board-area">
             <Board position={movingPos ?? game.player.position} overview={overview} bonus={game.bonusSquare} />
@@ -164,19 +165,19 @@ export function App() {
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
           </div>
-          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
+          <SidePanel s={game} level={moneyLevel} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
         <Toasts log={game.log} />
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {!busy && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
+        {!busy && !game.bigEvent && game.newsEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
         {ready && game.phase === 'decision' && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
         {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
-        {ready && newsStep && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
-        {ready && settleStep && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
+        {ready && settleStep && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
         {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>

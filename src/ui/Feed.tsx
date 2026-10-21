@@ -35,7 +35,6 @@ export function FeedPanel({ s, onClose }: { s: GameState; onClose: () => void })
         <div className="feed-list">
           {[...years].reverse().map((y) => {
             const events = visibleEntries(s.log.filter((l) => l.year === y.year));
-            const newsKey = `news-${y.year}`;
             const endKey = `end-${y.year}`;
             const rec = y.rec;
             const change = rec ? rec.breakdown.work + rec.breakdown.investment + rec.breakdown.revaluation + rec.breakdown.other : 0;
@@ -68,13 +67,6 @@ export function FeedPanel({ s, onClose }: { s: GameState; onClose: () => void })
                     </table>
                   </div>
                 )}
-                {rec?.newsId && (
-                  <button className="feed-item" onClick={() => toggle(newsKey)}>
-                    <span>{t('feed.news', { title: t(`news.${rec.newsId}.title`) })}</span>
-                    <span className="feed-arrow">{open === newsKey ? '▲' : '▼'}</span>
-                  </button>
-                )}
-                {rec?.newsId && open === newsKey && <div className="feed-detail">{t(`news.${rec.newsId}.text`)}</div>}
                 {[...events].reverse().map((e, i) => (
                   <div key={i} className="feed-item static">
                     <span className="muted">{t('feed.month', { month: e.month })}</span>

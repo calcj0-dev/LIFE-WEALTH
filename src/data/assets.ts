@@ -66,8 +66,6 @@ export const REAL_ESTATE_DRIFT: Record<Economy, number> = { boom: 0.02, normal: 
 /** 不動産の相場の値動きの大きさ（年） */
 export const REAL_ESTATE_VOLATILITY = 0.05;
 
-/** 1年の値動きの大きさのうち、毎月の小さな動きで出す割合（残りは年末のニュースのとき）。design.md 7章 */
-export const MONTHLY_VOLATILITY_SHARE = 0.5;
 
 /** ニュースが景気を決めない年の、景気の移り変わりの確率 */
 export const ECONOMY_TRANSITION: Record<Economy, Record<Economy, number>> = {
