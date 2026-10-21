@@ -29,9 +29,11 @@ export interface Strategy {
   gambleChance: number;
   /** 家を買えるときに買う確率 */
   homeChance: number;
+  /** 投資の話に乗る確率（なければ乗らない） */
+  talkChance?: number;
 }
 
-export const DEFAULT_STRATEGY: Strategy = { investRate: 0.5, gambleChance: 0.3, homeChance: 0.4 };
+export const DEFAULT_STRATEGY: Strategy = { investRate: 0.5, gambleChance: 0.3, homeChance: 0.4, talkChance: 0.3 };
 
 /** 決定の選び方。人間らしく、お金に余裕がないときは使わない */
 function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy, rand: () => number): string {
@@ -52,6 +54,11 @@ function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy,
       // 頭金と諸費用を払っても、預金が半分以上残るときだけ買う
       if (home && rand() < strategy.homeChance && -(home.cash ?? 0) * 2 <= cash) return home.id;
       return 'skip';
+    }
+    case 'talk': {
+      // ときどき、うまい話に乗ってしまう
+      const small = enabled.find((o) => o.id === 'join:10');
+      return small && rand() < (strategy.talkChance ?? 0) ? small.id : 'skip';
     }
     case 'stock': {
       // 預金に余裕があれば、ときどき買う

@@ -10,9 +10,9 @@ import type { GameState, JobId } from '../src/game/types';
 const SEEDS_PER_CASE = 30;
 const YEARS = [20, 40];
 const STRATEGIES: { id: string; name: string; strategy: Strategy }[] = [
-  { id: 'none', name: '投資しない', strategy: { investRate: 0, gambleChance: 0.3, homeChance: 0.4 } },
-  { id: 'saving', name: '積み立てだけ（おすすめの金額）', strategy: { investRate: 0, saving: true, gambleChance: 0.3, homeChance: 0.4 } },
-  { id: 'invest', name: '積み立て＋年末に余ったお金の半分を投資信託に', strategy: { investRate: 0.5, saving: true, gambleChance: 0.3, homeChance: 0.4 } },
+  { id: 'none', name: '投資しない', strategy: { investRate: 0, gambleChance: 0.3, homeChance: 0.4, talkChance: 0.3 } },
+  { id: 'saving', name: '積み立てだけ（おすすめの金額）', strategy: { investRate: 0, saving: true, gambleChance: 0.3, homeChance: 0.4, talkChance: 0.3 } },
+  { id: 'invest', name: '積み立て＋年末に余ったお金の半分を投資信託に', strategy: { investRate: 0.5, saving: true, gambleChance: 0.3, homeChance: 0.4, talkChance: 0.3 } },
 ];
 
 interface Row {
@@ -33,6 +33,8 @@ interface Row {
   bigEvents: number;
   gambleSpent: number;
   gambleReturned: number;
+  talkSpent: number;
+  talkReturned: number;
   prices: Record<string, number>;
 }
 
@@ -55,6 +57,8 @@ function toRow(s: GameState, job: JobId, years: number, strategy: string, counts
     bigEvents: s.log.filter((l) => l.key.startsWith('bigEvent.') && l.key.split('.').length === 2).length,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
+    talkSpent: s.stats.talkSpent,
+    talkReturned: s.stats.talkReturned,
     prices: { ...s.market.prices, realEstate: s.market.realEstateIndex, living: s.market.livingIndex },
   };
 }
@@ -176,6 +180,7 @@ ${YEARS.map(section).join('\n')}
 
 - カードローンを使ったことがある割合: ${rate(rows, (r) => r.hadDebt)}
 - ギャンブルの還元率（実際の結果）: ${Math.round((returned / Math.max(1, spent)) * 100)}%
+- 投資の話の還元率（実際の結果）: ${Math.round((rows.reduce((a, r) => a + r.talkReturned, 0) / Math.max(1, rows.reduce((a, r) => a + r.talkSpent, 0))) * 100)}%（自動プレイは、30%の確率で10万円だけ乗る）
 
 ## 資産ごとの実際の値上がり率（40年の年平均）
 

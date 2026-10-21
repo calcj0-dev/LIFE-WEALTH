@@ -20,7 +20,7 @@ import { BigEventModal } from './BigEvent';
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
-const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard)(\.[a-zA-Z]+)+</;
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent)(\.[a-zA-Z]+)+</;
 
 describe('画面', () => {
   it('タイトル画面にバージョンが出る', () => {

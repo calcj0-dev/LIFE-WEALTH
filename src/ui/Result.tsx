@@ -28,6 +28,7 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
             <span>{t('result.savingTotal')}</span>
             <span className="v">{formatMoney(st.savingTotal)}</span>
           </div>
+          <div className="muted">{t('result.talks', { spent: st.talkSpent, returned: st.talkReturned })}</div>
           <div className="muted">{t('result.gamble', { spent: st.gambleSpent, returned: st.gambleReturned })}</div>
           <div className="muted">{t('result.insurance', { paid: st.premiumsPaid, received: st.insurancePaid })}</div>
         </div>

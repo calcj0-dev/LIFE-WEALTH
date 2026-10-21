@@ -76,6 +76,7 @@ export function SidePanel({ s, onOpenHistory, onOpenFeed }: { s: GameState; onOp
             {t(p.savingPaused ? 'panel.saving.paused' : 'panel.saving', { name: t(`asset.${id}`), amount: p.saving[id] })}
           </div>
         ))}
+        {p.talks.length > 0 && <div className="minus">{t('panel.talks', { count: p.talks.length })}</div>}
         <button className="secondary history-button" style={{ marginTop: 8 }} onClick={onOpenHistory}>
           {t('history.open')}
         </button>
