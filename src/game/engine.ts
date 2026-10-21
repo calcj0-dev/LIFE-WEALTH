@@ -44,7 +44,8 @@ import {
   sellOrder,
   totalDebt,
 } from './finance';
-import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { newYearMarket, shockPrice, updateMarketMonth, updateMarketYear } from './market';
+import { BIG_EVENTS, BIG_EVENTS_BY_ID, monthlyChance } from '../data/bigEvents';
 import { nextRandom, pickWeighted, randomInt } from './rng';
 import { computeResult } from './score';
 import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, Settlement, SpouseWork } from './types';
@@ -141,6 +142,7 @@ export function createGame(seed: number): GameState {
     result: null,
     yearMarket: { startPrices: {}, startRealEstateIndex: 1, amounts: {} },
     marketChange: null,
+    bigEvent: null,
   };
   s.yearMarket = newYearMarket(s);
   recordPrices(s, 0);
@@ -209,6 +211,7 @@ export function rollJob(state: GameState): GameState {
 export function roll(state: GameState, card?: { index: number; exact?: number }): GameState {
   assertPhase(state, 'roll');
   if (state.tradeOpen) throw new Error('trade time is open');
+  if (state.bigEvent) throw new Error('big event is showing');
   const s = clone(state);
   let face: number;
   let times = 1;
@@ -794,6 +797,8 @@ function endMonth(s: GameState) {
   accumulate(s);
   coverShortfall(s);
   flows.revaluation += updateMarketMonth(s);
+  flows.revaluation += maybeBigEvent(s);
+  coverShortfall(s);
 
   s.cardUsed = false;
   if (s.month >= MONTHS_PER_YEAR) {
@@ -835,6 +840,78 @@ function coverShortfall(s: GameState) {
     log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
   }
   s.yearFlows.sold += sold;
+}
+
+// ---------------------------------------------------------------- 大きなイベント（design.md 5.3）
+
+/**
+ * 月末に、大きなイベントが起きるか決める。起きたら反映して、画面に見せるための結果を s.bigEvent に入れる。
+ * 1ヶ月に起きるのは1つまで。値動きで動いた自分の資産の金額を返す
+ */
+export function maybeBigEvent(s: GameState): number {
+  for (const ev of BIG_EVENTS) {
+    if (nextRandom(s) < monthlyChance(ev)) return applyBigEvent(s, ev.id);
+  }
+  return 0;
+}
+
+/** 大きなイベントを起こす。値動きで動いた自分の資産の金額を返す */
+function applyBigEvent(s: GameState, id: string): number {
+  const ev = BIG_EVENTS_BY_ID[id];
+  const p = s.player;
+  const result = { id, rates: {} as Record<AssetId, number>, moved: 0, cash: 0, covered: 0 };
+  const pay = (amount: number, key: string) => {
+    if (Math.round(amount * 10) === 0) return;
+    addCash(s, amount, key);
+    result.cash += amount;
+  };
+  for (const ef of ev.effects) {
+    switch (ef.t) {
+      case 'market':
+        for (const asset of ef.assets) {
+          const rate = ef.min + nextRandom(s) * (ef.max - ef.min);
+          result.rates[asset] = rate;
+          result.moved += shockPrice(s, asset, rate);
+        }
+        break;
+      case 'living':
+        s.market.livingIndex *= 1 + ef.rate;
+        break;
+      case 'depositLoss':
+        pay(-Math.max(0, p.cash - ef.threshold) * ef.rate, `bigEvent.${id}.loss`);
+        break;
+      case 'cash':
+        pay(ef.amount, `bigEvent.${id}.cash`);
+        break;
+      case 'homeDamage':
+        if (!p.home) break;
+        if (p.home.fireInsured) {
+          s.stats.insurancePaid += ef.amount;
+          result.covered += ef.amount;
+        } else pay(-ef.amount, `bigEvent.${id}.home`);
+        break;
+    }
+  }
+  log(s, `bigEvent.${id}`, { notice: true });
+  s.bigEvent = result;
+  return result.moved;
+}
+
+/** 大きなイベントを、今すぐ起こす（テスト用） */
+export function triggerBigEvent(state: GameState, id: string): GameState {
+  if (!BIG_EVENTS_BY_ID[id]) throw new Error(`unknown big event: ${id}`);
+  const s = clone(state);
+  const moved = applyBigEvent(s, id);
+  s.yearFlows.revaluation += moved;
+  coverShortfall(s);
+  return s;
+}
+
+/** 大きなイベントの画面を閉じる */
+export function dismissBigEvent(state: GameState): GameState {
+  const s = clone(state);
+  s.bigEvent = null;
+  return s;
 }
 
 // ---------------------------------------------------------------- 年末
@@ -890,6 +967,7 @@ function endYear(s: GameState) {
 /** 年末のニュースと決算を見たあと、次の年へ。最後の年なら終了 */
 export function nextYear(state: GameState): GameState {
   assertPhase(state, 'yearEnd');
+  if (state.bigEvent) throw new Error('big event is showing');
   const s = clone(state);
   if (s.year >= s.years) {
     s.result = computeResult(s);

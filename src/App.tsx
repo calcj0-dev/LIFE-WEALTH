@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, closeTrade, createGame, nextYear, openTradeCard, roll } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, nextYear, openTradeCard, roll } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -13,6 +13,7 @@ import { JobRoulette, YearsSetup } from './ui/Setup';
 import { Toasts } from './ui/Toasts';
 import { SavingSetup, TradeModal } from './ui/Trade';
 import { CardHand, cardIcon } from './ui/Cards';
+import { BigEventModal } from './ui/BigEvent';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -42,7 +43,8 @@ export function App() {
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const busy = spinning || movingPos !== null;
-  const paused = showHistory || showFeed;
+  // 大きなイベントの画面を出している間も、ほかの画面は止める
+  const paused = showHistory || showFeed || !!game?.bigEvent;
   const yearEnd = game?.phase === 'yearEnd';
   const newsStep = yearEnd && newsSeenYear !== game!.year;
   const settleStep = yearEnd && !newsStep && settleSeenYear !== game!.year;
@@ -168,7 +170,7 @@ export function App() {
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
-              canSpin={game.phase === 'roll' && !busy && !game.tradeOpen}
+              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
               onSpin={spin}
               resultLabel={moveLabel ?? undefined}
             />
@@ -194,6 +196,7 @@ export function App() {
         )}
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
+        {!busy && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
         {ready && game.phase === 'decision' && <DecisionModal s={game} onChoose={(id) => setGame(choose(game, id))} />}
         {ready && !autoView && newsStep && isImportantNews(game) && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
         {ready && !autoView && settleStep && isNotableYearEnd(game) && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}

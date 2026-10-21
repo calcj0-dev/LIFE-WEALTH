@@ -283,6 +283,20 @@ export interface GameState {
   yearMarket: YearMarket;
   /** 最後の年末の値動き */
   marketChange: MarketChange | null;
+  /** 起きたばかりの大きなイベント。画面いっぱいに見せ、「OK」を押すまで止める（design.md 5.3） */
+  bigEvent: BigEventResult | null;
+}
+
+export interface BigEventResult {
+  id: string;
+  /** 銘柄ごとの値動きの割合（大暴落、大急騰など） */
+  rates: Record<AssetId, number>;
+  /** 値動きで、自分の資産が動いた金額 */
+  moved: number;
+  /** お金が動いた金額（預金の損、地震の被害、相続など。保険で払われた分は含めない） */
+  cash: number;
+  /** 保険で払われた金額 */
+  covered: number;
 }
 
 export interface YearMarket {

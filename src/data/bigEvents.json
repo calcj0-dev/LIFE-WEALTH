@@ -1,0 +1,45 @@
+{
+  "_note": "大きなイベント。design.md 5.3。everyYears は「何年に1回くらい起きるか」。月末に、1ヶ月あたり 1 ÷ (everyYears × 12) の確率で起きる。effects の t: market（銘柄の値段を min〜max の割合で動かす）、living（生活費の水準を rate だけ上げる）、depositLoss（預金のうち threshold を超える分の rate を失う）、cash（全員のお金が amount 動く）、homeDamage（持ち家の損害。火災・地震保険に入っていれば保険で払われる）",
+  "events": [
+    {
+      "id": "crash",
+      "everyYears": 7,
+      "effects": [
+        { "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": -0.5, "max": -0.3 },
+        { "t": "market", "assets": ["gold"], "min": 0.05, "max": 0.1 },
+        { "t": "market", "assets": ["bond"], "min": 0.02, "max": 0.03 }
+      ]
+    },
+    {
+      "id": "surge",
+      "everyYears": 7,
+      "effects": [{ "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": 0.2, "max": 0.4 }]
+    },
+    {
+      "id": "inflationShock",
+      "everyYears": 15,
+      "effects": [
+        { "t": "living", "rate": 0.1 },
+        { "t": "market", "assets": ["gold", "energy"], "min": 0.1, "max": 0.2 }
+      ]
+    },
+    {
+      "id": "bankFailure",
+      "everyYears": 20,
+      "effects": [{ "t": "depositLoss", "threshold": 1000, "rate": 0.5 }]
+    },
+    {
+      "id": "earthquake",
+      "everyYears": 20,
+      "effects": [
+        { "t": "cash", "amount": -100 },
+        { "t": "homeDamage", "amount": 1000 }
+      ]
+    },
+    {
+      "id": "inheritance",
+      "everyYears": 20,
+      "effects": [{ "t": "cash", "amount": 500 }]
+    }
+  ]
+}

@@ -30,6 +30,7 @@ interface Row {
   bonusPerYear: number;
   bonusTotal: number;
   cardsPerYear: number;
+  bigEvents: number;
   gambleSpent: number;
   gambleReturned: number;
   prices: Record<string, number>;
@@ -51,6 +52,7 @@ function toRow(s: GameState, job: JobId, years: number, strategy: string, counts
     bonusPerYear: s.log.filter((l) => l.key === 'bonus.get').length / years,
     bonusTotal: s.log.filter((l) => l.key === 'bonus.get').reduce((a, l) => a + (l.cash ?? 0), 0),
     cardsPerYear: s.log.filter((l) => l.key === 'card.use').length / years,
+    bigEvents: s.log.filter((l) => l.key.startsWith('bigEvent.') && l.key.split('.').length === 2).length,
     gambleSpent: s.stats.gambleSpent,
     gambleReturned: s.stats.gambleReturned,
     prices: { ...s.market.prices, realEstate: s.market.realEstateIndex, living: s.market.livingIndex },
@@ -160,6 +162,10 @@ ${YEARS.map(section).join('\n')}
 
 - ポップアップで止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.popupsPerYear)).toFixed(1)}回（12ターンのうち。年末のニュースと決算は含まない）
 - カードを使った回数: 1年あたり平均 ${mean(rows.map((r) => r.cardsPerYear)).toFixed(1)}回（自動プレイは、ボーナスマスをねらうときと、手札がいっぱいのときに使う）
+
+## 大きなイベント
+
+- 20年で起きた回数: 平均 ${mean(rows.filter((r) => r.years === 20).map((r) => r.bigEvents)).toFixed(1)}回
 
 ## ボーナスマス
 

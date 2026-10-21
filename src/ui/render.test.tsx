@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Board } from '../board/Board';
 import { Roulette } from '../board/Roulette';
 import { playGame } from '../game/autoplay';
-import { choose, chooseJob, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
 import { AutoPopup, FeedPanel, NewsBrief, YearEndBrief } from './Feed';
@@ -15,6 +15,7 @@ import { Result } from './Result';
 import { BudgetCard, JobRoulette, YearsSetup, minutesFor } from './Setup';
 import { SavingSetup, TradeModal } from './Trade';
 import { CardHand } from './Cards';
+import { BigEventModal } from './BigEvent';
 
 const noop = () => {};
 
@@ -50,6 +51,11 @@ describe('画面', () => {
   it('1年の流れのどの場面も、エラーなく描ける', () => {
     let s: GameState = setSaving(chooseJob(chooseYears(createGame(5), 10), 'employee'), { fund: 2, gold: 1 });
     while (s.phase !== 'finished') {
+      if (s.bigEvent) {
+        expect(renderToString(<BigEventModal s={s} onClose={noop} />)).not.toMatch(RAW_KEY);
+        s = dismissBigEvent(s);
+        continue;
+      }
       if (s.phase === 'roll') {
         const hand = renderToString(<CardHand s={s} canUse onMove={noop} onTrade={noop} />);
         expect(hand).toContain('ボーナスマスまで');

@@ -12,6 +12,8 @@ import {
   REAL_ESTATE_DRIFT,
   REAL_ESTATE_VOLATILITY,
 } from '../data/assets';
+import { BIG_EVENTS, monthlyChance } from '../data/bigEvents';
+import calibration from '../data/marketCalibration.json';
 import { NEWS, type NewsDef } from '../data/news';
 import { BASE_INFLATION, REAL_ESTATE } from '../data/rules';
 import { pickWeighted, randomNormal } from './rng';
@@ -87,10 +89,111 @@ function computeCorrection(): Record<Key, number> {
     // 1年あたりの平均と散らばり。平均の上乗せを打ち消し、値動きの散らばりで複利が目減りする分を足す
     result[k] = -mean / YEARS + (variance / YEARS + volOf(k) ** 2) / 2;
   }
+  // 大きなイベント（大暴落、大急騰など。design.md 5.3）で動く分も打ち消す。
+  // 一気に動くので、複利で目減りする分まで含めて、対数（何倍になったか）で平均を出す
+  for (const ev of BIG_EVENTS) {
+    const perYear = monthlyChance(ev) * 12;
+    for (const ef of ev.effects) {
+      if (ef.t !== 'market') continue;
+      const STEPS = 100;
+      let logMean = 0;
+      for (let i = 0; i < STEPS; i++) logMean += Math.log(1 + ef.min + ((i + 0.5) / STEPS) * (ef.max - ef.min)) / STEPS;
+      for (const k of ef.assets) result[k] -= perYear * logMean;
+    }
+  }
   return result;
 }
 
-const CORRECTION = computeCorrection();
+/**
+ * ゲームと同じ値動き（毎月の動き、年末のニュース、大きなイベント）を、決まった乱数で何度も試し、
+ * 銘柄ごとの「長い目で見た年平均の伸び（中央の値）」を求める。補正の微調整に使う
+ */
+export function simulateGrowth(correction: Record<Key, number>, paths: number, years: number): Record<AssetId, number> {
+  let seed = 67890;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const normal = () => Math.sqrt(-2 * Math.log(Math.max(rand(), 1e-12))) * Math.cos(2 * Math.PI * rand());
+  const total = NEWS.reduce((a, n) => a + n.weight, 0);
+  const growth: Record<AssetId, number[]> = Object.fromEntries(ASSET_IDS.map((id) => [id, []]));
+  for (let path = 0; path < paths; path++) {
+    let economy: Economy = 'normal';
+    const logPrice: Record<AssetId, number> = Object.fromEntries(ASSET_IDS.map((id) => [id, 0]));
+    for (let y = 0; y < years; y++) {
+      for (let m = 0; m < 12; m++) {
+        for (const id of ASSET_IDS) {
+          const a = ASSETS[id];
+          const drift = Math.pow(1 + a.meanReturn + correction[id] + a.drift[economy], 1 / 12) - 1;
+          logPrice[id] += Math.log(1 + clamp(drift + a.volatility * Math.sqrt(MONTHLY_VOLATILITY_SHARE / 12) * normal(), MONTH_LIMIT));
+        }
+        for (const ev of BIG_EVENTS) {
+          if (rand() >= monthlyChance(ev)) continue;
+          for (const ef of ev.effects) {
+            if (ef.t !== 'market') continue;
+            for (const id of ef.assets) logPrice[id] += Math.log(1 + ef.min + rand() * (ef.max - ef.min));
+          }
+          break;
+        }
+      }
+      let r = rand() * total;
+      let news = NEWS[NEWS.length - 1];
+      for (const n of NEWS) {
+        r -= n.weight;
+        if (r < 0) {
+          news = n;
+          break;
+        }
+      }
+      for (const id of ASSET_IDS) {
+        const noise = ASSETS[id].volatility * Math.sqrt(1 - MONTHLY_VOLATILITY_SHARE) * normal();
+        logPrice[id] += Math.log(1 + clamp((news.shocks[id] ?? 0) + noise, YEAR_LIMIT));
+      }
+      if (news.economy) economy = news.economy;
+      else {
+        let q = rand();
+        let next: Economy = 'normal';
+        for (const e of ECONOMIES) {
+          q -= ECONOMY_TRANSITION[economy][e];
+          if (q < 0) {
+            next = e;
+            break;
+          }
+        }
+        economy = next;
+      }
+    }
+    for (const id of ASSET_IDS) growth[id].push(Math.exp(logPrice[id] / years) - 1);
+  }
+  return Object.fromEntries(
+    ASSET_IDS.map((id) => {
+      const sorted = growth[id].sort((a, b) => a - b);
+      return [id, sorted[Math.floor(sorted.length / 2)]];
+    }),
+  );
+}
+
+/**
+ * 補正。計算で出した値に、前もって試して求めた微調整（src/data/marketCalibration.json）を足す。
+ * 微調整は、銘柄・ニュース・大きなイベントのデータを変えたら、npm run calibrate で作り直す
+ */
+export function baseCorrection(): Record<Key, number> {
+  return computeCorrection();
+}
+
+const CORRECTION: Record<Key, number> = (() => {
+  const c = computeCorrection();
+  const offsets = (calibration as { offsets: Record<string, number> }).offsets;
+  for (const id of ASSET_IDS) c[id] += offsets[id] ?? 0;
+  return c;
+})();
+
+/** 大きなイベントで、銘柄の値段を一気に動かす。動いた金額（自分の資産）を返す */
+export function shockPrice(s: GameState, id: AssetId, rate: number): number {
+  return movePrice(s, id, rate);
+}
 
 export function newsById(id: string): NewsDef {
   const n = NEWS.find((x) => x.id === id);
