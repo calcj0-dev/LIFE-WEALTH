@@ -1,0 +1,27 @@
+{
+  "_note": "投資の話のマス（投資の落とし穴）。design.md 6.4。乗ると元手を払い、結果はその年の年末に決まる。outcomes の multiplier は「元手の何倍が戻るか」。マイナスなら、その分が借金になる。どれも平均すると損をする（multiplier × probability の合計が1より小さい）",
+  "amounts": [10, 50, 100],
+  "talks": [
+    {
+      "id": "scam",
+      "outcomes": [
+        { "probability": 0.8, "multiplier": 0 },
+        { "probability": 0.2, "multiplier": 2 }
+      ]
+    },
+    {
+      "id": "hype",
+      "outcomes": [
+        { "probability": 0.7, "multiplier": 0.5 },
+        { "probability": 0.3, "multiplier": 2 }
+      ]
+    },
+    {
+      "id": "leverage",
+      "outcomes": [
+        { "probability": 0.4, "multiplier": 3 },
+        { "probability": 0.6, "multiplier": -1 }
+      ]
+    }
+  ]
+}

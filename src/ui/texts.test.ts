@@ -25,6 +25,7 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
     else if (s.phase === 'decision') {
       const d = s.decision!;
       if (d.kind === 'event') keys.add(`event.${d.eventId}.title`).add(`event.${d.eventId}.text`);
+      else if (d.kind === 'talk') keys.add(`talk.${d.talkId}.title`).add(`talk.${d.talkId}.text`);
       else if (d.kind === 'notice') keys.add(`${d.messageKey}.title`).add(`${d.messageKey}.text`);
       else keys.add(`${d.kind}.title`).add(`${d.kind}.text`);
       describeDecision(s);

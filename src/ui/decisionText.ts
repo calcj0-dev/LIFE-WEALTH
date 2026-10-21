@@ -14,6 +14,8 @@ export function describeDecision(s: GameState): { title: string; text: string; s
       return { title: t(`event.${d.eventId}.title`), text: t(`event.${d.eventId}.text`), squareType };
     case 'realEstate':
       return { title: t('realEstate.title'), text: t('realEstate.text', { price: d.offerPrice! }), squareType };
+    case 'talk':
+      return { title: t(`talk.${d.talkId}.title`), text: t(`talk.${d.talkId}.text`), squareType };
     case 'stock': {
       const rate = s.marketChange?.rates[d.assetId!];
       const text = t('stock.text', { name: t(`asset.${d.assetId}`) });

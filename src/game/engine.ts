@@ -4,6 +4,7 @@
 import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, START_PRICE, zeroHoldings } from '../data/assets';
 import { BOARD } from '../data/board';
 import { CARDS, CARDS_BY_ID, HAND_MAX } from '../data/cards';
+import { INVEST_TALKS, INVEST_TALKS_BY_ID, TALK_AMOUNTS } from '../data/investTalks';
 import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSize } from '../data/events';
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, type GambleId } from '../data/gamble';
 import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_YEAR, JOBS, JOB_IDS, salaryAtYear } from '../data/jobs';
@@ -113,6 +114,7 @@ export function createGame(seed: number): GameState {
       position: 0,
       lap: 0,
       hand: [],
+      talks: [],
     },
     market: {
       prices: Object.fromEntries(ASSET_IDS.map((id) => [id, START_PRICE])),
@@ -138,7 +140,7 @@ export function createGame(seed: number): GameState {
     history: [],
     prices: [],
     log: [],
-    stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0, savingTotal: 0 },
+    stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0, savingTotal: 0, talkSpent: 0, talkReturned: 0 },
     result: null,
     yearMarket: { startPrices: {}, startRealEstateIndex: 1, amounts: {} },
     marketChange: null,
@@ -359,8 +361,8 @@ function handleSquare(s: GameState) {
       return startDecision(s, { kind: 'stock', assetId: stocks[randomInt(s, 0, stocks.length - 1)] }, 'square');
     }
     case 'investTalk':
-      // 投資の話のマスは段階3.5の5で作る
-      return notice('square.investTalk.soon');
+      // 投資の落とし穴。3つのどれかの話を持ちかけられる（design.md 6.4）
+      return startDecision(s, { kind: 'talk', talkId: INVEST_TALKS[randomInt(s, 0, INVEST_TALKS.length - 1)].id }, 'square');
     case 'gamble':
       return startDecision(s, { kind: 'gamble' }, 'square');
     case 'realEstate': {
@@ -478,6 +480,17 @@ export function getOptions(s: GameState): DecisionOption[] {
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
+    case 'talk':
+      return [
+        ...TALK_AMOUNTS.map((amount) => ({
+          id: `join:${amount}`,
+          key: `option.talk.${d.talkId}`,
+          params: { amount },
+          enabled: canAfford(s, amount),
+          cash: -amount,
+        })),
+        { id: 'skip', key: 'option.talk.decline', enabled: true },
+      ];
     case 'discard':
       return s.player.hand.map((card, i) => ({ id: `discard:${i}`, key: 'option.discard', params: { card }, enabled: true }));
     case 'stock':
@@ -583,6 +596,18 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
     case 'realEstate':
       if (optionId !== 'skip') buyHome(s, d.offerPrice!, optionId === 'homeLoan');
       return null;
+    case 'talk': {
+      const id = d.talkId!;
+      if (optionId === 'skip') {
+        log(s, `talk.${id}.decline`);
+        return null;
+      }
+      const amount = Number(optionId.slice(5));
+      addCash(s, -amount, `talk.${id}.join`, { amount });
+      p.talks.push({ id, amount });
+      s.stats.talkSpent += amount;
+      return null;
+    }
     case 'discard': {
       const [card] = p.hand.splice(Number(optionId.slice(8)), 1);
       log(s, 'card.discard', { params: { card } });
@@ -916,9 +941,33 @@ export function dismissBigEvent(state: GameState): GameState {
 
 // ---------------------------------------------------------------- 年末
 
-/** 年末: 利息と配当が入り、ニュースで相場が大きく動き、決算をまとめる */
+/** 乗った投資の話の結果を決める（design.md 6.4）。戻ったお金は預金に、借金になった分はカードローンに入る */
+function resolveTalks(s: GameState) {
+  const p = s.player;
+  for (const talk of p.talks) {
+    const def = INVEST_TALKS_BY_ID[talk.id];
+    const outcome = pickWeighted(s, def.outcomes, (o) => o.probability)!;
+    const back = talk.amount * outcome.multiplier;
+    s.stats.talkReturned += back;
+    const params = { amount: talk.amount, back: Math.abs(back) };
+    if (back > talk.amount) {
+      addCash(s, back, `talk.${talk.id}.win`, params);
+    } else if (back > 0) {
+      addCash(s, back, `talk.${talk.id}.lose`, params);
+    } else if (back === 0) {
+      log(s, `talk.${talk.id}.lose`, { params, notice: true });
+    } else {
+      p.cardLoan += -back;
+      log(s, `talk.${talk.id}.debt`, { params, notice: true });
+    }
+  }
+  p.talks = [];
+}
+
+/** 年末: 投資の話の結果が出て、利息と配当が入り、ニュースで相場が大きく動き、決算をまとめる */
 function endYear(s: GameState) {
   const p = s.player;
+  resolveTalks(s);
   const flows = s.yearFlows;
   const yearly: Record<string, number> = {
     interest: Math.max(0, p.cash) * s.market.depositRate,

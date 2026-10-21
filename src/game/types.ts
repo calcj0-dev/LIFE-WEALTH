@@ -99,6 +99,8 @@ export interface Player {
   lap: number;
   /** 手札のカード（カードの番号。design.md 3.9） */
   hand: string[];
+  /** 乗った投資の話。結果は年末に決まる（design.md 6.4） */
+  talks: { id: string; amount: number }[];
 }
 
 export interface Market {
@@ -193,6 +195,9 @@ export interface Stats {
   insurancePaid: number;
   /** 積み立てで買った金額の合計 */
   savingTotal: number;
+  /** 投資の話に払った元手の合計と、戻ってきた金額の合計（借金になった分はマイナス） */
+  talkSpent: number;
+  talkReturned: number;
 }
 
 export type DecisionKind =
@@ -202,6 +207,7 @@ export type DecisionKind =
   | 'gamble'
   | 'realEstate'
   | 'stock'
+  | 'talk'
   | 'discard'
   | 'athleteRetire'
   | 'notice';
@@ -214,6 +220,8 @@ export interface Decision {
   offerPrice?: number;
   /** 株のマスで、割安に買える銘柄 */
   assetId?: AssetId;
+  /** 投資の話の種類 */
+  talkId?: string;
   /** お知らせの文章の番号（notice） */
   messageKey?: string;
   params?: Record<string, number | string>;
