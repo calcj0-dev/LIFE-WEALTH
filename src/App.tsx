@@ -19,7 +19,8 @@ import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
 import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
-import { RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
+import { BonusModal, RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
+import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
 
@@ -31,6 +32,8 @@ const PAY_STEP_MS = [300, 650, 650, 250];
 /** ライバルの駒が1マス進む時間と、ライバルの番の前後の間（ミリ秒。design.md 12.2） */
 const RIVAL_STEP_MS = 130;
 const RIVAL_PAUSE_MS = 400;
+/** 次のボーナスマスの発表を見せる時間（ミリ秒） */
+const ANNOUNCE_MS = 1800;
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -71,12 +74,18 @@ export function App() {
   // あなたの月末を見せる順番（design.md 2.2、12.2）: 給料と生活費のアクション → 今月のまとめ → ライバルの番
   // → ライバルのお知らせ → 大きなイベント・ニュース。計算は全員分もう済んでいるので、見せる順番だけを決める
 
+  // あなたがボーナスマスに止まったら、まず「ボーナスゲット！」の画面を出す（design.md 3.10）
+  /** ボーナスゲットの画面を閉じた月 */
+  const [bonusShown, setBonusShown] = useState<string | null>(null);
+  const bonusEntry = humanDone && monthEnded && game && turnStart ? game.log.slice(turnStart.logLen).find((e) => e.key === 'bonus.get') : undefined;
+  const celebrating = !!bonusEntry && bonusShown !== flowKey;
+
   // 給料と生活費のアクション。銀行預金の横に「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
   /** アクションを見せ終わった月 */
   const [payShown, setPayShown] = useState<string | null>(null);
   /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
   const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
-  const paying = humanDone && monthEnded && payShown !== flowKey;
+  const paying = humanDone && monthEnded && !celebrating && payShown !== flowKey;
   const payIndex = payStep?.key === flowKey ? payStep.i : 0;
   /** 大きなイベントで動いた銀行預金（ライバルの番のあとに見せるので、それまでは引いておく） */
   const bigEventCash = game?.bigEvent?.cash ?? 0;
@@ -106,7 +115,7 @@ export function App() {
   // 大きなイベントとニュースは全員に起きるので、このあとの画面で見せる（まとめには入れない）
   const monthEntries = game && turnStart ? game.log.slice(turnStart.logLen).filter((e) => !e.key.startsWith('bigEvent.')) : [];
   const summary: TurnSummaryData | null =
-    game && turnStart && humanDone && monthEnded && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
+    game && turnStart && humanDone && monthEnded && !celebrating && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
       ? {
           year: turnStart.year,
           month: turnStart.month,
@@ -125,7 +134,7 @@ export function App() {
   const [rivalShown, setRivalShown] = useState<string | null>(null);
   /** 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前） */
   const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number } | null>(null);
-  const rivalsMoving = humanDone && monthEnded && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
+  const rivalsMoving = humanDone && monthEnded && !celebrating && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
   const rs = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
   const rivalPositions =
     game?.rivals.map((r, k) => {
@@ -149,7 +158,7 @@ export function App() {
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
   // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
-  const turnComplete = humanDone && monthEnded && !paying && !summary && !rivalsMoving;
+  const turnComplete = humanDone && monthEnded && !celebrating && !paying && !summary && !rivalsMoving;
   useEffect(() => {
     if (turnComplete) setTurnStart(null);
   }, [turnComplete]);
@@ -170,8 +179,35 @@ export function App() {
   });
   /** ターンが終わり、ライバルのお知らせも見たあと（大きなイベントとニュースを出す） */
   const afterTurn = !turnStart && alerts.length === 0;
+
+  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、
+  // ほかの画面がないときに、盤面をボーナスマスまで動かして「次のボーナスマスはここ！」と出す
+  /** 発表を見せたボーナスマス */
+  const [announced, setAnnounced] = useState<number | null>(null);
+  /** 発表を見せている間 */
+  const [announcing, setAnnouncing] = useState(false);
+  const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
+  const wantAnnounce = inPlay && afterTurn && !game!.bigEvent && !game!.newsEvent && !showHistory && !showFeed && announced !== game!.bonusSquare;
+  useEffect(() => {
+    if (!game) {
+      setAnnounced(null);
+      return;
+    }
+    if (!wantAnnounce) return;
+    setAnnouncing(true);
+    const square = game.bonusSquare;
+    const id = window.setTimeout(() => {
+      setAnnounced(square);
+      setAnnouncing(false);
+    }, ANNOUNCE_MS);
+    // 途中で止まったときも、発表中のままにならないようにする
+    return () => {
+      window.clearTimeout(id);
+      setAnnouncing(false);
+    };
+  }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
-  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0;
+  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce;
   const yearEnd = game?.phase === 'yearEnd';
   const tradeStep = yearEnd && tradeYear === game!.year;
   const settleStep = yearEnd && !tradeStep;
@@ -306,9 +342,15 @@ export function App() {
                 look: RIVAL_LOOKS[r.id],
                 family: familyOf(game.seed, r.id, r.player.married, r.player.children, RIVAL_LOOKS[r.id]),
               }))}
-              focus={rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
+              focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
               landed={humanDone ? game.player.position : undefined}
             />
+            {announcing && (
+              <div className="bonus-announce" role="status">
+                <div className="bonus-announce-title">{t('bonus.announce')}</div>
+                <div>{t('bonus.announceDistance', { n: bonusDistance(game) })}</div>
+              </div>
+            )}
             <div className="board-toolbar">
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
                 {t(overview ? 'board.follow' : 'board.overview')}
@@ -346,6 +388,9 @@ export function App() {
         )}
         {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
         {!busy && afterTurn && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
+        {celebrating && bonusEntry && !showHistory && !showFeed && (
+          <BonusModal amount={bonusEntry.cash ?? 0} onClose={() => setBonusShown(flowKey)} />
+        )}
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}

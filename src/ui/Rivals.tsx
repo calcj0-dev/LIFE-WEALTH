@@ -103,10 +103,12 @@ export function RivalFeed({ s, hideMonth }: { s: GameState; hideMonth?: { year: 
 
 /** 大事な動きのお知らせ（ライバルの結婚、ボーナスマスを取られた、大きな損）。「OK」で閉じる */
 export function RivalAlertModal({ lines, onClose }: { lines: RivalLine[]; onClose: () => void }) {
+  // ボーナスマスを取られたときは、見出しを変えて、少し派手にする
+  const taker = lines.find((l) => l.entry.key === 'bonus.get');
   return (
-    <div className="overlay">
-      <div className="modal rival-alert">
-        <h2>{t('rivalAlert.title')}</h2>
+    <div className={`overlay${taker ? ' shake' : ''}`}>
+      <div className={`modal rival-alert${taker ? ' bonus-taken' : ''}`}>
+        <h2>{taker ? t('rivalAlert.bonusTaken', { name: rivalName(taker.id) }) : t('rivalAlert.title')}</h2>
         {lines.map((l, i) => (
           <div key={i} className="rival-alert-row" style={{ borderColor: RIVAL_LOOKS[l.id].color }}>
             <Line line={l} />
@@ -292,6 +294,24 @@ export function WorthRaceChart({ s }: { s: GameState }) {
             {whoName(ser.who)}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** あなたがボーナスマスに止まったときの画面（design.md 3.10） */
+export function BonusModal({ amount, onClose }: { amount: number; onClose: () => void }) {
+  return (
+    <div className="overlay">
+      <Confetti count={60} seed={3} />
+      <div className="modal bonus-get">
+        <div className="bonus-get-star">★</div>
+        <h2>{t('bonus.getTitle')}</h2>
+        <div className="bonus-get-amount">+{formatMoney(amount)}</div>
+        <p className="muted">{t('bonus.getText')}</p>
+        <div className="options">
+          <button onClick={onClose}>{t('option.ok')}</button>
+        </div>
       </div>
     </div>
   );

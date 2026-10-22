@@ -606,5 +606,10 @@
   "avatar.title": "あなたのキャラクターを選ぼう",
   "avatar.lead": "ライバルは、コツコツさん（堅実タイプ）とイケイケさん（攻めタイプ）の2人です。",
   "avatar.start": "このキャラクターで始める",
-  "panel.independent": "独立した子ども {count}人"
+  "panel.independent": "独立した子ども {count}人",
+  "bonus.getTitle": "ボーナスゲット！",
+  "bonus.getText": "ボーナスマスにぴったり止まりました。次のボーナスマスも、カードを使ってねらいましょう。",
+  "bonus.announce": "次のボーナスマスはここ！",
+  "bonus.announceDistance": "あなたの駒から あと{n}マス",
+  "rivalAlert.bonusTaken": "{name}にボーナスを取られた！"
 }
