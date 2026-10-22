@@ -307,6 +307,7 @@ export function App() {
                 family: familyOf(game.seed, r.id, r.player.married, r.player.children, RIVAL_LOOKS[r.id]),
               }))}
               focus={rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
+              landed={humanDone ? game.player.position : undefined}
             />
             <div className="board-toolbar">
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>

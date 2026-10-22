@@ -34,6 +34,13 @@ export function Roulette({ value, spinning, canSpin, onSpin, labels, buttonLabel
   const angleFor = (n: number) => -((n - 0.5) * 360) / count;
   const [rotation, setRotation] = useState(0);
   const turns = useRef(0);
+  /** 止まった回数（止まるたびに、出た数字を大きく出す演出をやり直す） */
+  const [stops, setStops] = useState(0);
+  const wasSpinning = useRef(false);
+  useEffect(() => {
+    if (wasSpinning.current && !spinning) setStops((n) => n + 1);
+    wasSpinning.current = spinning;
+  }, [spinning]);
 
   useEffect(() => {
     if (!spinning || value === null) return;
@@ -89,6 +96,11 @@ export function Roulette({ value, spinning, canSpin, onSpin, labels, buttonLabel
         <circle r="16" fill="#fff" stroke="#e6d3ad" strokeWidth="4" />
         <polygon points="-14,-112 14,-112 0,-86" fill="#2d2a32" stroke="#fff" strokeWidth="3" />
       </svg>
+      {!spinning && value !== null && stops > 0 && !large && (
+        <div key={stops} className="roll-pop" aria-hidden="true">
+          {value}
+        </div>
+      )}
       {!spinning && value !== null && !canSpin && (
         <div className="roll-result">{resultLabel ?? t('roll.result', { n: value })}</div>
       )}

@@ -167,12 +167,16 @@ interface Props {
   others?: { position: number; look: Look; family?: FamilyMember[] }[];
   /** 映すマス（ライバルの番で、ライバルを追うとき）。なければ、あなたの駒を映す */
   focus?: number;
+  /** 止まったばかりのマス（光らせる） */
+  landed?: number;
 }
 
 /** 人の駒（キャラクター）。家族は、うしろに小さく並んで一緒に歩く（design.md 10.1） */
 function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; family?: FamilyMember[] }) {
   return (
     <g style={{ transform: `translate(${x}px, ${y - 40}px)`, transition: 'transform 0.22s ease-out' }}>
+      {/* マスが変わるたびに作り直して、ぴょんと跳ねる動きをやり直す */}
+      <g key={`${x},${y}`} className="piece-hop">
       {/* 遠くの家族から描き、近い家族が手前に重なるようにする。足もとの高さをそろえる */}
       {family
         .map((m, j) => (
@@ -182,6 +186,7 @@ function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; 
         ))
         .reverse()}
       <AvatarBody look={look} />
+      </g>
     </g>
   );
 }
@@ -215,7 +220,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus }: Props) {
+export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -313,6 +318,9 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
               {/* 上のほうを少し明るくして、ふっくらした見た目にする */}
               <path d={`M${-SIZE / 2 + 6},${-SIZE / 2 + 18} Q${-SIZE / 2 + 6},${-SIZE / 2 + 6} ${-SIZE / 2 + 18},${-SIZE / 2 + 6} L${SIZE / 2 - 18},${-SIZE / 2 + 6} Q${SIZE / 2 - 6},${-SIZE / 2 + 6} ${SIZE / 2 - 6},${-SIZE / 2 + 18} L${SIZE / 2 - 6},-4 L${-SIZE / 2 + 6},-4 Z`} fill="#fff" opacity="0.16" />
               <SquareIcon type={sq.type} married={married} />
+              {sq.id === landed && (
+                <rect className="square-landed" x={-SIZE / 2 - 4} y={-SIZE / 2 - 4} width={SIZE + 8} height={SIZE + 8} rx="19" fill="none" stroke="#fff6a8" strokeWidth="6" />
+              )}
               {sq.id === bonus && (
                 <g>
                   <rect x={-SIZE / 2 - 6} y={-SIZE / 2 - 6} width={SIZE + 12} height={SIZE + 12} rx="20" fill="none" stroke="#ff4d6d" strokeWidth="6" strokeDasharray="10 6" />

@@ -46,6 +46,13 @@ export function AnimatedMoney({ value, level = 'medium', className, label }: { v
   return (
     <span className={`animated-money${tone}${className ? ` ${className}` : ''}`} key={delta?.key}>
       {formatMoney(value)}
+      {delta && delta.level !== 'weak' && delta.v > 0 && (
+        <span className="coin-burst" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
       {delta && delta.level !== 'weak' && (
         <span className={`money-float ${delta.v > 0 ? 'plus' : 'minus'}${delta.level === 'strong' ? ' strong' : ''}`}>
           {delta.v > 0 ? '+' : ''}

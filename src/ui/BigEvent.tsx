@@ -5,6 +5,7 @@ import type { GameState } from '../game/types';
 import { formatMoney, formatSigned, has, t } from '../i18n';
 import { MoneyDelta } from './Delta';
 import { EveryoneMoved } from './Rivals';
+import { Confetti } from './Confetti';
 
 const ICONS: Record<string, string> = {
   crash: '📉',
@@ -15,12 +16,17 @@ const ICONS: Record<string, string> = {
   inheritance: '🎁',
 };
 
+/** 画面をゆらす大きなイベントと、紙ふぶきを出す大きなイベント（design.md 10.1） */
+const SHAKE = ['crash', 'earthquake', 'bankFailure', 'inflationShock'];
+const CELEBRATE = ['surge', 'inheritance'];
+
 export function BigEventModal({ s, onClose }: { s: GameState; onClose: () => void }) {
   const ev = s.bigEvent!;
   const rates = Object.entries(ev.rates);
   const hasTradeCard = s.player.hand.some((c) => CARDS_BY_ID[c]?.kind === 'trade');
   return (
-    <div className="overlay big-event-overlay">
+    <div className={`overlay big-event-overlay${SHAKE.includes(ev.id) ? ' shake' : ''}`}>
+      {CELEBRATE.includes(ev.id) && <Confetti seed={ev.id.length} />}
       <div className={`modal big-event big-event-${ev.id}`}>
         <div className="big-event-icon">{ICONS[ev.id] ?? '⚡'}</div>
         <h2>{t(`bigEvent.${ev.id}.title`)}</h2>

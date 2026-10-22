@@ -7,6 +7,7 @@ import type { GameState, LogEntry, RivalId, SeatData } from '../game/types';
 import { formatMoney, formatSigned, t } from '../i18n';
 import { niceStep } from './AssetChart';
 import { yearTickStep } from './chartColors';
+import { Confetti } from './Confetti';
 import { AvatarIcon } from '../board/Avatar';
 import { RIVAL_LOOKS, lookById, type Look } from '../data/characters';
 import { MoneyDelta } from './Delta';
@@ -206,6 +207,7 @@ export function FinalRanking({ s }: { s: GameState }) {
   const best = byReturn[0];
   return (
     <div className="final-ranking">
+      {me.rank === 1 && <Confetti count={70} seed={7} />}
       <div className="final-headline">{t('result.yourRank', { n: me.rank })}</div>
       <div className="final-list">
         {list.map((x) => (

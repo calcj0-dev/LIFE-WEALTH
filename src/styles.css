@@ -1168,7 +1168,7 @@ button.small {
   animation: money-flash-up 1.2s ease-out;
 }
 .animated-money.flash-medium-down {
-  animation: money-flash-down 1.2s ease-out;
+  animation: money-flash-down 1.2s ease-out, money-shake 0.4s ease-in-out;
 }
 .animated-money.flash-strong-up {
   animation: money-flash-up 1.6s ease-out, money-shake 0.5s ease-in-out;
@@ -1862,4 +1862,184 @@ button.small {
   align-items: flex-end;
   gap: 4px;
   margin-bottom: 4px;
+}
+
+/* ---------------- 演出（design.md 10.1） */
+
+/* ルーレットが止まったら、出た数字を大きく出す（画面の中のルーレットでは出さない） */
+.modal .roll-pop,
+.center-screen .roll-pop {
+  display: none;
+}
+.roll-pop {
+  position: absolute;
+  left: 50%;
+  top: 92px;
+  width: 64px;
+  height: 64px;
+  margin-left: -32px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  color: var(--primary);
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 64px;
+  text-align: center;
+  pointer-events: none;
+  animation: roll-pop 1s ease-out forwards;
+}
+@keyframes roll-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  45% {
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+/* 駒は1マスごとにぴょんと跳ねる */
+.piece-hop {
+  animation: piece-hop 0.26s ease-out;
+}
+@keyframes piece-hop {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-16px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+/* 止まったマスが光る */
+.square-landed {
+  animation: square-landed 1.2s ease-in-out infinite;
+}
+@keyframes square-landed {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* お金が増えたら、コインが数字に飛びこむ */
+.animated-money {
+  position: relative;
+}
+.coin-burst {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  pointer-events: none;
+}
+.coin-burst i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0, #ffc93c 60%, #d99a00);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  animation: coin-in 0.8s ease-in forwards;
+}
+.coin-burst i:nth-child(2) {
+  animation-delay: 0.12s;
+  margin-left: -14px;
+}
+.coin-burst i:nth-child(3) {
+  animation-delay: 0.24s;
+  margin-left: 10px;
+}
+@keyframes coin-in {
+  0% {
+    transform: translateY(-34px) scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(8px) scale(1);
+    opacity: 0;
+  }
+}
+/* 大暴落・地震などは、画面が少しゆれる */
+.overlay.shake .modal {
+  animation: screen-shake 0.6s ease-in-out;
+}
+@keyframes screen-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-10px, 4px);
+  }
+  30% {
+    transform: translate(9px, -5px);
+  }
+  45% {
+    transform: translate(-7px, 3px);
+  }
+  60% {
+    transform: translate(6px, -2px);
+  }
+  75% {
+    transform: translate(-3px, 1px);
+  }
+}
+/* 紙ふぶき */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+.confetti span {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(calc(540deg * var(--turn)));
+    opacity: 0.8;
+  }
+}
+/* 「動きを減らす」設定の人には、ゆれ、紙ふぶき、跳ねる動きを出さない */
+@media (prefers-reduced-motion: reduce) {
+  .confetti,
+  .coin-burst {
+    display: none;
+  }
+  .overlay.shake .modal,
+  .piece-hop,
+  .square-landed,
+  .roll-pop,
+  .animated-money {
+    animation: none !important;
+  }
 }
