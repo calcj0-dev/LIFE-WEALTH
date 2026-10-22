@@ -258,8 +258,6 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
     pos = BOARD[pos].next[0];
     if (pos === 0) s.player.lap += 1;
     s.lastPath.push(pos);
-    // 結婚マスは、独身なら出目が残っていても必ず止まる（design.md 3.5）
-    if (BOARD[pos].type === 'stopMarriage' && !s.player.married) break;
   }
   s.player.position = pos;
   handleSquare(s);
@@ -304,13 +302,13 @@ export function closeTrade(state: GameState): GameState {
   return s;
 }
 
-/** 次のボーナスマスを決める。今いる場所から10〜40マス先。スタートと結婚マスには付けない */
+/** 次のボーナスマスを決める。今いる場所から10〜40マス先。スタートには付けない */
 function placeBonus(s: GameState) {
   for (let guard = 0; guard < 100; guard++) {
     const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
     const index = (s.player.position + ahead) % BOARD.length;
     const type = BOARD[index].type;
-    if (type !== 'start' && type !== 'stopMarriage') {
+    if (type !== 'start') {
       s.bonusSquare = index;
       return;
     }
@@ -350,14 +348,9 @@ function handleSquare(s: GameState) {
       return endMonth(s);
     case 'start':
       return notice('square.start');
-    case 'stopMarriage':
-      if (p.married) return notice('square.marriage.married');
-      return startDecision(s, { kind: 'marriage' }, 'square');
-    case 'birth':
-      if (!p.married) {
-        addCash(s, -BIRTH.gift, 'birth.gift');
-        return endMonth(s);
-      }
+    case 'family':
+      // 結婚・出産マス。独身なら結婚、結婚していれば出産のルーレット（design.md 3.5）
+      if (!p.married) return startDecision(s, { kind: 'marriage' }, 'square');
       if (p.children.length >= MAX_CHILDREN) return notice('square.birth.full');
       return startDecision(s, { kind: 'birth' }, 'square');
     case 'small': {

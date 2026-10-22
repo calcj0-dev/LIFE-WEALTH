@@ -1,40 +1,33 @@
 import type { Square, SquareType } from '../game/types';
 
-/** マスの種類ごとの数（合計72）。design.md 3.3 */
+/** マスの種類ごとの数（合計200）。design.md 3.3。数を変えれば、盤面のマスの数も変わる */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
-  stopMarriage: 1,
-  birth: 2,
-  small: 22,
-  card: 10,
-  luckyCard: 2,
-  medium: 12,
-  large: 6,
-  stock: 6,
-  investTalk: 3,
-  gamble: 3,
-  realEstate: 4,
+  family: 6,
+  small: 66,
+  card: 28,
+  luckyCard: 5,
+  medium: 33,
+  large: 17,
+  stock: 17,
+  investTalk: 8,
+  gamble: 8,
+  realEstate: 11,
 };
 
-/** 結婚ストップのマスの位置（スタートから何マス先か） */
-export const MARRIAGE_STOP_INDEX = 18;
-
 /**
- * 72マスの並び順を作る。スタートと結婚ストップは決まった位置に置き、
+ * マスの並び順を作る。スタートは0番に置き、
  * ほかの種類は盤面全体にむらなく散らす。乱数は使わないので、毎回同じ並びになる。
  */
 function buildOrder(): SquareType[] {
   const total = Object.values(SQUARE_COUNTS).reduce((a, b) => a + b, 0);
-  const fixed = new Map<number, SquareType>([
-    [0, 'start'],
-    [MARRIAGE_STOP_INDEX, 'stopMarriage'],
-  ]);
+  const fixed = new Map<number, SquareType>([[0, 'start']]);
   const free: number[] = [];
   for (let i = 0; i < total; i++) if (!fixed.has(i)) free.push(i);
 
   // 種類ごとに「盤面上の理想の位置」を等間隔に並べ、近い順に空きマスへ割り当てる
   const wanted: { type: SquareType; pos: number }[] = [];
-  const order: SquareType[] = ['small', 'card', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'birth', 'luckyCard'];
+  const order: SquareType[] = ['small', 'card', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'family', 'luckyCard'];
   order.forEach((type, k) => {
     const n = SQUARE_COUNTS[type];
     for (let j = 0; j < n; j++) {
@@ -62,11 +55,16 @@ function buildOrder(): SquareType[] {
 
 /**
  * 盤面の道。1マス分の長さを1とした座標で、曲がりくねった1本の道を折れ線で表す。
- * マスはこの道の上に等間隔に並べるので、マスの数を変えても形は崩れない。
+ * マスはこの道の上に等間隔に並べる。道の長さ（200）をマスの数に合わせておくと、マスどうしが重ならない。
+ * マスを増やすときは、横の長さか、折り返しの数を増やす。
  */
 const ROUTE: [number, number][] = [
-  [1, 0], [14, 0], [14, 2], [1, 2], [1, 4], [14, 4], [14, 6], [-1, 6], [-1, 0], [1, 0],
+  [1, 0], [22, 0], [22, 2], [1, 2], [1, 4], [22, 4], [22, 6], [1, 6], [1, 8], [22, 8],
+  [22, 10], [1, 10], [1, 12], [22, 12], [22, 14], [-1, 14], [-1, 0], [1, 0],
 ];
+const ROUTE_MIN_X = Math.min(...ROUTE.map((p) => p[0]));
+const ROUTE_MAX_X = Math.max(...ROUTE.map((p) => p[0]));
+const ROUTE_MAX_Y = Math.max(...ROUTE.map((p) => p[1]));
 
 /** 1マス分の長さ（画面上の大きさ） */
 const UNIT = 130;
@@ -74,13 +72,13 @@ const MARGIN = 150;
 
 /** 盤面全体の大きさ */
 export const BOARD_WORLD = {
-  width: (14 - -1) * UNIT + MARGIN * 2,
-  height: 6 * UNIT + MARGIN * 2,
+  width: (ROUTE_MAX_X - ROUTE_MIN_X) * UNIT + MARGIN * 2,
+  height: ROUTE_MAX_Y * UNIT + MARGIN * 2,
 };
 
 /** 座標を画面上の位置にする */
 export function toWorld(x: number, y: number): { x: number; y: number } {
-  return { x: (x + 1) * UNIT + MARGIN, y: y * UNIT + MARGIN };
+  return { x: (x - ROUTE_MIN_X) * UNIT + MARGIN, y: y * UNIT + MARGIN };
 }
 
 /** 道に沿って、マスを等間隔に置く */

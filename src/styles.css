@@ -1635,3 +1635,30 @@ button.small {
     max-height: 120px;
   }
 }
+
+/* 全体図: ドラッグで動かし、ホイールや2本の指で拡大・縮小する（design.md 3.1） */
+.board-area svg.board-overview {
+  cursor: grab;
+  touch-action: none;
+  /* ドラッグしたときに、マスの絵が文字として選ばれて青くならないようにする */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.board-area svg.board-overview:active {
+  cursor: grabbing;
+}
+.board-zoom {
+  position: absolute;
+  left: 12px;
+  top: 54px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.board-zoom button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 900;
+}

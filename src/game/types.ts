@@ -7,8 +7,7 @@ export type AssetId = string;
 export type Economy = 'boom' | 'normal' | 'recession';
 export type SquareType =
   | 'start'
-  | 'stopMarriage'
-  | 'birth'
+  | 'family'
   | 'small'
   | 'card'
   | 'luckyCard'

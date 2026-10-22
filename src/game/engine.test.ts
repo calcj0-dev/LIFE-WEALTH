@@ -4,7 +4,10 @@ import eventsJson from '../data/events.json';
 import jobsJson from '../data/jobs.json';
 import newsJson from '../data/news.json';
 import { ASSETS, ASSET_IDS, checkAssets } from '../data/assets';
-import { BOARD, MARRIAGE_STOP_INDEX, SQUARE_COUNTS } from '../data/board';
+import { BOARD, SQUARE_COUNTS } from '../data/board';
+
+/** 最初の結婚・出産マス */
+const FAMILY_INDEX = BOARD.findIndex((sq) => sq.type === 'family');
 import { EVENTS, checkEvents } from '../data/events';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
@@ -98,19 +101,25 @@ describe('データ（JSON）', () => {
 });
 
 describe('盤面', () => {
-  it('72マスで、種類ごとの数が設計どおり', () => {
-    expect(BOARD).toHaveLength(72);
+  it('200マスで、種類ごとの数が設計どおり', () => {
+    expect(BOARD).toHaveLength(200);
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
       expect(BOARD.filter((sq) => sq.type === type)).toHaveLength(n);
     }
   });
-  it('スタートは0番、結婚マスは18番', () => {
+  it('スタートは0番', () => {
     expect(BOARD[0].type).toBe('start');
-    expect(BOARD[MARRIAGE_STOP_INDEX].type).toBe('stopMarriage');
+  });
+  it('マスどうしが重ならない（となりのマスとの間が、マスの大きさより広い）', () => {
+    for (let i = 0; i < BOARD.length; i++) {
+      const a = BOARD[i];
+      const b = BOARD[(i + 1) % BOARD.length];
+      expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(80);
+    }
   });
   it('1周つながっている', () => {
     let pos = 0;
-    for (let i = 0; i < 72; i++) pos = BOARD[pos].next[0];
+    for (let i = 0; i < BOARD.length; i++) pos = BOARD[pos].next[0];
     expect(pos).toBe(0);
   });
 });
@@ -240,26 +249,18 @@ describe('ゲームの進行', () => {
 });
 
 describe('結婚と出産', () => {
-  it('独身なら、結婚マスは出目が残っていても必ず止まる', () => {
-    let found = false;
-    for (let seed = 1; seed <= 200 && !found; seed++) {
-      let s = started(seed);
-      s = { ...s, player: { ...s.player, position: MARRIAGE_STOP_INDEX - 1 } };
-      s = roll(s);
-      expect(s.player.position).toBe(MARRIAGE_STOP_INDEX);
-      expect(s.decision?.kind).toBe('marriage');
-      if (s.lastRoll! > 1) found = true;
-    }
-    expect(found).toBe(true);
+  it('独身なら、結婚・出産マスにちょうど止まると結婚のルーレット', () => {
+    const s = landOn(started(), FAMILY_INDEX);
+    expect(s.decision?.kind).toBe('marriage');
   });
-  it('結婚していれば、結婚マスは止まらずに通りすぎる', () => {
+  it('結婚・出産マスは、必ず止まるマスではない（出目が残っていれば通りすぎる）', () => {
     let passed = false;
     for (let seed = 1; seed <= 200 && !passed; seed++) {
       let s = started(seed);
-      s = { ...s, player: { ...s.player, married: true, position: MARRIAGE_STOP_INDEX - 1 } };
+      s = { ...s, player: { ...s.player, position: FAMILY_INDEX - 1 } };
       s = roll(s);
       if (s.lastRoll! > 1) {
-        expect(s.player.position).toBeGreaterThan(MARRIAGE_STOP_INDEX);
+        expect(s.player.position).toBeGreaterThan(FAMILY_INDEX);
         passed = true;
       }
     }
@@ -269,7 +270,7 @@ describe('結婚と出産', () => {
     let married = 0;
     let single = 0;
     for (let seed = 1; seed <= 100; seed++) {
-      let s = landOn(started(seed), MARRIAGE_STOP_INDEX);
+      let s = landOn(started(seed), FAMILY_INDEX);
       s = choose({ ...s, rngState: seed * 7919 }, 'spin');
       const face = Number(s.decision!.params!.face);
       expect(s.player.married).toBe(MARRIAGE.faces.includes(face));
@@ -281,7 +282,7 @@ describe('結婚と出産', () => {
   });
   it('結婚したら、毎月の支出（共働きなら収入も）がいくらからいくらになるかを出す', () => {
     for (let seed = 1; seed <= 40; seed++) {
-      let s = landOn(started(seed), MARRIAGE_STOP_INDEX);
+      let s = landOn(started(seed), FAMILY_INDEX);
       s = choose({ ...s, rngState: seed * 7919 }, 'spin');
       if (!s.player.married) continue;
       const pr = s.decision!.params!;
@@ -299,14 +300,8 @@ describe('結婚と出産', () => {
     expect(after.phase).toBe('roll');
     expect(after.log.some((l) => l.key.startsWith(`event.${s.decision!.eventId}`))).toBe(true);
   });
-  it('独身で出産マスに止まると、出産祝いを払う', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'birth');
-    const s = landOn(started(), index);
-    expect(s.phase).toBe('roll');
-    expect(s.log.some((l) => l.key === 'birth.gift' && l.cash === -BIRTH.gift)).toBe(true);
-  });
-  it('結婚していれば、出産マスでルーレットを回し、当たれば子どもが生まれる', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'birth');
+  it('結婚していれば、結婚・出産マスで出産のルーレットを回し、当たれば子どもが生まれる', () => {
+    const index = FAMILY_INDEX;
     let born = 0;
     for (let seed = 1; seed <= 60; seed++) {
       let s = started(seed);

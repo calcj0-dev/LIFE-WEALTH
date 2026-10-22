@@ -368,10 +368,8 @@
   "bigEvent.tradeHint": "取引カードを持っています。使えば、今すぐ売り買いできます。",
   "bigEvent.noTradeHint": "取引カードがないので、売り買いは年末の取引タイムまで待ちます。",
   "label.square.nothing": "何もない日",
-  "label.square.marriage.married": "結婚マス（結婚しているので通過）",
-  "label.square.birth.full": "出産マス（子どもは3人まで）",
+  "label.square.birth.full": "結婚・出産マス（子どもは3人まで）",
   "label.square.realEstate.owned": "家の売り出し（もう家を持っています）",
-  "label.birth.gift": "友だちへの出産祝い",
   "label.birth.born": "子どもが生まれた",
   "label.birth.cost": "出産の費用",
   "label.marriage.marry": "結婚した",
@@ -418,8 +416,6 @@
   "label.suffix.success": "（成功）",
   "label.suffix.fail": "（失敗）",
   "squareType.start": "スタート",
-  "squareType.stopMarriage": "結婚",
-  "squareType.birth": "出産",
   "squareType.small": "小さな出来事",
   "squareType.card": "カード",
   "squareType.luckyCard": "ラッキーカード",
@@ -579,5 +575,8 @@
   "trade.did.sellShares": "{name}を {n}株（{amount}）売りました",
   "trade.home.none": "家は持っていません。家の売り出しのマスで買えます。",
   "payFlow.salary": "お給料",
-  "payFlow.expense": "生活費"
+  "payFlow.expense": "生活費",
+  "squareType.family": "結婚・出産",
+  "board.zoomIn": "拡大",
+  "board.zoomOut": "縮小"
 }
