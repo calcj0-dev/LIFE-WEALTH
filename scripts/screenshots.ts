@@ -56,6 +56,11 @@ for (const vp of VIEWPORTS) {
   await shot('title');
   await clickText(page, 'body', 'はじめから');
   await page.waitForTimeout(200);
+  // キャラクターを選ぶ（2人目を選んで撮る）
+  await page.locator('.avatar-choice').nth(1).click();
+  await shot('avatar');
+  await clickText(page, 'body', 'このキャラクターで始める');
+  await page.waitForTimeout(200);
   await shot('years');
   await page.locator('.choice-card', { hasText: process.env.YEARS ?? '10年' }).first().click();
   await clickText(page, 'body', 'この年数で始める');

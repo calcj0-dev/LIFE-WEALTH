@@ -1816,3 +1816,42 @@ button.small {
   width: 100%;
   font-size: 11px;
 }
+
+/* キャラクター（design.md 10.1） */
+.avatar-icon {
+  flex: none;
+  vertical-align: middle;
+}
+.avatar-select {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.avatar-choice {
+  width: 120px;
+  padding: 10px;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.avatar-choice.selected {
+  border-color: var(--primary);
+  background: #fff1e6;
+}
+.avatar-choice svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+.avatar-rivals {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  align-items: center;
+}
+.avatar-rivals svg {
+  width: 70px;
+  height: 80px;
+}

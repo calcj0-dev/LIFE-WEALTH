@@ -162,7 +162,7 @@ function newSeat(): SeatData {
  * ゲームを作る。monthsPerTurn を渡すと、1ターンの月数を変えられる（試すとき用。design.md 0.1）。
  * rivals を false にすると、ライバル（CPU）なしの1人で遊ぶ（テスト用）
  */
-export function createGame(seed: number, options: { monthsPerTurn?: number; rivals?: boolean } = {}): GameState {
+export function createGame(seed: number, options: { monthsPerTurn?: number; rivals?: boolean; avatar?: string } = {}): GameState {
   const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
   if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
   const s: GameState = {
@@ -185,6 +185,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number; riva
     tradeOpen: false,
     bonusSquare: 0,
     prices: [],
+    avatar: options.avatar,
     rivals: options.rivals === false ? [] : RIVAL_IDS.map((id) => ({ id, ...newSeat() })),
     cpuSeat: -1,
     ...newSeat(),

@@ -602,5 +602,8 @@
   "squareType.minusLarge": "マイナスのマス（大）",
   "squareType.chance": "チャンスのマス",
   "cards.exactBonus": "ボーナスマス",
-  "cards.exactHint": "ボタンの色は、進んだ先のマスの色です（緑: お金が増える、赤: お金が減る、★: ボーナスマス）"
+  "cards.exactHint": "ボタンの色は、進んだ先のマスの色です（緑: お金が増える、赤: お金が減る、★: ボーナスマス）",
+  "avatar.title": "あなたのキャラクターを選ぼう",
+  "avatar.lead": "ライバルは、コツコツさん（堅実タイプ）とイケイケさん（攻めタイプ）の2人です。",
+  "avatar.start": "このキャラクターで始める"
 }

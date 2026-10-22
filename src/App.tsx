@@ -19,7 +19,9 @@ import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
 import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
-import { PLAYER_COLOR, RIVAL_COLORS, RivalAlertModal, isImportant, rivalLines } from './ui/Rivals';
+import { RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
+import { RIVAL_LOOKS } from './data/characters';
+import { AvatarSelect } from './ui/AvatarSelect';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
@@ -41,6 +43,8 @@ export function App() {
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
   const [moveLabel, setMoveLabel] = useState<string | null>(null);
   const [overview, setOverview] = useState(false);
+  /** はじめから: キャラクターを選んでいる間 */
+  const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
@@ -245,7 +249,17 @@ export function App() {
   };
 
   let screen: React.ReactNode;
-  if (!game) {
+  if (!game && pickingLook) {
+    // はじめから: まず、あなたのキャラクターを選ぶ（design.md 10.1）
+    screen = (
+      <AvatarSelect
+        onDone={(avatar) => {
+          setPickingLook(false);
+          setGame(createGame(Math.floor(Math.random() * 2 ** 31), { avatar }));
+        }}
+      />
+    );
+  } else if (!game) {
     screen = (
       <div className="center-screen">
         <h1 className="logo">
@@ -253,7 +267,7 @@ export function App() {
         </h1>
         <p className="subtitle">{t('app.subtitle')}</p>
         <div className="button-row">
-          <button onClick={() => setGame(createGame(Math.floor(Math.random() * 2 ** 31)))}>{t('title.new')}</button>
+          <button onClick={() => setPickingLook(true)}>{t('title.new')}</button>
           {saved && (
             <button className="secondary" onClick={() => setGame(saved)}>
               {t('title.continue')}
@@ -285,8 +299,8 @@ export function App() {
               overview={overview}
               bonus={game.bonusSquare}
               married={game.player.married}
-              color={PLAYER_COLOR}
-              others={game.rivals.map((r, k) => ({ position: rivalPositions[k], color: RIVAL_COLORS[r.id] }))}
+              look={lookOf(game, 'you')}
+              others={game.rivals.map((r, k) => ({ position: rivalPositions[k], look: RIVAL_LOOKS[r.id] }))}
               focus={rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
             />
             <div className="board-toolbar">

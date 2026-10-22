@@ -7,12 +7,13 @@ import type { GameState, LogEntry, RivalId, SeatData } from '../game/types';
 import { formatMoney, formatSigned, t } from '../i18n';
 import { niceStep } from './AssetChart';
 import { yearTickStep } from './chartColors';
+import { AvatarIcon } from '../board/Avatar';
+import { RIVAL_LOOKS, lookById, type Look } from '../data/characters';
 import { MoneyDelta } from './Delta';
 import { logLabel, visibleEntries } from './logLabel';
 
-/** 駒の色。あなたはオレンジ、コツコツさんは緑、イケイケさんは紫（design.md 12.4） */
-export const PLAYER_COLOR = '#ff7a45';
-export const RIVAL_COLORS: Record<RivalId, string> = { steady: '#3cb371', bold: '#9b5de5' };
+/** だれかのキャラクター（あなたは選んだキャラクター。design.md 10.1） */
+export const lookOf = (s: GameState, w: Who): Look => (w === 'you' ? lookById(s.avatar) : RIVAL_LOOKS[w]);
 
 export const rivalName = (id: RivalId) => t(`rival.${id}`);
 
@@ -48,7 +49,7 @@ export function isImportant(e: LogEntry): boolean {
 function Line({ line }: { line: RivalLine }) {
   return (
     <div className="rival-line">
-      <span className="rival-dot" style={{ background: RIVAL_COLORS[line.id] }} />
+      <AvatarIcon look={RIVAL_LOOKS[line.id]} />
       <span className="rival-line-text">
         {rivalName(line.id)}: {logLabel(line.entry)}
       </span>
@@ -106,7 +107,7 @@ export function RivalAlertModal({ lines, onClose }: { lines: RivalLine[]; onClos
       <div className="modal rival-alert">
         <h2>{t('rivalAlert.title')}</h2>
         {lines.map((l, i) => (
-          <div key={i} className="rival-alert-row" style={{ borderColor: RIVAL_COLORS[l.id] }}>
+          <div key={i} className="rival-alert-row" style={{ borderColor: RIVAL_LOOKS[l.id].color }}>
             <Line line={l} />
           </div>
         ))}
@@ -121,16 +122,16 @@ export function RivalAlertModal({ lines, onClose }: { lines: RivalLine[]; onClos
 /** ニュースや大きなイベントで、みんなの資産がいくら動いたか（design.md 12.2） */
 export function EveryoneMoved({ s, amountOf }: { s: GameState; amountOf: (v: SeatData) => number }) {
   if (!s.rivals.length) return null;
-  const rows: { name: string; color: string; v: number }[] = [
-    { name: t('rival.you'), color: PLAYER_COLOR, v: amountOf(s) },
-    ...s.rivals.map((r) => ({ name: rivalName(r.id), color: RIVAL_COLORS[r.id], v: amountOf(r) })),
+  const rows: { name: string; look: Look; v: number }[] = [
+    { name: t('rival.you'), look: lookOf(s, 'you'), v: amountOf(s) },
+    ...s.rivals.map((r) => ({ name: rivalName(r.id), look: RIVAL_LOOKS[r.id], v: amountOf(r) })),
   ];
   return (
     <div className="everyone-moved">
       <div className="muted">{t('rival.everyoneMoved')}</div>
       {rows.map((r) => (
         <div key={r.name} className="rival-line">
-          <span className="rival-dot" style={{ background: r.color }} />
+          <AvatarIcon look={r.look} />
           <span className="rival-line-text">{r.name}</span>
           {Math.round(r.v) !== 0 ? <MoneyDelta v={r.v} /> : <span className="muted">{t('rival.noChange')}</span>}
         </div>
@@ -142,7 +143,7 @@ export function EveryoneMoved({ s, amountOf }: { s: GameState; amountOf: (v: Sea
 // ---------------------------------------------------------------- 順位（design.md 12.4）
 
 export const whoName = (w: Who) => (w === 'you' ? t('rival.you') : rivalName(w));
-export const whoColor = (w: Who) => (w === 'you' ? PLAYER_COLOR : RIVAL_COLORS[w]);
+export const whoColor = (s: GameState, w: Who) => lookOf(s, w).color;
 
 /** 上の欄の順位。3人の順位と純資産を横に並べ、あなたの順位が上がったら短く光る。スマホでは、あなたの順位だけ */
 export function RankStrip({ s }: { s: GameState }) {
@@ -159,7 +160,7 @@ export function RankStrip({ s }: { s: GameState }) {
     <div className={`rank-strip${flash ? ' rank-up' : ''}`} key={flash}>
       {list.map((x) => (
         <span key={x.who} className={`rank-item${x.who === 'you' ? ' me' : ''}`}>
-          <span className="rival-dot" style={{ background: whoColor(x.who) }} />
+          <AvatarIcon look={lookOf(s, x.who)} />
           <b>{t('rank.nth', { n: x.rank })}</b>
           <span className="rank-name">{whoName(x.who)}</span>
           <span className="rank-worth">{formatMoney(x.worth)}</span>
@@ -181,7 +182,7 @@ export function RankTable({ s }: { s: GameState }) {
               <b>{t('rank.nth', { n: x.rank })}</b>
             </td>
             <td>
-              <span className="rival-dot" style={{ background: whoColor(x.who), display: 'inline-block' }} /> {whoName(x.who)}
+              <AvatarIcon look={lookOf(s, x.who)} /> {whoName(x.who)}
             </td>
             <td className="ledger-money">{formatMoney(x.worth)}</td>
             <td className="ledger-money">
@@ -210,7 +211,7 @@ export function FinalRanking({ s }: { s: GameState }) {
         {list.map((x) => (
           <div key={x.who} className={`final-row${x.who === 'you' ? ' me' : ''}`}>
             <span className="final-medal">{MEDALS[x.rank - 1] ?? ''}</span>
-            <span className="rival-dot" style={{ background: whoColor(x.who) }} />
+            <AvatarIcon look={lookOf(s, x.who)} />
             <span className="final-name">{whoName(x.who)}</span>
             <strong>{formatMoney(x.worth)}</strong>
           </div>
@@ -221,7 +222,7 @@ export function FinalRanking({ s }: { s: GameState }) {
         {best.investReturn > 0 && <div className="invest-award-winner">{t('result.investAwardWinner', { name: whoName(best.who) })}</div>}
         {byReturn.map((x) => (
           <div key={x.who} className="rival-line">
-            <span className="rival-dot" style={{ background: whoColor(x.who) }} />
+            <AvatarIcon look={lookOf(s, x.who)} />
             <span className="rival-line-text">{whoName(x.who)}</span>
             <span className={x.investReturn >= 0 ? 'plus' : 'minus'}>{`${formatSigned(x.investReturn * 100)}%`}</span>
           </div>
@@ -270,7 +271,7 @@ export function WorthRaceChart({ s }: { s: GameState }) {
             key={ser.who}
             d={ser.values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join('')}
             fill="none"
-            stroke={whoColor(ser.who)}
+            stroke={whoColor(s, ser.who)}
             strokeWidth={ser.who === 'you' ? 3.5 : 2.5}
           />
         ))}
@@ -285,7 +286,7 @@ export function WorthRaceChart({ s }: { s: GameState }) {
       <div className="legend">
         {series.map((ser) => (
           <span key={ser.who}>
-            <i style={{ background: whoColor(ser.who) }} />
+            <i style={{ background: whoColor(s, ser.who) }} />
             {whoName(ser.who)}
           </span>
         ))}
