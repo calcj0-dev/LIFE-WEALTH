@@ -54,11 +54,14 @@ export function SidePanel({
   onOpenHistory,
   onOpenFeed,
   level,
+  cashShown,
 }: {
   s: GameState;
   onOpenHistory: () => void;
   onOpenFeed: () => void;
   level?: MoneyLevel;
+  /** 給料と生活費のアクションの間だけ、銀行預金をこの金額で見せる（design.md 2.2） */
+  cashShown?: { value: number; label?: string; level: MoneyLevel };
 }) {
   const p = s.player;
   const family = p.married ? t(`panel.married.${p.spouse!.work}`) : t('panel.single');
@@ -77,7 +80,7 @@ export function SidePanel({
       </div>
       <div className="card">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={<AnimatedMoney value={p.cash} level={level} />} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} />} />
         {owned.map((id) => (
           <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}

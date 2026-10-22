@@ -11,6 +11,8 @@ import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modal
 import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
 import { TurnSummary, hasSomething, type TurnSummaryData } from './ui/TurnSummary';
+import { shownTotal } from './ui/Ledger';
+import type { MoneyLevel } from './ui/AnimatedMoney';
 import { netWorth } from './game/finance';
 import { SavingSetup, TradeModal } from './ui/Trade';
 import { CardHand, cardIcon } from './ui/Cards';
@@ -21,6 +23,8 @@ import { APP_VERSION } from './version';
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
 const STEP_MS = 280;
+/** 給料と生活費のアクションの、段階ごとの長さ（ミリ秒）。月末の前 → お給料 → 生活費 → 積み立てなどを引いたあと */
+const PAY_STEP_MS = [300, 650, 650, 250];
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -49,8 +53,40 @@ export function App() {
   const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number } | null>(null);
   /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
   const [turnMoving, setTurnMoving] = useState(false);
-  // ターンが終わった（選ぶ出来事も大きなイベントも残っていない）ら、今月のまとめを出す
-  const turnDone = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && !game.bigEvent && movingPos === null && !spinning;
+  /** 選ぶ出来事も大きなイベントも残っていない */
+  const settled = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && !game.bigEvent && movingPos === null && !spinning;
+
+  // 給料と生活費のアクション（design.md 2.2）。このターンで月末が来たら、銀行預金の横に
+  // 「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
+  /** アクションを見せ終わった月 */
+  const [payShown, setPayShown] = useState<string | null>(null);
+  /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
+  const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
+  const m = game?.lastMonth;
+  const flowKey = m ? `${m.year}-${m.month}` : null;
+  const paying = settled && !!flowKey && flowKey === `${turnStart!.year}-${turnStart!.month}` && payShown !== flowKey;
+  const payIndex = payStep?.key === flowKey ? payStep.i : 0;
+  let cashShown: { value: number; label?: string; level: MoneyLevel } | undefined;
+  if (paying && game && m) {
+    const income = shownTotal(m.income);
+    const expense = shownTotal(m.expense);
+    const end = game.player.cash;
+    const start = end - (income - expense) + m.saved + m.repaid;
+    cashShown = [
+      { value: start, level: 'medium' as MoneyLevel },
+      { value: start + income, label: t('payFlow.salary'), level: 'medium' as MoneyLevel },
+      { value: start + income - expense, label: t('payFlow.expense'), level: 'medium' as MoneyLevel },
+      { value: end, level: 'weak' as MoneyLevel },
+    ][payIndex];
+  }
+  useEffect(() => {
+    if (!paying || !flowKey) return;
+    const id = window.setTimeout(() => (payIndex >= 3 ? setPayShown(flowKey) : setPayStep({ key: flowKey, i: payIndex + 1 })), PAY_STEP_MS[payIndex]);
+    return () => window.clearTimeout(id);
+  }, [paying, flowKey, payIndex]);
+
+  // ターンが終わった（アクションも見せ終わった）ら、今月のまとめを出す
+  const turnDone = settled && !paying;
   const summary: TurnSummaryData | null =
     game && turnStart && turnDone && hasSomething(game.log.slice(turnStart.logLen))
       ? {
@@ -201,7 +237,7 @@ export function App() {
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
           </div>
-          <SidePanel s={game} level={moneyLevel} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
+          <SidePanel s={game} level={moneyLevel} cashShown={cashShown} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
@@ -220,7 +256,7 @@ export function App() {
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
         {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
-        {ready && settleStep && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
+        {ready && settleStep && !paying && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
         {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>
