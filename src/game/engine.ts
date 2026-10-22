@@ -50,10 +50,13 @@ import {
   totalDebt,
 } from './finance';
 import { maybeNews, newYearMarket, shockPrice, updateMarketMonth, updateMarketYear } from './market';
+import { asSeat, forEachSeat, seatViews } from './seats';
+import { cpuChoice, cpuYearEndTrade } from './cpu';
+import { PERSONALITIES, RIVAL_IDS } from '../data/rivals';
 import { BIG_EVENTS, BIG_EVENTS_BY_ID, turnChance } from '../data/bigEvents';
 import { nextRandom, pickWeighted, randomInt } from './rng';
 import { computeResult } from './score';
-import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, Settlement, SpouseWork } from './types';
+import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, RivalId, SeatData, Settlement, SpouseWork } from './types';
 
 const clone = (s: GameState): GameState => structuredClone(s);
 
@@ -95,19 +98,9 @@ const emptyFlows = (year: number): Settlement => ({
 /** 1ターンの月数として使える数（12を割り切れる数） */
 const VALID_MONTHS_PER_TURN = [1, 2, 3, 4, 6, 12];
 
-/** ゲームを作る。monthsPerTurn を渡すと、1ターンの月数を変えられる（試すとき用。design.md 0.1） */
-export function createGame(seed: number, options: { monthsPerTurn?: number } = {}): GameState {
-  const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
-  if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
-  const s: GameState = {
-    saveVersion: 3,
-    seed,
-    rngState: seed >>> 0,
-    years: DEFAULT_YEARS,
-    monthsPerTurn,
-    year: 1,
-    month: 1,
-    phase: 'setupYears',
+/** プレイヤー1人分の、始めの記録 */
+function newSeat(): SeatData {
+  return {
     player: {
       jobId: JOB_IDS[0],
       salary: 0,
@@ -131,6 +124,56 @@ export function createGame(seed: number, options: { monthsPerTurn?: number } = {
       hand: [],
       talks: [],
     },
+    yearFlows: emptyFlows(1),
+    lastSettlement: null,
+    history: [],
+    log: [],
+    stats: {
+      investmentIncome: 0,
+      gambleSpent: 0,
+      gambleReturned: 0,
+      premiumsPaid: 0,
+      insurancePaid: 0,
+      savingTotal: 0,
+      talkSpent: 0,
+      talkReturned: 0,
+      invested: 0,
+      divested: 0,
+      assetIncome: 0,
+    },
+    queue: [],
+    lastMonth: null,
+    marketChange: null,
+    yearMarket: { startPrices: {}, startRealEstateIndex: 1, startEconomy: 'normal', amounts: {}, newsIds: [], economySet: false },
+    newsEvent: null,
+    bigEvent: null,
+    decision: null,
+    decisionFrom: null,
+    cardUsed: false,
+    lastRoll: null,
+    lastFace: null,
+    lastCard: null,
+    lastPath: [],
+    result: null,
+  };
+}
+
+/**
+ * ゲームを作る。monthsPerTurn を渡すと、1ターンの月数を変えられる（試すとき用。design.md 0.1）。
+ * rivals を false にすると、ライバル（CPU）なしの1人で遊ぶ（テスト用）
+ */
+export function createGame(seed: number, options: { monthsPerTurn?: number; rivals?: boolean } = {}): GameState {
+  const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
+  if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
+  const s: GameState = {
+    saveVersion: 4,
+    seed,
+    rngState: seed >>> 0,
+    years: DEFAULT_YEARS,
+    monthsPerTurn,
+    year: 1,
+    month: 1,
+    phase: 'setupYears',
     market: {
       prices: Object.fromEntries(ASSET_IDS.map((id) => [id, ASSETS[id].startPrice])),
       depositRate: START_DEPOSIT_RATE,
@@ -139,30 +182,14 @@ export function createGame(seed: number, options: { monthsPerTurn?: number } = {
       livingIndex: 1,
       wageIndex: 1,
     },
-    lastRoll: null,
-    lastFace: null,
-    lastCard: null,
-    cardUsed: false,
     tradeOpen: false,
     bonusSquare: 0,
-    lastPath: [],
-    decision: null,
-    queue: [],
-    decisionFrom: null,
-    yearFlows: emptyFlows(1),
-    lastSettlement: null,
-    history: [],
     prices: [],
-    log: [],
-    stats: { investmentIncome: 0, gambleSpent: 0, gambleReturned: 0, premiumsPaid: 0, insurancePaid: 0, savingTotal: 0, talkSpent: 0, talkReturned: 0 },
-    result: null,
-    yearMarket: { startPrices: {}, startRealEstateIndex: 1, startEconomy: 'normal', amounts: {}, newsIds: [], economySet: false },
-    marketChange: null,
-    bigEvent: null,
-    newsEvent: null,
-    lastMonth: null,
+    rivals: options.rivals === false ? [] : RIVAL_IDS.map((id) => ({ id, ...newSeat() })),
+    cpuSeat: -1,
+    ...newSeat(),
   };
-  s.yearMarket = newYearMarket(s);
+  for (const v of seatViews(s)) v.yearMarket = newYearMarket(s);
   recordPrices(s, 0);
   placeBonus(s);
   return s;
@@ -182,11 +209,24 @@ export function chooseJob(state: GameState, jobId: JobId): GameState {
   assertPhase(state, 'setupJob');
   if (!JOBS[jobId]) throw new Error(`unknown job: ${jobId}`);
   const s = clone(state);
+  setStartJob(s, jobId);
+  // ライバルの職業も、ルーレットで決まる（design.md 12.1）
+  s.rivals.forEach((r, i) => {
+    const personality = PERSONALITIES[r.id];
+    asSeat(s, i, () => {
+      setStartJob(s, JOB_IDS[randomInt(s, 0, JOB_IDS.length - 1)]);
+      if (personality.medical) s.player.medicalPremium = medicalPremiumAt(s.year);
+    });
+  });
+  s.phase = 'setupSaving';
+  return s;
+}
+
+/** 始めの職業を決める */
+function setStartJob(s: GameState, jobId: JobId) {
   s.player.jobId = jobId;
   s.player.salary = JOBS[jobId].startSalary;
   s.player.athleteRetireYear = jobId === 'athlete' ? randomInt(s, ATHLETE_RETIRE_YEAR.min, ATHLETE_RETIRE_YEAR.max) : null;
-  s.phase = 'setupSaving';
-  return s;
 }
 
 /** 積み立てのおすすめの金額（毎月の手取りの1割、1万円単位） */
@@ -232,6 +272,12 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   if (state.bigEvent) throw new Error('big event is showing');
   if (state.newsEvent) throw new Error('news is showing');
   const s = clone(state);
+  rollIn(s, card);
+  return s;
+}
+
+/** ルーレットを回して進む（受け取った状態を書き換える。ライバルの番でも使う） */
+function rollIn(s: GameState, card?: { index: number; exact?: number }) {
   let face: number;
   let times = 1;
   s.lastCard = null;
@@ -261,7 +307,6 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   }
   s.player.position = pos;
   handleSquare(s);
-  return s;
 }
 
 // ---------------------------------------------------------------- カードとボーナスマス（design.md 3.9、3.10）
@@ -302,11 +347,16 @@ export function closeTrade(state: GameState): GameState {
   return s;
 }
 
-/** 次のボーナスマスを決める。今いる場所から10〜40マス先。スタートには付けない */
+/**
+ * 次のボーナスマスを決める。あなたの駒から10〜40マス先。スタートには付けない。
+ * ライバルが取ったときも、あなたがねらえるように、あなたの駒から数える（design.md 12.3）
+ */
 function placeBonus(s: GameState) {
+  // ライバルの番の間は、あなたの記録はそのライバルの場所に入れ替わっている
+  const me = s.cpuSeat >= 0 ? s.rivals[s.cpuSeat].player : s.player;
   for (let guard = 0; guard < 100; guard++) {
     const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
-    const index = (s.player.position + ahead) % BOARD.length;
+    const index = (me.position + ahead) % BOARD.length;
     const type = BOARD[index].type;
     if (type !== 'start') {
       s.bonusSquare = index;
@@ -562,22 +612,27 @@ export function medicalPremiumAt(year: number): number {
 
 export function choose(state: GameState, optionId: string): GameState {
   assertPhase(state, 'decision');
-  const option = getOptions(state).find((o) => o.id === optionId);
+  const s = clone(state);
+  chooseIn(s, optionId);
+  return s;
+}
+
+/** 決定する（受け取った状態を書き換える。ライバルの番でも使う） */
+function chooseIn(s: GameState, optionId: string) {
+  const option = getOptions(s).find((o) => o.id === optionId);
   if (!option) throw new Error(`unknown option: ${optionId}`);
   if (!option.enabled) throw new Error(`option not available: ${optionId}`);
-  const s = clone(state);
   const followUp = applyDecision(s, s.decision!, optionId);
   if (followUp) {
     // ルーレットの結果を、同じ流れの中でお知らせとして見せる
     s.decision = followUp;
-    return s;
+    return;
   }
   const from = s.decisionFrom;
   s.decision = null;
   s.decisionFrom = null;
   if (from === 'queue') nextFromQueue(s);
   else endMonth(s);
-  return s;
 }
 
 /** 決定を反映する。ルーレットの結果を見せるときは、次に出すお知らせを返す */
@@ -861,8 +916,41 @@ function addFlows(target: Record<string, number>, items: Record<string, number>)
   for (const [k, v] of Object.entries(items)) target[k] = (target[k] ?? 0) + v;
 }
 
-/** 月末: 給料が入り、生活費などが出ていく。値段が少し動く。12月なら年末へ */
+/**
+ * 月末。あなたのマスの出来事が終わったら、ライバルが順に動き、全員に給料が入って生活費などが出ていく。
+ * そのあと、全員に共通の値動き、ニュース、大きなイベントが起きる。12月なら年末へ（design.md 12.2）
+ */
 function endMonth(s: GameState) {
+  // ライバルの番の中では、その人の月末だけを行う
+  if (s.cpuSeat >= 0) {
+    endSeatMonth(s);
+    s.phase = 'roll';
+    return;
+  }
+  s.rivals.forEach((r, i) => {
+    const id = r.id;
+    asSeat(s, i, () => playCpuTurn(s, id, i));
+  });
+  endSeatMonth(s);
+
+  updateMarketMonth(s);
+  // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
+  maybeNews(s);
+  maybeBigEvent(s);
+  forEachSeat(s, () => coverShortfall(s));
+
+  if (s.month + s.monthsPerTurn > MONTHS_PER_YEAR) {
+    endYear(s);
+    recordPrices(s, s.month);
+    return;
+  }
+  recordPrices(s, s.month);
+  s.month += s.monthsPerTurn;
+  s.phase = 'roll';
+}
+
+/** 1人分の月末: 給料が入り、生活費などが出ていく。借金を返し、積み立てる */
+function endSeatMonth(s: GameState) {
   const p = s.player;
   const { income, expense, loanInterest } = computeMonth(s, false);
   const flows = s.yearFlows;
@@ -885,23 +973,43 @@ function endMonth(s: GameState) {
   flows.repaid += repaid;
   s.lastMonth = { year: s.year, month: s.month, income, expense, saved, repaid };
   coverShortfall(s);
-  flows.revaluation += updateMarketMonth(s);
-  // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
-  const newsMoved = maybeNews(s);
-  if (s.newsEvent) log(s, 'news.happened', { params: { news: s.newsEvent.id }, notice: true });
-  flows.revaluation += newsMoved;
-  flows.revaluation += maybeBigEvent(s);
-  coverShortfall(s);
-
   s.cardUsed = false;
-  if (s.month + s.monthsPerTurn > MONTHS_PER_YEAR) {
-    endYear(s);
-    recordPrices(s, s.month);
-    return;
-  }
-  recordPrices(s, s.month);
-  s.month += s.monthsPerTurn;
+}
+
+/** 今の毎月の支出（ライバルが、残しておく預金を決めるのに使う） */
+const monthlyExpense = (s: GameState) => sum(estimateMonth(s).expense) / s.monthsPerTurn;
+
+/** ライバル1人の番。ルーレットを回して進み、選ぶことは性格に合わせて自動で決め、その人の月末まで行う（design.md 12.2） */
+function playCpuTurn(s: GameState, id: RivalId, seat: number) {
+  const personality = PERSONALITIES[id];
+  const phase = s.phase;
+  s.cpuSeat = seat;
   s.phase = 'roll';
+  rollIn(s);
+  for (let guard = 0; s.decision && guard < 30; guard++) chooseIn(s, cpuChoice(s, getOptions(s), personality, monthlyExpense(s)));
+  s.cpuSeat = -1;
+  s.phase = phase;
+}
+
+/** ライバル1人の、年の始めのお知らせや選ぶこと（進学、手札を捨てる、引退など）を、自動で済ませる */
+function runCpuQueue(s: GameState, id: RivalId, seat: number) {
+  const personality = PERSONALITIES[id];
+  const phase = s.phase;
+  s.cpuSeat = seat;
+  nextFromQueue(s);
+  for (let guard = 0; s.decision && guard < 30; guard++) chooseIn(s, cpuChoice(s, getOptions(s), personality, monthlyExpense(s)));
+  s.cpuSeat = -1;
+  s.phase = phase;
+}
+
+/** ライバル1人の年末: 保険を見直し、性格に合わせて売り買いする（design.md 12.1） */
+function cpuYearEnd(s: GameState, id: RivalId) {
+  const personality = PERSONALITIES[id];
+  if (personality.medical && s.player.medicalPremium === null) {
+    s.player.medicalPremium = medicalPremiumAt(s.year);
+    log(s, 'insurance.medical.join', { params: { premium: s.player.medicalPremium } });
+  }
+  for (const t of cpuYearEndTrade(s, personality, monthlyExpense(s))) log(s, t.key, { params: t.params });
 }
 
 function recordPrices(s: GameState, month: number) {
@@ -938,79 +1046,81 @@ function coverShortfall(s: GameState) {
 // ---------------------------------------------------------------- 大きなイベント（design.md 5.3）
 
 /**
- * 月末に、大きなイベントが起きるか決める。起きたら反映して、画面に見せるための結果を s.bigEvent に入れる。
- * 1ヶ月に起きるのは1つまで。値動きで動いた自分の資産の金額を返す
+ * 月末に、大きなイベントが起きるか決める。起きたら全員に反映して、画面に見せるための結果を、それぞれの bigEvent に入れる。
+ * 1ヶ月に起きるのは1つまで
  */
-export function maybeBigEvent(s: GameState): number {
+export function maybeBigEvent(s: GameState): void {
   for (const ev of BIG_EVENTS) {
     if (nextRandom(s) < turnChance(ev, s.monthsPerTurn)) return applyBigEvent(s, ev.id);
   }
-  return 0;
 }
 
-/** 大きなイベントを起こす。値動きで動いた自分の資産の金額を返す */
-function applyBigEvent(s: GameState, id: string): number {
+/** 大きなイベントを起こす。相場と物価は全員に共通で、預金の損や家の被害などは、一人ひとりに起きる（design.md 12.2） */
+function applyBigEvent(s: GameState, id: string) {
   const ev = BIG_EVENTS_BY_ID[id];
-  const p = s.player;
-  const result = { id, rates: {} as Record<AssetId, number>, moved: 0, cash: 0, covered: 0 };
-  const pay = (amount: number, key: string) => {
-    if (Math.round(amount * 10) === 0) return;
-    addCash(s, amount, key);
-    result.cash += amount;
-  };
+  const rates = {} as Record<AssetId, number>;
+  const moved = seatViews(s).map(() => 0);
   for (const ef of ev.effects) {
-    switch (ef.t) {
-      case 'market':
-        for (const asset of ef.assets) {
-          const rate = ef.min + nextRandom(s) * (ef.max - ef.min);
-          result.rates[asset] = rate;
-          result.moved += shockPrice(s, asset, rate);
-        }
-        break;
-      case 'living':
-        s.market.livingIndex *= 1 + ef.rate;
-        break;
-      case 'depositLoss':
-        pay(-Math.max(0, p.cash - ef.threshold) * ef.rate, `bigEvent.${id}.loss`);
-        break;
-      case 'cash':
-        pay(ef.amount, `bigEvent.${id}.cash`);
-        break;
-      case 'homeDamage':
-        if (!p.home) break;
-        if (p.home.fireInsured) {
-          s.stats.insurancePaid += ef.amount;
-          result.covered += ef.amount;
-        } else pay(-ef.amount, `bigEvent.${id}.home`);
-        break;
+    if (ef.t === 'market') {
+      for (const asset of ef.assets) {
+        const rate = ef.min + nextRandom(s) * (ef.max - ef.min);
+        rates[asset] = rate;
+        shockPrice(s, asset, rate).forEach((m, i) => (moved[i] += m));
+      }
+    } else if (ef.t === 'living') {
+      s.market.livingIndex *= 1 + ef.rate;
     }
   }
-  log(s, `bigEvent.${id}`, { notice: true });
-  s.bigEvent = result;
-  return result.moved;
+  forEachSeat(s, (i) => {
+    const p = s.player;
+    const result = { id, rates: { ...rates }, moved: moved[i + 1], cash: 0, covered: 0 };
+    const pay = (amount: number, key: string) => {
+      if (Math.round(amount * 10) === 0) return;
+      addCash(s, amount, key);
+      result.cash += amount;
+    };
+    for (const ef of ev.effects) {
+      switch (ef.t) {
+        case 'depositLoss':
+          pay(-Math.max(0, p.cash - ef.threshold) * ef.rate, `bigEvent.${id}.loss`);
+          break;
+        case 'cash':
+          pay(ef.amount, `bigEvent.${id}.cash`);
+          break;
+        case 'homeDamage':
+          if (!p.home) break;
+          if (p.home.fireInsured) {
+            s.stats.insurancePaid += ef.amount;
+            result.covered += ef.amount;
+          } else pay(-ef.amount, `bigEvent.${id}.home`);
+          break;
+      }
+    }
+    log(s, `bigEvent.${id}`, { notice: true });
+    s.bigEvent = result;
+  });
 }
 
 /** 大きなイベントを、今すぐ起こす（テスト用） */
 export function triggerBigEvent(state: GameState, id: string): GameState {
   if (!BIG_EVENTS_BY_ID[id]) throw new Error(`unknown big event: ${id}`);
   const s = clone(state);
-  const moved = applyBigEvent(s, id);
-  s.yearFlows.revaluation += moved;
-  coverShortfall(s);
+  applyBigEvent(s, id);
+  forEachSeat(s, () => coverShortfall(s));
   return s;
 }
 
 /** ニュースの画面を閉じる */
 export function dismissNews(state: GameState): GameState {
   const s = clone(state);
-  s.newsEvent = null;
+  for (const v of seatViews(s)) v.newsEvent = null;
   return s;
 }
 
 /** 大きなイベントの画面を閉じる */
 export function dismissBigEvent(state: GameState): GameState {
   const s = clone(state);
-  s.bigEvent = null;
+  for (const v of seatViews(s)) v.bigEvent = null;
   return s;
 }
 
@@ -1040,11 +1150,18 @@ function resolveTalks(s: GameState) {
   p.talks = [];
 }
 
-/** 年末: 投資の話の結果が出て、利息と配当が入り、ニュースで相場が大きく動き、決算をまとめる */
+/** 年末: 全員の投資の話の結果が出て、利息と配当が入り、家の相場が動き、決算をまとめる */
 function endYear(s: GameState) {
+  forEachSeat(s, () => yearIncome(s));
+  updateMarketYear(s);
+  forEachSeat(s, () => settleYear(s));
+  s.phase = 'yearEnd';
+}
+
+/** 1人分の年末の収入: 投資の話の結果、銀行預金の利息、国債の利息、株の配当 */
+function yearIncome(s: GameState) {
   const p = s.player;
   resolveTalks(s);
-  const flows = s.yearFlows;
   const yearly: Record<string, number> = {
     interest: Math.max(0, p.cash) * s.market.depositRate,
     bond: 0,
@@ -1056,17 +1173,22 @@ function endYear(s: GameState) {
     if (a.kind === 'bond') yearly.bond += v;
     else if (a.kind === 'stock') yearly.dividend += v;
   }
-  addFlows(flows.income, yearly);
+  addFlows(s.yearFlows.income, yearly);
   p.cash += sum(yearly);
   s.stats.investmentIncome += sum(yearly);
+  s.stats.assetIncome += yearly.bond + yearly.dividend;
+}
 
-  flows.revaluation += updateMarketYear(s);
+/** 1人分の決算をまとめ、1年の記録を残す */
+function settleYear(s: GameState) {
+  const p = s.player;
+  const flows = s.yearFlows;
   flows.net = sum(flows.income) - sum(flows.expense);
   s.lastSettlement = structuredClone(flows);
 
   const worth = netWorth(s);
   const prev = s.history.length ? s.history[s.history.length - 1].netWorth : START_CASH;
-  const investment = sum(yearly);
+  const investment = (flows.income.interest ?? 0) + (flows.income.bond ?? 0) + (flows.income.dividend ?? 0);
   const work = sum(flows.income) - investment - (sum(flows.expense) - flows.loanPrincipal);
   s.history.push({
     year: s.year,
@@ -1086,7 +1208,6 @@ function endYear(s: GameState) {
       depositRate: s.market.depositRate,
     },
   });
-  s.phase = 'yearEnd';
 }
 
 /** 年末のニュースと決算を見たあと、次の年へ。最後の年なら終了 */
@@ -1096,13 +1217,27 @@ export function nextYear(state: GameState): GameState {
   if (state.newsEvent) throw new Error('news is showing');
   const s = clone(state);
   if (s.year >= s.years) {
-    s.result = computeResult(s);
+    forEachSeat(s, () => {
+      s.result = computeResult(s);
+    });
     s.phase = 'finished';
     return s;
   }
-  const p = s.player;
+  const ids = s.rivals.map((r) => r.id);
+  // ライバルは、年末に自動で売り買いする（あなたの取引タイムのあと）
+  ids.forEach((id, i) => asSeat(s, i, () => cpuYearEnd(s, id)));
   s.year += 1;
   s.month = 1;
+  forEachSeat(s, () => newYearForSeat(s));
+  // ライバルの、年の始めのお知らせや選ぶことは、自動で済ませる
+  ids.forEach((id, i) => asSeat(s, i, () => runCpuQueue(s, id, i)));
+  nextFromQueue(s);
+  return s;
+}
+
+/** 1人分の、年の始め: 給料が上がり、子どもが年を取り、カードを1枚もらう */
+function newYearForSeat(s: GameState) {
+  const p = s.player;
   s.yearFlows = emptyFlows(s.year);
   s.yearMarket = newYearMarket(s);
   growSalary(s);
@@ -1118,8 +1253,6 @@ export function nextYear(state: GameState): GameState {
   if (p.jobId === 'athlete' && p.athleteRetireYear !== null && s.year >= p.athleteRetireYear) {
     s.queue.push({ kind: 'athleteRetire' });
   }
-  nextFromQueue(s);
-  return s;
 }
 
 function nextFromQueue(s: GameState) {

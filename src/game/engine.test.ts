@@ -480,7 +480,7 @@ describe('段階3.7の細かいところ', () => {
   });
   it('1ヶ月のお金の動き（今月のまとめに出すもの）を記録する', () => {
     const s = settle(roll(started(1, 20, 'employee', { fund: 2 })));
-    expect(s.lastMonth?.income.salary).toBeCloseTo(250 / 12, 6);
+    expect(s.lastMonth?.income.salary).toBeCloseTo(s.player.salary / 12, 6);
     expect(s.lastMonth?.saved).toBe(2);
   });
 });

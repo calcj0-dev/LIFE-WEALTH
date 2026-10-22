@@ -121,6 +121,26 @@ interface Props {
   overview: boolean;
   /** 結婚しているか（結婚・出産マスの絵を、指輪から赤ちゃんに変える） */
   married?: boolean;
+  /** あなたの駒の色 */
+  color?: string;
+  /** ライバルの駒（いるマスと色。design.md 12.4） */
+  others?: { position: number; color: string }[];
+  /** 映すマス（ライバルの番で、ライバルを追うとき）。なければ、あなたの駒を映す */
+  focus?: number;
+}
+
+/** 人の駒。color は服の色 */
+function Piece({ x, y, color }: { x: number; y: number; color: string }) {
+  return (
+    <g style={{ transform: `translate(${x}px, ${y - 40}px)`, transition: 'transform 0.22s ease-out' }}>
+      <ellipse cx="0" cy="52" rx="22" ry="7" fill="rgba(0,0,0,0.2)" />
+      <rect x="-17" y="8" width="34" height="42" rx="15" fill={color} stroke="#fff" strokeWidth="4" />
+      <circle cx="0" cy="-8" r="17" fill="#ffd9b8" stroke="#fff" strokeWidth="4" />
+      <path d="M-17,-12 Q0,-34 17,-12 Z" fill="#5a3b2e" />
+      <circle cx="-6" cy="-6" r="2.5" fill="#2d2a32" />
+      <circle cx="6" cy="-6" r="2.5" fill="#2d2a32" />
+    </g>
+  );
 }
 
 // 盤面の枠は画面より縦長になることが多く、そのときは左右が切れて映る（slice）。
@@ -152,8 +172,8 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married }: Props) {
-  const here = BOARD[position];
+export function Board({ position, overview, bonus, married, color = '#ff7a45', others = [], focus }: Props) {
+  const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
   const [camera, setCamera] = useState<Camera>(fitCamera);
@@ -264,14 +284,13 @@ export function Board({ position, overview, bonus, married }: Props) {
               )}
             </g>
           ))}
-          <g style={{ transform: `translate(${here.x}px, ${here.y - 40}px)`, transition: 'transform 0.22s ease-out' }}>
-            <ellipse cx="0" cy="52" rx="22" ry="7" fill="rgba(0,0,0,0.2)" />
-            <rect x="-17" y="8" width="34" height="42" rx="15" fill="#ff7a45" stroke="#fff" strokeWidth="4" />
-            <circle cx="0" cy="-8" r="17" fill="#ffd9b8" stroke="#fff" strokeWidth="4" />
-            <path d="M-17,-12 Q0,-34 17,-12 Z" fill="#5a3b2e" />
-            <circle cx="-6" cy="-6" r="2.5" fill="#2d2a32" />
-            <circle cx="6" cy="-6" r="2.5" fill="#2d2a32" />
-          </g>
+          {/* 同じマスにいる駒は、横に少しずらして重ならないようにする。あなたの駒は一番手前 */}
+          {[...others.map((o) => ({ ...o, me: false })), { position, color, me: true }].map((piece, k, all) => {
+            const sq = BOARD[piece.position];
+            const same = all.filter((o) => o.position === piece.position);
+            const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
+            return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} color={piece.color} />;
+          })}
         </g>
       </svg>
       {overview && (

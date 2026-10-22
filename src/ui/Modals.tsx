@@ -11,6 +11,7 @@ import { describeDecision } from './decisionText';
 import { MoneyDelta } from './Delta';
 import { HistoryTabs } from './HistoryTabs';
 import { Details, VerticalLedger } from './Ledger';
+import { EveryoneMoved, RankTable } from './Rivals';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -73,6 +74,7 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
           {t(`economy.${news.economy}.desc`)}
         </p>
       )}
+      <EveryoneMoved s={s} amountOf={(v) => Object.values(v.newsEvent?.amounts ?? {}).reduce((a, x) => a + Math.round(x), 0)} />
       {news.important && (
         <p>
           <strong>{t('news.important')}</strong>
@@ -299,6 +301,12 @@ export function YearEndModal({ s, onNext, onTrade }: { s: GameState; onNext: () 
           <span className="muted">{t('yearEnd.lastYear', { amount: now - change })}</span>
         </div>
       </div>
+      {s.rivals.length > 0 && (
+        <div className="card">
+          <h4>{t('yearEnd.ranking')}</h4>
+          <RankTable s={s} />
+        </div>
+      )}
       <div className="year-end-grid">
         <div className="card">
           <h4>{t('yearEnd.parts')}</h4>

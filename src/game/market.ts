@@ -16,6 +16,7 @@ import calibration from '../data/marketCalibration.json';
 import { NEWS, NEWS_PER_YEAR, type NewsDef } from '../data/news';
 import { BASE_INFLATION, REAL_ESTATE } from '../data/rules';
 import { nextRandom, pickWeighted, randomNormal } from './rng';
+import { seatViews } from './seats';
 import type { AssetId, Economy, GameState, NewsEvent, YearMarket } from './types';
 
 const ECONOMIES: Economy[] = ['boom', 'normal', 'recession'];
@@ -177,8 +178,8 @@ const CORRECTION: Record<Key, number> = (() => {
   return c;
 })();
 
-/** 大きなイベントで、銘柄の値段を一気に動かす。動いた金額（自分の資産）を返す */
-export function shockPrice(s: GameState, id: AssetId, rate: number): number {
+/** 大きなイベントで、銘柄の値段を一気に動かす。全員の資産が動いた金額を、seatViews の順で返す */
+export function shockPrice(s: GameState, id: AssetId, rate: number): number[] {
   return movePrice(s, id, rate);
 }
 
@@ -200,72 +201,79 @@ export function newYearMarket(s: GameState): YearMarket {
   };
 }
 
-/** 価格を動かし、自分の資産が動いた金額を記録する。動いた金額の合計を返す */
-function movePrice(s: GameState, id: AssetId, rate: number): number {
+/**
+ * 価格を動かし、全員（あなたとライバル）の資産が動いた金額を、その年の記録と決算の「値動き」に足す。
+ * 動いた金額を、seatViews の順（あなた、ライバル）で返す
+ */
+function movePrice(s: GameState, id: AssetId, rate: number): number[] {
   const before = s.market.prices[id];
   s.market.prices[id] = before * (1 + rate);
-  const moved = (s.player.holdings[id] ?? 0) * (s.market.prices[id] - before);
-  s.yearMarket.amounts[id] += moved;
-  return moved;
+  const diff = s.market.prices[id] - before;
+  return seatViews(s).map((v) => {
+    const moved = (v.player.holdings[id] ?? 0) * diff;
+    v.yearMarket.amounts[id] += moved;
+    v.yearFlows.revaluation += moved;
+    return moved;
+  });
 }
 
-/** 家の相場と、持ち家の値段を動かす。動いた金額（持ち家）を返す */
-function moveRealEstate(s: GameState, rate: number, aging = 0): number {
+/** 家の相場と、全員の持ち家の値段を動かす。持ち家が動いた金額を、seatViews の順で返す */
+function moveRealEstate(s: GameState, rate: number, aging = 0): number[] {
   s.market.realEstateIndex *= 1 + rate;
-  const home = s.player.home;
-  if (!home) return 0;
-  const before = home.value;
-  home.value *= (1 + rate) * (1 - aging);
-  s.yearMarket.amounts.realEstate += home.value - before;
-  return home.value - before;
+  return seatViews(s).map((v) => {
+    const home = v.player.home;
+    if (!home) return 0;
+    const before = home.value;
+    home.value *= (1 + rate) * (1 - aging);
+    const moved = home.value - before;
+    v.yearMarket.amounts.realEstate += moved;
+    v.yearFlows.revaluation += moved;
+    return moved;
+  });
 }
 
 /**
  * ターンの終わりの小さな値動き。平均の伸びと景気の上乗せは、1年で1年分になるように、ターンごとに少しずつ出す。
- * 1年の値動きの大きさは、すべてこの動きで出す。1ターンの月数（s.monthsPerTurn）に合わせて大きさを変える。動いた金額の合計を返す
+ * 1年の値動きの大きさは、すべてこの動きで出す。1ターンの月数（s.monthsPerTurn）に合わせて大きさを変える
  */
-export function updateMarketMonth(s: GameState): number {
+export function updateMarketMonth(s: GameState): void {
   const e = s.market.economy;
   const share = s.monthsPerTurn / 12;
-  let moved = 0;
   for (const id of ASSET_IDS) {
     const a = ASSETS[id];
     const drift = Math.pow(1 + a.meanReturn + CORRECTION[id] + a.drift[e], share) - 1;
     const noise = a.volatility * Math.sqrt(share) * randomNormal(s);
-    moved += movePrice(s, id, clamp(drift + noise, MONTH_LIMIT));
+    movePrice(s, id, clamp(drift + noise, MONTH_LIMIT));
   }
-  return moved;
 }
 
 /**
  * ターンの終わりに、ニュースが起きるか決める（1.5年に2回くらい。design.md 7章）。
- * 起きたら相場を動かし、画面に見せるための結果を s.newsEvent に入れる。動いた金額の合計を返す
+ * 起きたら相場を動かし、画面に見せるための結果を、全員の newsEvent に入れる
  */
-export function maybeNews(s: GameState): number {
-  if (nextRandom(s) >= newsTurnChance(s.monthsPerTurn)) return 0;
-  return applyNews(s, pickWeighted(s, NEWS, (n) => n.weight)!);
+export function maybeNews(s: GameState): void {
+  if (nextRandom(s) >= newsTurnChance(s.monthsPerTurn)) return;
+  applyNews(s, pickWeighted(s, NEWS, (n) => n.weight)!);
 }
 
-/** ニュースを起こす。動いた金額の合計を返す */
-export function applyNews(s: GameState, news: NewsDef): number {
+/** ニュースを起こす。全員に同じニュースが起き、それぞれの資産が動いた金額を、それぞれの newsEvent に入れる */
+export function applyNews(s: GameState, news: NewsDef): void {
   const m = s.market;
   const prevEconomy = m.economy;
   const before = { ...m.prices };
-  const amounts: Record<Key, number> = Object.fromEntries(KEYS.map((k) => [k, 0]));
-  let moved = 0;
+  const views = seatViews(s);
+  const amounts: Record<Key, number>[] = views.map(() => Object.fromEntries(KEYS.map((k) => [k, 0])));
   for (const id of ASSET_IDS) {
     const shock = news.shocks[id];
     if (!shock) continue;
-    amounts[id] = movePrice(s, id, clamp(shock, SHOCK_LIMIT));
-    moved += amounts[id];
+    movePrice(s, id, clamp(shock, SHOCK_LIMIT)).forEach((v, i) => (amounts[i][id] = v));
   }
   if (news.shocks.realEstate) {
-    amounts.realEstate = moveRealEstate(s, clamp(news.shocks.realEstate, SHOCK_LIMIT));
-    moved += amounts.realEstate;
+    moveRealEstate(s, clamp(news.shocks.realEstate, SHOCK_LIMIT)).forEach((v, i) => (amounts[i].realEstate = v));
   }
   if (news.economy) {
     m.economy = news.economy;
-    s.yearMarket.economySet = true;
+    for (const v of views) v.yearMarket.economySet = true;
   }
   if (news.depositRateChange) {
     m.depositRate = Math.min(DEPOSIT_RATE_MAX, Math.max(DEPOSIT_RATE_MIN, m.depositRate + news.depositRateChange));
@@ -273,21 +281,24 @@ export function applyNews(s: GameState, news: NewsDef): number {
   if (news.inflation) m.livingIndex *= 1 + news.inflation;
   const rates: Record<Key, number> = Object.fromEntries(ASSET_IDS.map((id) => [id, m.prices[id] / before[id] - 1]));
   rates.realEstate = news.shocks.realEstate ?? 0;
-  s.yearMarket.newsIds.push(news.id);
-  const event: NewsEvent = { id: news.id, year: s.year, month: s.month, prevEconomy, rates, amounts, moved };
-  s.newsEvent = event;
-  return moved;
+  views.forEach((v, i) => {
+    v.yearMarket.newsIds.push(news.id);
+    const moved = Object.values(amounts[i]).reduce((a, b) => a + b, 0);
+    const event: NewsEvent = { id: news.id, year: s.year, month: s.month, prevEconomy, rates, amounts: amounts[i], moved };
+    v.newsEvent = event;
+    v.log.push({ year: s.year, month: s.month, key: 'news.happened', params: { news: news.id }, notice: true });
+  });
 }
 
 /**
  * 年末の相場。家の相場が1年分動き、物価と給料の水準が上がる。
- * その年にニュースで景気が変わらなかったときは、景気が確率で移り変わる。1年の値動きをまとめる。動いた金額の合計を返す
+ * その年にニュースで景気が変わらなかったときは、景気が確率で移り変わる。全員の1年の値動きをまとめる
  */
-export function updateMarketYear(s: GameState): number {
+export function updateMarketYear(s: GameState): void {
   const m = s.market;
   const prevEconomy = s.yearMarket.startEconomy;
   const reReturn = clamp(CORRECTION.realEstate + REAL_ESTATE_DRIFT[m.economy] + REAL_ESTATE_VOLATILITY * randomNormal(s), SHOCK_LIMIT);
-  const moved = moveRealEstate(s, reReturn, REAL_ESTATE.agingRate);
+  moveRealEstate(s, reReturn, REAL_ESTATE.agingRate);
 
   if (!s.yearMarket.economySet) {
     const row = ECONOMY_TRANSITION[m.economy];
@@ -301,6 +312,5 @@ export function updateMarketYear(s: GameState): number {
   const rates = {} as Record<Key, number>;
   for (const id of ASSET_IDS) rates[id] = m.prices[id] / ym.startPrices[id] - 1;
   rates.realEstate = m.realEstateIndex / ym.startRealEstateIndex - 1;
-  s.marketChange = { prevEconomy, rates, amounts: { ...ym.amounts } };
-  return moved;
+  for (const v of seatViews(s)) v.marketChange = { prevEconomy, rates: { ...rates }, amounts: { ...v.yearMarket.amounts } };
 }

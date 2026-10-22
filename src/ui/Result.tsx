@@ -3,6 +3,7 @@ import { formatMoney, has, t } from '../i18n';
 import { HistoryTabs } from './HistoryTabs';
 import { dateLabel } from './dateLabel';
 import { logLabel } from './logLabel';
+import { FinalRanking, WorthRaceChart } from './Rivals';
 
 /** 結果画面。最後の純資産を大きく出す（design.md 9章） */
 export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
@@ -15,7 +16,14 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
       <div className="muted">{t('result.years', { years: s.years })}</div>
       <div className="muted">{t('result.netWorth')}</div>
       <div className="rank">{formatMoney(result.netWorth)}</div>
+      <FinalRanking s={s} />
       <div className="result-grid">
+        {s.rivals.length > 0 && (
+          <div className="card">
+            <h4 style={{ margin: '0 0 6px' }}>{t('result.race')}</h4>
+            <WorthRaceChart s={s} />
+          </div>
+        )}
         <div className="card">
           <div className="kv">
             <span>{t('result.netWorth')}</span>

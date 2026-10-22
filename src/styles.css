@@ -1662,3 +1662,141 @@ button.small {
   font-size: 20px;
   font-weight: 900;
 }
+
+/* ライバル（design.md 12.4） */
+.rival-feed h4 {
+  margin: 0 0 6px;
+}
+.rival-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rival-line-text {
+  flex: 1;
+  min-width: 0;
+}
+.rival-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.rival-feed-all {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.rival-feed-row {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rival-alert-row {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-left: 5px solid;
+  border-radius: 8px;
+  background: #fffaf0;
+  font-weight: 700;
+}
+.everyone-moved {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f6f3ee;
+}
+
+/* 順位（design.md 12.4） */
+.rank-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.rank-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f6f3ee;
+}
+.rank-item.me {
+  background: #fff1e6;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.rank-worth {
+  font-weight: 800;
+}
+.rank-up .rank-item.me {
+  animation: rank-up 1.2s ease-out;
+}
+@keyframes rank-up {
+  0% {
+    transform: scale(1.25);
+    background: #ffe08a;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.rank-table tr.me td {
+  font-weight: 800;
+}
+.final-ranking {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  width: min(560px, 100%);
+}
+.final-headline {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--primary);
+}
+.final-list {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+.final-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.final-row.me {
+  box-shadow: inset 0 0 0 2px var(--primary), var(--shadow);
+}
+.final-medal {
+  width: 28px;
+  font-size: 22px;
+}
+.final-name {
+  flex: 1;
+}
+.invest-award {
+  width: 100%;
+}
+.invest-award h4 {
+  margin: 0 0 6px;
+}
+.invest-award-winner {
+  margin-bottom: 6px;
+  font-weight: 900;
+}
+/* スマホでは、上の欄の順位は、あなたの分だけ短く出す */
+@media (max-width: 900px), (max-height: 520px) {
+  .rank-item:not(.me) {
+    display: none;
+  }
+  .rank-item .rank-worth {
+    display: none;
+  }
+}

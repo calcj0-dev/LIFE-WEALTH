@@ -4,6 +4,7 @@ import { CARDS_BY_ID } from '../data/cards';
 import type { GameState } from '../game/types';
 import { formatMoney, formatSigned, has, t } from '../i18n';
 import { MoneyDelta } from './Delta';
+import { EveryoneMoved } from './Rivals';
 
 const ICONS: Record<string, string> = {
   crash: '📉',
@@ -50,6 +51,7 @@ export function BigEventModal({ s, onClose }: { s: GameState; onClose: () => voi
         {rates.length === 0 && Math.round(ev.cash * 10) === 0 && ev.covered === 0 && has(`bigEvent.${ev.id}.none`) && (
           <p className="muted">{t(`bigEvent.${ev.id}.none`)}</p>
         )}
+        <EveryoneMoved s={s} amountOf={(v) => (v.bigEvent ? Math.round(v.bigEvent.moved) + Math.round(v.bigEvent.cash) : 0)} />
         {rates.length > 0 && <p className="muted">{t(hasTradeCard ? 'bigEvent.tradeHint' : 'bigEvent.noTradeHint')}</p>}
         <div className="options">
           <button onClick={onClose}>{t('option.ok')}</button>
