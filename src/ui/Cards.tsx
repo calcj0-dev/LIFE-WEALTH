@@ -1,6 +1,8 @@
 // 手札のカード。ルーレットを回す前に、1ターン1枚まで使える（design.md 3.9）。
 
 import { useState } from 'react';
+import { SQUARE_COLORS } from '../board/Board';
+import { BOARD } from '../data/board';
 import { CARDS_BY_ID, HAND_MAX } from '../data/cards';
 import { ROULETTE_MAX } from '../data/rules';
 import { bonusDistance } from '../game/engine';
@@ -59,21 +61,31 @@ export function CardHand({ s, canUse, onMove, onTrade }: Props) {
             )}
             {usable && choosing === i && (
               <div className="exact-buttons">
-                {Array.from({ length: ROULETTE_MAX }, (_, k) => k + 1).map((n) => (
-                  <button
-                    key={n}
-                    className="small"
-                    onClick={() => {
-                      setChoosing(null);
-                      onMove(i, n);
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
+                {/* ボタンは、その数だけ進んだ先のマスの色にする。赤いマスを避けたり、ボーナスマスをねらったりできる（design.md 3.3） */}
+                {Array.from({ length: ROULETTE_MAX }, (_, k) => k + 1).map((n) => {
+                  const target = (s.player.position + n) % BOARD.length;
+                  const type = BOARD[target].type;
+                  const bonus = target === s.bonusSquare;
+                  return (
+                    <button
+                      key={n}
+                      className={`small exact-button${bonus ? ' bonus' : ''}`}
+                      style={{ background: SQUARE_COLORS[type] }}
+                      title={bonus ? t('cards.exactBonus') : t(`squareType.${type}`)}
+                      onClick={() => {
+                        setChoosing(null);
+                        onMove(i, n);
+                      }}
+                    >
+                      {n}
+                      {bonus && '★'}
+                    </button>
+                  );
+                })}
                 <button className="secondary small" onClick={() => setChoosing(null)}>
                   {t('cards.cancel')}
                 </button>
+                <div className="muted exact-hint">{t('cards.exactHint')}</div>
               </div>
             )}
           </div>

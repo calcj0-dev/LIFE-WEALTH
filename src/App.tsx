@@ -19,7 +19,13 @@ import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
 import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
-import { PLAYER_COLOR, RIVAL_COLORS, RivalAlertModal, isImportant, rivalLines } from './ui/Rivals';
+import { BonusModal, RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
+import { bonusDistance } from './game/engine';
+import { RIVAL_LOOKS, familyOf } from './data/characters';
+import { AvatarSelect } from './ui/AvatarSelect';
+import { TitleScene } from './ui/TitleScene';
+import { MuteButton } from './ui/MuteButton';
+import { sfx } from './ui/sound';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
@@ -29,6 +35,8 @@ const PAY_STEP_MS = [300, 650, 650, 250];
 /** ライバルの駒が1マス進む時間と、ライバルの番の前後の間（ミリ秒。design.md 12.2） */
 const RIVAL_STEP_MS = 130;
 const RIVAL_PAUSE_MS = 400;
+/** 次のボーナスマスの発表を見せる時間（ミリ秒） */
+const ANNOUNCE_MS = 1800;
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -41,6 +49,8 @@ export function App() {
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
   const [moveLabel, setMoveLabel] = useState<string | null>(null);
   const [overview, setOverview] = useState(false);
+  /** はじめから: キャラクターを選んでいる間 */
+  const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
@@ -67,12 +77,18 @@ export function App() {
   // あなたの月末を見せる順番（design.md 2.2、12.2）: 給料と生活費のアクション → 今月のまとめ → ライバルの番
   // → ライバルのお知らせ → 大きなイベント・ニュース。計算は全員分もう済んでいるので、見せる順番だけを決める
 
+  // あなたがボーナスマスに止まったら、まず「ボーナスゲット！」の画面を出す（design.md 3.10）
+  /** ボーナスゲットの画面を閉じた月 */
+  const [bonusShown, setBonusShown] = useState<string | null>(null);
+  const bonusEntry = humanDone && monthEnded && game && turnStart ? game.log.slice(turnStart.logLen).find((e) => e.key === 'bonus.get') : undefined;
+  const celebrating = !!bonusEntry && bonusShown !== flowKey;
+
   // 給料と生活費のアクション。銀行預金の横に「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
   /** アクションを見せ終わった月 */
   const [payShown, setPayShown] = useState<string | null>(null);
   /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
   const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
-  const paying = humanDone && monthEnded && payShown !== flowKey;
+  const paying = humanDone && monthEnded && !celebrating && payShown !== flowKey;
   const payIndex = payStep?.key === flowKey ? payStep.i : 0;
   /** 大きなイベントで動いた銀行預金（ライバルの番のあとに見せるので、それまでは引いておく） */
   const bigEventCash = game?.bigEvent?.cash ?? 0;
@@ -102,7 +118,7 @@ export function App() {
   // 大きなイベントとニュースは全員に起きるので、このあとの画面で見せる（まとめには入れない）
   const monthEntries = game && turnStart ? game.log.slice(turnStart.logLen).filter((e) => !e.key.startsWith('bigEvent.')) : [];
   const summary: TurnSummaryData | null =
-    game && turnStart && humanDone && monthEnded && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
+    game && turnStart && humanDone && monthEnded && !celebrating && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
       ? {
           year: turnStart.year,
           month: turnStart.month,
@@ -121,7 +137,7 @@ export function App() {
   const [rivalShown, setRivalShown] = useState<string | null>(null);
   /** 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前） */
   const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number } | null>(null);
-  const rivalsMoving = humanDone && monthEnded && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
+  const rivalsMoving = humanDone && monthEnded && !celebrating && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
   const rs = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
   const rivalPositions =
     game?.rivals.map((r, k) => {
@@ -140,12 +156,15 @@ export function App() {
     }
     const path = game.rivals[rs.r].lastPath;
     const next = rs.i + 1 < path.length ? { key: flowKey, r: rs.r, i: rs.i + 1 } : { key: flowKey, r: rs.r + 1, i: -1 };
-    const id = window.setTimeout(() => setRivalStep(next), rs.i < 0 || next.r !== rs.r ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
+    const id = window.setTimeout(() => {
+      setRivalStep(next);
+      if (next.r === rs.r) sfx.step(true);
+    }, rs.i < 0 || next.r !== rs.r ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
     return () => window.clearTimeout(id);
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
   // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
-  const turnComplete = humanDone && monthEnded && !paying && !summary && !rivalsMoving;
+  const turnComplete = humanDone && monthEnded && !celebrating && !paying && !summary && !rivalsMoving;
   useEffect(() => {
     if (turnComplete) setTurnStart(null);
   }, [turnComplete]);
@@ -166,8 +185,35 @@ export function App() {
   });
   /** ターンが終わり、ライバルのお知らせも見たあと（大きなイベントとニュースを出す） */
   const afterTurn = !turnStart && alerts.length === 0;
+
+  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、
+  // ほかの画面がないときに、盤面をボーナスマスまで動かして「次のボーナスマスはここ！」と出す
+  /** 発表を見せたボーナスマス */
+  const [announced, setAnnounced] = useState<number | null>(null);
+  /** 発表を見せている間 */
+  const [announcing, setAnnouncing] = useState(false);
+  const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
+  const wantAnnounce = inPlay && afterTurn && !game!.bigEvent && !game!.newsEvent && !showHistory && !showFeed && announced !== game!.bonusSquare;
+  useEffect(() => {
+    if (!game) {
+      setAnnounced(null);
+      return;
+    }
+    if (!wantAnnounce) return;
+    setAnnouncing(true);
+    const square = game.bonusSquare;
+    const id = window.setTimeout(() => {
+      setAnnounced(square);
+      setAnnouncing(false);
+    }, ANNOUNCE_MS);
+    // 途中で止まったときも、発表中のままにならないようにする
+    return () => {
+      window.clearTimeout(id);
+      setAnnouncing(false);
+    };
+  }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
-  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0;
+  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce;
   const yearEnd = game?.phase === 'yearEnd';
   const tradeStep = yearEnd && tradeYear === game!.year;
   const settleStep = yearEnd && !tradeStep;
@@ -190,7 +236,12 @@ export function App() {
 
   /** 駒を1マスずつ動かしてから、新しい状態にする */
   const move = (next: GameState) => {
-    next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
+    next.lastPath.forEach((pos, i) =>
+      later(() => {
+        setMovingPos(pos);
+        sfx.step();
+      }, STEP_MS * (i + 1)),
+    );
     later(() => {
       setMovingPos(null);
       setGame(next);
@@ -211,6 +262,7 @@ export function App() {
     setMoveLabel(null);
     setSpinValue(next.lastRoll);
     setSpinning(true);
+    sfx.spin(SPIN_DURATION_MS);
     setOverview(false);
     later(() => {
       setSpinning(false);
@@ -238,6 +290,7 @@ export function App() {
       return;
     }
     setSpinning(true);
+    sfx.spin(SPIN_DURATION_MS);
     later(() => {
       setSpinning(false);
       move(next);
@@ -245,15 +298,26 @@ export function App() {
   };
 
   let screen: React.ReactNode;
-  if (!game) {
+  if (!game && pickingLook) {
+    // はじめから: まず、あなたのキャラクターを選ぶ（design.md 10.1）
     screen = (
-      <div className="center-screen">
+      <AvatarSelect
+        onDone={(avatar) => {
+          setPickingLook(false);
+          setGame(createGame(Math.floor(Math.random() * 2 ** 31), { avatar }));
+        }}
+      />
+    );
+  } else if (!game) {
+    screen = (
+      <div className="center-screen title-screen">
+        <TitleScene />
         <h1 className="logo">
           LIFE <span>&amp;</span> WEALTH
         </h1>
         <p className="subtitle">{t('app.subtitle')}</p>
         <div className="button-row">
-          <button onClick={() => setGame(createGame(Math.floor(Math.random() * 2 ** 31)))}>{t('title.new')}</button>
+          <button onClick={() => setPickingLook(true)}>{t('title.new')}</button>
           {saved && (
             <button className="secondary" onClick={() => setGame(saved)}>
               {t('title.continue')}
@@ -279,20 +343,33 @@ export function App() {
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
         <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} />
         <div className="game-body">
-          <div className="board-area">
+          <div className={`board-area${overview ? ' overview' : ''}`}>
             <Board
               position={movingPos ?? game.player.position}
               overview={overview}
               bonus={game.bonusSquare}
               married={game.player.married}
-              color={PLAYER_COLOR}
-              others={game.rivals.map((r, k) => ({ position: rivalPositions[k], color: RIVAL_COLORS[r.id] }))}
-              focus={rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
+              look={lookOf(game, 'you')}
+              family={familyOf(game.seed, 'you', game.player.married, game.player.children, lookOf(game, 'you'))}
+              others={game.rivals.map((r, k) => ({
+                position: rivalPositions[k],
+                look: RIVAL_LOOKS[r.id],
+                family: familyOf(game.seed, r.id, r.player.married, r.player.children, RIVAL_LOOKS[r.id]),
+              }))}
+              focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
+              landed={humanDone ? game.player.position : undefined}
             />
+            {announcing && (
+              <div className="bonus-announce" role="status">
+                <div className="bonus-announce-title">{t('bonus.announce')}</div>
+                <div>{t('bonus.announceDistance', { n: bonusDistance(game) })}</div>
+              </div>
+            )}
             <div className="board-toolbar">
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
                 {t(overview ? 'board.follow' : 'board.overview')}
               </button>
+              <MuteButton />
             </div>
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
@@ -326,6 +403,9 @@ export function App() {
         )}
         {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
         {!busy && afterTurn && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
+        {celebrating && bonusEntry && !showHistory && !showFeed && (
+          <BonusModal amount={bonusEntry.cash ?? 0} onClose={() => setBonusShown(flowKey)} />
+        )}
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}

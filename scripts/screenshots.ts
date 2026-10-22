@@ -56,6 +56,11 @@ for (const vp of VIEWPORTS) {
   await shot('title');
   await clickText(page, 'body', 'はじめから');
   await page.waitForTimeout(200);
+  // キャラクターを選ぶ（2人目を選んで撮る）
+  await page.locator('.avatar-choice').nth(1).click();
+  await shot('avatar');
+  await clickText(page, 'body', 'このキャラクターで始める');
+  await page.waitForTimeout(200);
   await shot('years');
   await page.locator('.choice-card', { hasText: process.env.YEARS ?? '10年' }).first().click();
   await clickText(page, 'body', 'この年数で始める');
@@ -165,6 +170,14 @@ for (const vp of VIEWPORTS) {
       // ルーレットが回るのを待つ
       if (await page.locator('.roulette-steps').count()) await page.waitForTimeout(2700);
       continue;
+    }
+    // ぴったりカードがあれば、数を選ぶ画面（進んだ先のマスの色）を1回撮る
+    const exactCard = page.locator('.game-card', { hasText: 'ぴったり' }).locator('button:not([disabled])', { hasText: '使う' });
+    if (!shots.has('exact') && (await exactCard.count())) {
+      await exactCard.first().click();
+      await page.waitForTimeout(150);
+      await shot('exact');
+      await clickText(page, '.exact-buttons', 'やめる');
     }
     // ふつうのターン: ルーレットを回して、駒の移動を待つ
     if (await clickText(page, '.board-area', 'ルーレットを回す')) {

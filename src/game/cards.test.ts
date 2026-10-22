@@ -130,7 +130,8 @@ describe('ボーナスマス', () => {
     expect(s.bonusSquare).not.toBe(s0.bonusSquare);
   });
   it('通りすぎたときは、もらえない', () => {
-    const base = started();
+    // ライバルが取らないように、ライバルなしで確かめる
+    const base = { ...started(), rivals: [] };
     const s0 = { ...base, bonusSquare: (base.player.position + 2) % BOARD.length };
     const s = roll(withHand(s0, ['exact']), { index: 0, exact: 3 });
     expect(s.log.some((l) => l.key === 'bonus.get')).toBe(false);

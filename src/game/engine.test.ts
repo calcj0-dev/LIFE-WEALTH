@@ -8,7 +8,7 @@ import { BOARD, SQUARE_COUNTS } from '../data/board';
 
 /** 最初の結婚・出産マス */
 const FAMILY_INDEX = BOARD.findIndex((sq) => sq.type === 'family');
-import { EVENTS, checkEvents } from '../data/events';
+import { EVENTS, EVENTS_BY_ID, checkEvents } from '../data/events';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
 import { NEWS, checkNews } from '../data/news';
@@ -83,7 +83,7 @@ describe('データ（JSON）', () => {
     expect(checkNews({ frequency: { count: 2, years: 1.5 }, news: [{ id: 'n', weight: 1, shocks: { noSuchAsset: 0.1 } }] })).toEqual([
       'news[0]: shocks の「noSuchAsset」という銘柄はありません',
     ]);
-    expect(checkEvents({ events: [{ id: 'e', size: 'huge', weight: 1, effects: [{ t: 'magic' }], when: { age: 30 } }] }).length).toBe(3);
+    expect(checkEvents({ events: [{ id: 'e', sign: 'plus', size: 'huge', weight: 1, effects: [{ t: 'magic' }], when: { age: 30 } }] }).length).toBe(3);
     expect(checkJobs({ jobs: [{ id: 'a' }, { id: 'a' }], athleteRetireYear: { min: 5, max: 1 }, athleteNextJobs: ['b'] }).length).toBeGreaterThan(3);
   });
   it('画面に出す文字が、言語ファイルにある', () => {
@@ -292,8 +292,34 @@ describe('結婚と出産', () => {
     }
     throw new Error('結婚する例が見つからない');
   });
+  it('プラスのマスではお金が増える出来事、マイナスのマスでは減る出来事、チャンスのマスでは選ぶ出来事が起きる', () => {
+    for (const [type, sign] of [
+      ['plusSmall', 'plus'],
+      ['minusMedium', 'minus'],
+      ['plusLarge', 'plus'],
+      ['minusLarge', 'minus'],
+      ['chance', 'chance'],
+    ] as const) {
+      const index = BOARD.findIndex((sq) => sq.type === type);
+      for (let seed = 1; seed <= 15; seed++) {
+        const s = landOn(started(seed), index);
+        if (s.decision?.kind !== 'event') continue;
+        expect(EVENTS_BY_ID[s.decision.eventId!].sign).toBe(sign);
+      }
+    }
+  });
+  it('マスに合う出来事がないときは、同じ色の1つ小さい出来事にする', () => {
+    // YouTuber は昇進も昇給もなく、11年目からは親からの援助もないので、プラス（大）の出来事がない
+    const index = BOARD.findIndex((sq) => sq.type === 'plusLarge');
+    const base = started(3, 20, 'youtuber');
+    const s = landOn({ ...base, year: 11 }, index);
+    expect(s.decision?.kind).toBe('event');
+    const ev = EVENTS_BY_ID[s.decision!.eventId!];
+    expect(ev.sign).toBe('plus');
+    expect(ev.size).not.toBe('large');
+  });
   it('小さな出来事のマスでも、出来事の画面を出してから起こす', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'small');
+    const index = BOARD.findIndex((sq) => sq.type === 'minusSmall');
     const s = landOn(started(), index);
     expect(s.decision?.kind).toBe('event');
     const after = choose(s, 'ok');

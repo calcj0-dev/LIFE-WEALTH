@@ -3,7 +3,9 @@ import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { AnimatedMoney, type MoneyLevel } from './AnimatedMoney';
-import { RankStrip, RivalFeed } from './Rivals';
+import { RankStrip, RivalFeed, lookOf } from './Rivals';
+import { AvatarIcon } from '../board/Avatar';
+import { familyOf } from '../data/characters';
 import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
@@ -84,9 +86,9 @@ export function SidePanel({
         </button>
       </div>
       <RivalFeed s={s} hideMonth={hideRivalMonth} />
-      <div className="card">
+      <div className="card panel-assets">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} />} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} sound />} />
         {owned.map((id) => (
           <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}
@@ -108,6 +110,13 @@ export function SidePanel({
       </div>
       <div className="card">
         <h4>{t('panel.family')}</h4>
+        <div className="family-icons">
+          <AvatarIcon look={lookOf(s, 'you')} size={26} />
+          {familyOf(s.seed, 'you', p.married, p.children, lookOf(s, 'you')).map((m, i) => (
+            <AvatarIcon key={i} look={m.look} size={Math.round(26 * Math.max(0.7, m.scale + 0.2))} />
+          ))}
+          {p.children.some((c) => c.independent) && <span className="muted">{t('panel.independent', { count: p.children.filter((c) => c.independent).length })}</span>}
+        </div>
         <div>{family}</div>
         {p.children.length > 0 && <div>{t('panel.children', { count: p.children.length })}</div>}
         <div>{p.home ? t('panel.home') : t('panel.rent')}</div>

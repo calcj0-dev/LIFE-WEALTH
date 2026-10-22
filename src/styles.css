@@ -1168,7 +1168,7 @@ button.small {
   animation: money-flash-up 1.2s ease-out;
 }
 .animated-money.flash-medium-down {
-  animation: money-flash-down 1.2s ease-out;
+  animation: money-flash-down 1.2s ease-out, money-shake 0.4s ease-in-out;
 }
 .animated-money.flash-strong-up {
   animation: money-flash-up 1.6s ease-out, money-shake 0.5s ease-in-out;
@@ -1799,4 +1799,474 @@ button.small {
   .rank-item .rank-worth {
     display: none;
   }
+}
+
+/* ぴったりカードの数のボタン。進んだ先のマスの色（design.md 3.3） */
+.exact-button {
+  min-width: 34px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-weight: 900;
+}
+.exact-button.bonus {
+  outline: 3px dashed #ff4d6d;
+  outline-offset: 1px;
+}
+.exact-hint {
+  width: 100%;
+  font-size: 11px;
+}
+
+/* キャラクター（design.md 10.1） */
+.avatar-icon {
+  flex: none;
+  vertical-align: middle;
+}
+.avatar-select {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.avatar-choice {
+  width: 120px;
+  padding: 10px;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.avatar-choice.selected {
+  border-color: var(--primary);
+  background: #fff1e6;
+}
+.avatar-choice svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+.avatar-rivals {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  align-items: center;
+}
+.avatar-rivals svg {
+  width: 70px;
+  height: 80px;
+}
+
+.family-icons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+/* ---------------- 演出（design.md 10.1） */
+
+/* ルーレットが止まったら、出た数字を大きく出す（画面の中のルーレットでは出さない） */
+.modal .roll-pop,
+.center-screen .roll-pop {
+  display: none;
+}
+.roll-pop {
+  position: absolute;
+  left: 50%;
+  top: 92px;
+  width: 64px;
+  height: 64px;
+  margin-left: -32px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  color: var(--primary);
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 64px;
+  text-align: center;
+  pointer-events: none;
+  animation: roll-pop 1s ease-out forwards;
+}
+@keyframes roll-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  45% {
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+/* 駒は1マスごとにぴょんと跳ねる */
+.piece-hop {
+  animation: piece-hop 0.26s ease-out;
+}
+@keyframes piece-hop {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-16px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+/* 止まったマスが光る */
+.square-landed {
+  animation: square-landed 1.2s ease-in-out infinite;
+}
+@keyframes square-landed {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* お金が増えたら、コインが数字に飛びこむ */
+.animated-money {
+  position: relative;
+}
+.coin-burst {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  pointer-events: none;
+}
+.coin-burst i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0, #ffc93c 60%, #d99a00);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  animation: coin-in 0.8s ease-in forwards;
+}
+.coin-burst i:nth-child(2) {
+  animation-delay: 0.12s;
+  margin-left: -14px;
+}
+.coin-burst i:nth-child(3) {
+  animation-delay: 0.24s;
+  margin-left: 10px;
+}
+@keyframes coin-in {
+  0% {
+    transform: translateY(-34px) scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(8px) scale(1);
+    opacity: 0;
+  }
+}
+/* 大暴落・地震などは、画面が少しゆれる */
+.overlay.shake .modal {
+  animation: screen-shake 0.6s ease-in-out;
+}
+@keyframes screen-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-10px, 4px);
+  }
+  30% {
+    transform: translate(9px, -5px);
+  }
+  45% {
+    transform: translate(-7px, 3px);
+  }
+  60% {
+    transform: translate(6px, -2px);
+  }
+  75% {
+    transform: translate(-3px, 1px);
+  }
+}
+/* 紙ふぶき */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+.confetti span {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(calc(540deg * var(--turn)));
+    opacity: 0.8;
+  }
+}
+/* 「動きを減らす」設定の人には、ゆれ、紙ふぶき、跳ねる動きを出さない */
+@media (prefers-reduced-motion: reduce) {
+  .confetti,
+  .coin-burst {
+    display: none;
+  }
+  .overlay.shake .modal,
+  .piece-hop,
+  .square-landed,
+  .roll-pop,
+  .animated-money {
+    animation: none !important;
+  }
+}
+
+/* ボーナスマスの演出（design.md 3.10） */
+.bonus-get {
+  text-align: center;
+  border: 6px solid #ffd166;
+}
+.bonus-get-star {
+  font-size: 56px;
+  line-height: 1;
+  color: #ffb703;
+  animation: bonus-star 1s ease-out;
+}
+@keyframes bonus-star {
+  0% {
+    transform: scale(0.2) rotate(-90deg);
+  }
+  60% {
+    transform: scale(1.3) rotate(10deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+.bonus-get-amount {
+  font-size: 40px;
+  font-weight: 900;
+  color: #0f8a7e;
+}
+.rival-alert.bonus-taken {
+  border: 4px solid #ff4d6d;
+}
+.rival-alert.bonus-taken h2 {
+  color: #d6336c;
+}
+.bonus-announce {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  padding: 10px 22px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 3px dashed #ff4d6d;
+  box-shadow: var(--shadow);
+  text-align: center;
+  font-weight: 700;
+  z-index: 5;
+  animation: announce-in 0.4s ease-out;
+}
+.bonus-announce-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ff4d6d;
+}
+@keyframes announce-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bonus-get-star,
+  .bonus-announce {
+    animation: none;
+  }
+}
+
+/* ---------------- 全体図: ルーレットと手札をかくして、盤面を広く見せる（design.md 3.1） */
+.board-area.overview .roulette,
+.board-area.overview .card-hand {
+  display: none;
+}
+
+/* ---------------- スマホの横向き（design.md 10.2）。高さが低いので、すき間を詰め、大事なものを上に出す */
+@media (max-height: 520px) {
+  .game-body {
+    grid-template-columns: 1fr minmax(200px, 230px);
+    gap: 6px;
+    padding: 6px;
+  }
+  .hud {
+    gap: 10px;
+    padding-left: 10px;
+  }
+  .hud-age {
+    font-size: 17px;
+  }
+  .hud-years {
+    display: none;
+  }
+  .hud-item .value {
+    font-size: 15px;
+  }
+  /* 右側は、銀行預金と資産を一番上に出す（給料のアクションが見えるように） */
+  .side-panel {
+    gap: 6px;
+    font-size: 13px;
+  }
+  .side-panel .card {
+    padding: 8px 10px;
+  }
+  .side-panel .panel-assets {
+    order: -2;
+  }
+  .side-panel .budget {
+    order: -1;
+  }
+  /* 手札は小さくし、カードの説明の文は省く */
+  .card-hand {
+    max-width: 52%;
+    padding: 6px;
+  }
+  .card-hand .game-card-text,
+  .card-hand .muted {
+    display: none;
+  }
+  .card-hand .exact-buttons .exact-hint {
+    display: none;
+  }
+  .roulette {
+    padding: 4px 8px 8px;
+  }
+  .roulette button {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+  .board-toolbar {
+    left: 6px;
+    top: 6px;
+  }
+}
+
+/* ---------------- 全体の見た目（design.md 10.1） */
+
+/* 始めの画面（タイトル、キャラクター、年数、職業、積み立て）は、やわらかい水玉の背景にする */
+.center-screen {
+  background-image: radial-gradient(circle, rgba(255, 122, 69, 0.08) 2px, transparent 2.5px), radial-gradient(circle, rgba(46, 196, 182, 0.08) 2px, transparent 2.5px);
+  background-size: 36px 36px;
+  background-position: 0 0, 18px 18px;
+}
+.title-screen {
+  gap: 14px;
+}
+.title-scene {
+  width: min(560px, 92vw);
+  height: auto;
+}
+.title-screen .button-row button {
+  min-width: 160px;
+  padding: 12px 28px;
+  font-size: 17px;
+}
+.title-hop {
+  animation: title-hop 1.6s ease-in-out infinite;
+}
+.title-hop-1 {
+  animation-delay: 0.2s;
+}
+.title-hop-2 {
+  animation-delay: 0.4s;
+}
+@keyframes title-hop {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
+.title-coin {
+  animation: title-coin 2.4s ease-in-out infinite;
+}
+.title-coin-1 {
+  animation-delay: 0.8s;
+}
+.title-coin-2 {
+  animation-delay: 1.6s;
+}
+@keyframes title-coin {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+/* 見出しを少し太く、カードの角を少し丸く */
+h2 {
+  letter-spacing: 0.02em;
+}
+.card {
+  border-radius: 16px;
+}
+@media (max-height: 520px) {
+  .title-scene {
+    width: min(380px, 70vw);
+  }
+  .title-screen {
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-hop,
+  .title-coin {
+    animation: none;
+  }
+}
+
+/* 音を消すボタン（盤面の絵の大きさの決まりより、こちらを優先する） */
+.board-toolbar .mute-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  padding: 0;
+}
+.board-area .mute-button svg {
+  width: 20px;
+  height: 20px;
 }

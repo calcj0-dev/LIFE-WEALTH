@@ -5,6 +5,8 @@ import data from './events.json';
 import { assertValid, checkFields, checkUniqueIds, isNumber, isObject, type Problems } from './validate';
 
 export type EventSize = 'small' | 'medium' | 'large';
+/** plus はお金が増える（緑のマス）、minus は減る（赤のマス）、chance は選ぶ出来事（黄色のマス）。design.md 3.3 */
+export type EventSign = 'plus' | 'minus' | 'chance';
 
 export type Effect =
   | { t: 'cash'; amount: number }
@@ -37,6 +39,7 @@ export interface EventCondition {
 
 export interface EventDef {
   id: string;
+  sign: EventSign;
   size: EventSize;
   /** 起きやすさ */
   weight: number;
@@ -50,6 +53,7 @@ export interface EventDef {
 }
 
 const SIZES: EventSize[] = ['small', 'medium', 'large'];
+const SIGNS: EventSign[] = ['plus', 'minus', 'chance'];
 const EFFECT_FIELDS: Record<Effect['t'], Record<string, 'number'>> = {
   cash: { amount: 'number' },
   salaryRate: { rate: 'number' },
@@ -77,8 +81,10 @@ export function checkEvents(raw: unknown): Problems {
   const problems: Problems = [];
   list.forEach((e, i) => {
     const where = `events[${i}]（${e?.id}）`;
-    problems.push(...checkFields(where, e, { id: 'string', size: 'string', weight: 'number', when: 'object?', weightBy: 'string?', effects: 'array?', choice: 'string?' }));
+    problems.push(...checkFields(where, e, { id: 'string', sign: 'string', size: 'string', weight: 'number', when: 'object?', weightBy: 'string?', effects: 'array?', choice: 'string?' }));
     if (!SIZES.includes(e.size)) problems.push(`${where}: size は small・medium・large のどれかにします`);
+    if (!SIGNS.includes(e.sign)) problems.push(`${where}: sign は plus・minus・chance のどれかにします`);
+    if ((e.sign === 'chance') !== !!e.choice) problems.push(`${where}: 選ぶ出来事（choice）は sign を chance に、それ以外は plus か minus にします`);
     if (isNumber(e.weight) && e.weight <= 0) problems.push(`${where}: weight は0より大きくします`);
     if (e.weightBy !== undefined && !['unemployment', 'sickness'].includes(e.weightBy)) problems.push(`${where}: weightBy が正しくありません`);
     if (e.choice !== undefined && !['jobChange', 'sideBusiness'].includes(e.choice)) problems.push(`${where}: choice が正しくありません`);

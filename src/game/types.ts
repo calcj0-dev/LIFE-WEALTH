@@ -8,11 +8,15 @@ export type Economy = 'boom' | 'normal' | 'recession';
 export type SquareType =
   | 'start'
   | 'family'
-  | 'small'
+  | 'plusSmall'
+  | 'minusSmall'
+  | 'plusMedium'
+  | 'minusMedium'
+  | 'plusLarge'
+  | 'minusLarge'
+  | 'chance'
   | 'card'
   | 'luckyCard'
-  | 'medium'
-  | 'large'
   | 'stock'
   | 'investTalk'
   | 'gamble'
@@ -351,6 +355,8 @@ export interface GameState {
   lastMonth: MonthFlow | null;
   /** 起きたばかりのニュース。今月のまとめで見せ、「OK」を押すまで止める（design.md 7章） */
   newsEvent: NewsEvent | null;
+  /** あなたのキャラクター（src/data/characters.ts の番号。古いセーブにはないので、なければ最初のキャラクター） */
+  avatar?: string;
   /** ライバル（CPU）2人。いないときは空（design.md 12章） */
   rivals: Rival[];
   /**
