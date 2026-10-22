@@ -206,6 +206,11 @@ export interface Stats {
   /** 投資の話に払った元手の合計と、戻ってきた金額の合計（借金になった分はマイナス） */
   talkSpent: number;
   talkReturned: number;
+  /** 投資に入れたお金の合計（買った金額）と、売って戻ったお金の合計（投資の成績に使う。design.md 9章） */
+  invested: number;
+  divested: number;
+  /** 持っている資産から入った配当と国債の利息の合計（銀行預金の利息は入れない） */
+  assetIncome: number;
 }
 
 export type DecisionKind =
@@ -252,10 +257,49 @@ export type Phase = 'setupYears' | 'setupJob' | 'setupSaving' | 'roll' | 'decisi
 
 export interface GameResult {
   netWorth: number;
+  /** 投資の成績（投資に入れたお金に対して、何%増えたか。design.md 9章） */
+  investReturn: number;
+}
+
+/**
+ * プレイヤーごとに持つ記録の名前（design.md 12章）。あなたの分は GameState にそのまま持ち、
+ * ライバルの分は Rival に同じ形で持つ。ライバルの番では、この記録を GameState と入れ替えて、同じ計算を使う
+ */
+export type SeatKey =
+  | 'player'
+  | 'yearFlows'
+  | 'lastSettlement'
+  | 'history'
+  | 'log'
+  | 'stats'
+  | 'queue'
+  | 'lastMonth'
+  | 'marketChange'
+  | 'yearMarket'
+  | 'newsEvent'
+  | 'bigEvent'
+  | 'decision'
+  | 'decisionFrom'
+  | 'cardUsed'
+  | 'lastRoll'
+  | 'lastFace'
+  | 'lastCard'
+  | 'lastPath'
+  | 'result';
+
+/** プレイヤー1人分の記録 */
+export type SeatData = Pick<GameState, SeatKey>;
+
+/** ライバル（CPU）の番号。steady はコツコツさん（堅実タイプ）、bold はイケイケさん（攻めタイプ） */
+export type RivalId = 'steady' | 'bold';
+
+/** ライバル（CPU）1人分 */
+export interface Rival extends SeatData {
+  id: RivalId;
 }
 
 export interface GameState {
-  saveVersion: 3;
+  saveVersion: 4;
   seed: number;
   rngState: number;
   /** 遊ぶ年数（10〜50） */
@@ -307,6 +351,10 @@ export interface GameState {
   lastMonth: MonthFlow | null;
   /** 起きたばかりのニュース。今月のまとめで見せ、「OK」を押すまで止める（design.md 7章） */
   newsEvent: NewsEvent | null;
+  /** ライバル（CPU）2人。いないときは空（design.md 12章） */
+  rivals: Rival[];
+  /** ライバルの番の計算をしている間だけ true（月末の、全員に共通の処理を行わないため） */
+  cpuTurn: boolean;
 }
 
 /** 1ターンの月末の、お金の動き */

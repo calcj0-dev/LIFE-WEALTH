@@ -72,6 +72,7 @@ function addUnits(s: GameState, id: AssetId, units: number, price: number): numb
   s.player.holdings[id] = (s.player.holdings[id] ?? 0) + units;
   s.player.cost[id] = costOf(s, id) + spend;
   s.player.cash -= spend;
+  s.stats.invested += spend;
   return spend;
 }
 
@@ -88,6 +89,7 @@ function removeUnits(s: GameState, id: AssetId, units: number): number {
     s.player.cost[id] = 0;
   }
   s.player.cash += gained;
+  s.stats.divested += gained;
   return gained;
 }
 
