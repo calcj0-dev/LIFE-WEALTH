@@ -578,5 +578,16 @@
   "payFlow.expense": "生活費",
   "squareType.family": "結婚・出産",
   "board.zoomIn": "拡大",
-  "board.zoomOut": "縮小"
+  "board.zoomOut": "縮小",
+  "option.close": "閉じる",
+  "rival.you": "あなた",
+  "rival.steady": "コツコツさん",
+  "rival.bold": "イケイケさん",
+  "rival.everyoneMoved": "みんなの資産の動き",
+  "rival.noChange": "変わらず",
+  "rivalFeed.title": "ライバルの動き",
+  "rivalFeed.empty": "まだ動きはありません。",
+  "rivalFeed.more": "もっと見る",
+  "rivalFeed.date": "{year}年目 {month}月",
+  "rivalAlert.title": "ライバルに動きがありました"
 }

@@ -3,6 +3,7 @@ import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { AnimatedMoney, type MoneyLevel } from './AnimatedMoney';
+import { RivalFeed } from './Rivals';
 import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
@@ -78,6 +79,7 @@ export function SidePanel({
           {t('feed.open')}
         </button>
       </div>
+      <RivalFeed s={s} />
       <div className="card">
         <h4>{t('panel.assets')}</h4>
         <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} />} />

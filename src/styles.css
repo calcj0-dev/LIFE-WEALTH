@@ -1662,3 +1662,48 @@ button.small {
   font-size: 20px;
   font-weight: 900;
 }
+
+/* ライバル（design.md 12.4） */
+.rival-feed h4 {
+  margin: 0 0 6px;
+}
+.rival-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rival-line-text {
+  flex: 1;
+  min-width: 0;
+}
+.rival-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.rival-feed-all {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.rival-feed-row {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rival-alert-row {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-left: 5px solid;
+  border-radius: 8px;
+  background: #fffaf0;
+  font-weight: 700;
+}
+.everyone-moved {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f6f3ee;
+}

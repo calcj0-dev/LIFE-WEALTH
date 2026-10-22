@@ -11,6 +11,7 @@ import { describeDecision } from './decisionText';
 import { MoneyDelta } from './Delta';
 import { HistoryTabs } from './HistoryTabs';
 import { Details, VerticalLedger } from './Ledger';
+import { EveryoneMoved } from './Rivals';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -73,6 +74,7 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
           {t(`economy.${news.economy}.desc`)}
         </p>
       )}
+      <EveryoneMoved s={s} amountOf={(v) => Object.values(v.newsEvent?.amounts ?? {}).reduce((a, x) => a + Math.round(x), 0)} />
       {news.important && (
         <p>
           <strong>{t('news.important')}</strong>

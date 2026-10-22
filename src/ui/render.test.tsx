@@ -52,7 +52,7 @@ describe('段階3.7の画面', () => {
     expect(html).not.toMatch(RAW_KEY);
   });
   it('ニュースの画面の「あなたの資産」は、表の行を足した数と合う', () => {
-    const s = { newsEvent: { id: 'rateUp', year: 3, month: 4, prevEconomy: 'normal', rates: { gold: 0.1, bank: 0.1 }, amounts: { gold: 0.6, bank: 0.6 }, moved: 1.2 } } as unknown as GameState;
+    const s = { rivals: [], newsEvent: { id: 'rateUp', year: 3, month: 4, prevEconomy: 'normal', rates: { gold: 0.1, bank: 0.1 }, amounts: { gold: 0.6, bank: 0.6 }, moved: 1.2 } } as unknown as GameState;
     const html = renderToString(<NewsModal s={s} onNext={noop} />);
     expect(html).toContain('利上げ');
     expect(html).toMatch(/\+(<!-- -->)?2万円/);
