@@ -20,7 +20,7 @@ import { BigEventModal } from './ui/BigEvent';
 import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
 import { RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
-import { RIVAL_LOOKS } from './data/characters';
+import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -300,7 +300,12 @@ export function App() {
               bonus={game.bonusSquare}
               married={game.player.married}
               look={lookOf(game, 'you')}
-              others={game.rivals.map((r, k) => ({ position: rivalPositions[k], look: RIVAL_LOOKS[r.id] }))}
+              family={familyOf(game.seed, 'you', game.player.married, game.player.children, lookOf(game, 'you'))}
+              others={game.rivals.map((r, k) => ({
+                position: rivalPositions[k],
+                look: RIVAL_LOOKS[r.id],
+                family: familyOf(game.seed, r.id, r.player.married, r.player.children, RIVAL_LOOKS[r.id]),
+              }))}
               focus={rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
             />
             <div className="board-toolbar">

@@ -2,7 +2,7 @@
 // 曲がりくねった道に色とりどりのマスが並び、まわりに家や木がある、にぎやかな盤面（design.md 3.1）。
 
 import { useEffect, useRef, useState } from 'react';
-import { PLAYER_LOOKS, type Look } from '../data/characters';
+import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
 import { BOARD, BOARD_WORLD, ROUTE_POINTS } from '../data/board';
 import type { SquareType } from '../game/types';
@@ -138,16 +138,26 @@ interface Props {
   married?: boolean;
   /** あなたのキャラクター（design.md 10.1） */
   look?: Look;
-  /** ライバルの駒（いるマスとキャラクター。design.md 12.4） */
-  others?: { position: number; look: Look }[];
+  /** あなたの家族（駒のうしろに並ぶ） */
+  family?: FamilyMember[];
+  /** ライバルの駒（いるマス、キャラクター、家族。design.md 12.4） */
+  others?: { position: number; look: Look; family?: FamilyMember[] }[];
   /** 映すマス（ライバルの番で、ライバルを追うとき）。なければ、あなたの駒を映す */
   focus?: number;
 }
 
-/** 人の駒（キャラクター） */
-function Piece({ x, y, look }: { x: number; y: number; look: Look }) {
+/** 人の駒（キャラクター）。家族は、うしろに小さく並んで一緒に歩く（design.md 10.1） */
+function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; family?: FamilyMember[] }) {
   return (
     <g style={{ transform: `translate(${x}px, ${y - 40}px)`, transition: 'transform 0.22s ease-out' }}>
+      {/* 遠くの家族から描き、近い家族が手前に重なるようにする。足もとの高さをそろえる */}
+      {family
+        .map((m, j) => (
+          <g key={j} transform={`translate(${-30 - j * 19} ${(1 - m.scale) * 52})`}>
+            <AvatarBody look={m.look} scale={m.scale} />
+          </g>
+        ))
+        .reverse()}
       <AvatarBody look={look} />
     </g>
   );
@@ -182,7 +192,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], others = [], focus }: Props) {
+export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -295,11 +305,11 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
             </g>
           ))}
           {/* 同じマスにいる駒は、横に少しずらして重ならないようにする。あなたの駒は一番手前 */}
-          {[...others.map((o) => ({ ...o, me: false })), { position, look, me: true }].map((piece, k, all) => {
+          {[...others.map((o) => ({ ...o, me: false })), { position, look, family, me: true }].map((piece, k, all) => {
             const sq = BOARD[piece.position];
             const same = all.filter((o) => o.position === piece.position);
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
-            return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} />;
+            return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
           })}
         </g>
       </svg>

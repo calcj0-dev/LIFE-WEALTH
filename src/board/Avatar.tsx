@@ -30,6 +30,9 @@ function Hair({ look }: { look: Look }) {
       );
     case 'neat':
       return <path d="M-17,-10 Q-14,-30 4,-27 Q17,-24 17,-10 Q6,-20 -17,-10 Z" fill={c} />;
+    case 'tuft':
+      // 赤ちゃん: 頭のてっぺんに少しだけ
+      return <path d="M-3,-24 Q0,-34 4,-25 Q1,-28 -3,-24 Z" fill={c} />;
     case 'spiky':
       return <path d="M-17,-10 L-15,-28 L-8,-21 L-2,-32 L4,-22 L11,-30 L13,-20 L18,-24 L17,-10 Q0,-18 -17,-10 Z" fill={c} />;
     default:
