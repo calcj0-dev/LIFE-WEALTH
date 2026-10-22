@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ASSET_IDS } from '../data/assets';
+import { BIRTH, HIGH_SCHOOL_FACES, MARRIAGE, SPOUSE_WORK_FACES, UNIVERSITY_FACES } from '../data/rules';
 import { Roulette, SPIN_DURATION_MS } from '../board/Roulette';
 import { SQUARE_COLORS } from '../board/Board';
 import { getOptions } from '../game/engine';
@@ -9,7 +10,7 @@ import { formatMoney, formatSigned, t } from '../i18n';
 import { describeDecision } from './decisionText';
 import { MoneyDelta } from './Delta';
 import { HistoryTabs } from './HistoryTabs';
-import { Details, LedgerTable, MoneySummary, NetWorthTable } from './Ledger';
+import { Details, VerticalLedger } from './Ledger';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -19,25 +20,24 @@ function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean
   );
 }
 
-// ---------------------------------------------------------------- 年末のニュース
+// ---------------------------------------------------------------- ニュース（1年のどの月でも起きる。design.md 7章）
 
-/** 大事なニュースの年か（金融危機、技術革新ブームなど）。ニュースの画面で強調する */
-export function isImportantNews(s: GameState): boolean {
-  return !!s.newsId && !!newsById(s.newsId).important;
+/** 大事なニュースか（金融危機、技術革新ブームなど）。ニュースの画面で強調する */
+export function isImportantNews(id: string): boolean {
+  return !!newsById(id).important;
 }
 
-export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () => void; closeOnly?: boolean }) {
-  const news = newsById(s.newsId!);
-  const change = s.marketChange;
-  const keys = [...ASSET_IDS, 'realEstate'];
-  const owned = change ? keys.filter((k) => Math.abs(change.amounts[k]) >= 0.5) : [];
-  const total = owned.reduce((a, k) => a + change!.amounts[k], 0);
+export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
+  const ev = s.newsEvent!;
+  const news = newsById(ev.id);
+  const keys = [...ASSET_IDS, 'realEstate'].filter((k) => Math.abs(ev.rates[k] ?? 0) >= 0.005);
+  const owned = keys.filter((k) => Math.abs(ev.amounts[k] ?? 0) >= 0.5);
   return (
     <Overlay>
-      <div className="muted">{t('news.heading', { year: s.year })}</div>
-      <h2>{t(`news.${news.id}.title`)}</h2>
+      <div className="muted">{t('news.heading', { year: ev.year, month: ev.month })}</div>
+      <h2>📰 {t(`news.${news.id}.title`)}</h2>
       <p>{t(`news.${news.id}.text`)}</p>
-      {change && (
+      {keys.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -50,8 +50,8 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
             {keys.map((k) => (
               <tr key={k}>
                 <td>{t(`asset.${k}`)}</td>
-                <td className={change.rates[k] >= 0 ? 'plus' : 'minus'}>{formatSigned(change.rates[k] * 100)}%</td>
-                <td>{owned.includes(k) ? <MoneyDelta v={change.amounts[k]} /> : '—'}</td>
+                <td className={ev.rates[k] >= 0 ? 'plus' : 'minus'}>{formatSigned(ev.rates[k] * 100)}%</td>
+                <td>{owned.includes(k) ? <MoneyDelta v={ev.amounts[k]} /> : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -59,26 +59,25 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
       )}
       {owned.length > 0 ? (
         <p className="summary-line">
-          {t('news.table.mine')}: <MoneyDelta v={total} big />
+          {t('news.table.mine')}: <MoneyDelta v={ev.moved} big />
         </p>
       ) : (
         <p className="muted">{t('news.noHoldings')}</p>
       )}
-      <p className="muted">
-        {t('news.economy', {
-          prev: t(`economy.${change?.prevEconomy ?? s.market.economy}`),
-          now: t(`economy.${s.market.economy}`),
-        })}
-        <br />
-        {t(`economy.${s.market.economy}.desc`)}
-      </p>
+      {news.economy && news.economy !== ev.prevEconomy && (
+        <p className="muted">
+          {t('news.economy', { prev: t(`economy.${ev.prevEconomy}`), now: t(`economy.${news.economy}`) })}
+          <br />
+          {t(`economy.${news.economy}.desc`)}
+        </p>
+      )}
       {news.important && (
         <p>
           <strong>{t('news.important')}</strong>
         </p>
       )}
       <div className="options">
-        <button onClick={onNext}>{t(closeOnly ? 'news.close' : 'news.next')}</button>
+        <button onClick={onNext}>{t('option.ok')}</button>
       </div>
     </Overlay>
   );
@@ -86,35 +85,103 @@ export function NewsModal({ s, onNext, closeOnly }: { s: GameState; onNext: () =
 
 // ---------------------------------------------------------------- マスの出来事
 
+// ---------------------------------------------------------------- ルーレットで決まる出来事（design.md 3.8）
+
+/** ルーレットの種類。何を決めるか、なぜ大事か、どの目で何になるかを、言語ファイルから出す */
+type Topic = 'marriage' | 'spouseWork' | 'birth' | 'highSchool' | 'university';
+
+/** 出目から、結果の種類を決める */
+function outcomeOf(topic: Topic, face: number): string {
+  switch (topic) {
+    case 'marriage':
+      return MARRIAGE.faces.includes(face) ? 'yes' : 'no';
+    case 'birth':
+      return BIRTH.faces.includes(face) ? 'yes' : 'no';
+    case 'spouseWork':
+      return SPOUSE_WORK_FACES.full.includes(face) ? 'full' : 'none';
+    case 'highSchool':
+      return HIGH_SCHOOL_FACES.public.includes(face) ? 'public' : 'private';
+    case 'university':
+      return (Object.keys(UNIVERSITY_FACES) as (keyof typeof UNIVERSITY_FACES)[]).find((k) => UNIVERSITY_FACES[k].includes(face))!;
+  }
+}
+
+/** お知らせの種類から、回したルーレットの種類を決める */
+function topicsOf(messageKey: string): Topic[] {
+  if (messageKey.startsWith('marriage.yes')) return ['marriage', 'spouseWork'];
+  if (messageKey.startsWith('marriage.')) return ['marriage'];
+  if (messageKey.startsWith('birth.')) return ['birth'];
+  if (messageKey.startsWith('school.highSchool')) return ['highSchool'];
+  if (messageKey.startsWith('school.university')) return ['university'];
+  return [];
+}
+
+/** ルーレットの説明（何を決めるか、なぜ大事か、どの目で何になるか） */
+function TopicGuide({ topic, index }: { topic: Topic; index?: number }) {
+  return (
+    <div className="roulette-guide">
+      <div className="roulette-guide-title">
+        {index !== undefined ? `${'①②③'[index]} ` : ''}
+        {t(`roulette.${topic}.title`)}
+      </div>
+      <div className="muted">{t(`roulette.${topic}.why`)}</div>
+      <div className="roulette-guide-faces">{t(`roulette.${topic}.faces`)}</div>
+    </div>
+  );
+}
+
 /**
- * ルーレットが回って止まる部品（結婚、出産、配偶者の働き方、子どもの進学。design.md 2.2）。
- * faces の出目を順に回して見せ、全部止まったら onDone を呼ぶ
+ * 回したルーレットを、1つずつ見せる。1つめが止まって結果を読み、「次へ」を押してから2つめを出す。
+ * auto なら、1つめはすぐに回し始める（「ルーレットを回す」を押した直後のとき）
  */
-export function RouletteReveal({ faces, onDone }: { faces: number[]; onDone: () => void }) {
-  const [index, setIndex] = useState(0);
-  const [spinning, setSpinning] = useState(false);
+function RouletteSteps({ topics, faces, auto, onDone }: { topics: Topic[]; faces: number[]; auto: boolean; onDone: () => void }) {
+  const [step, setStep] = useState(0);
+  const [stage, setStage] = useState<'ready' | 'spinning' | 'done'>(auto ? 'spinning' : 'ready');
+  const [turned, setTurned] = useState(false);
+  const topic = topics[step];
+  const face = faces[step];
+
   useEffect(() => {
-    if (index >= faces.length) {
-      onDone();
-      return;
-    }
-    // 描いたあとに回し始める（回る前の向きから、出目の向きへ動かすため）
-    const start = window.setTimeout(() => setSpinning(true), 50);
-    const stop = window.setTimeout(() => {
-      setSpinning(false);
-      setIndex((i) => i + 1);
-    }, SPIN_DURATION_MS + 400);
+    if (stage !== 'spinning') return;
+    // 描いたあとに回し始める（止まっている向きから、出目の向きへ動かすため）
+    setTurned(false);
+    const start = window.setTimeout(() => setTurned(true), 50);
+    const stop = window.setTimeout(() => setStage('done'), SPIN_DURATION_MS + 400);
     return () => {
       clearTimeout(start);
       clearTimeout(stop);
     };
-    // onDone は表示のたびに変わらないよう呼び出し側で作る
-  }, [index]);
+  }, [stage, step]);
+
+  const resultText = (k: number) => t(`roulette.${topics[k]}.result.${outcomeOf(topics[k], faces[k])}`, { face: faces[k] });
+  const last = step >= topics.length - 1;
   return (
-    <div className="roulette-reveal">
-      {faces.map((face, i) => (
-        <Roulette key={i} value={i <= index ? face : null} spinning={i === index && spinning} canSpin={false} onSpin={() => {}} resultLabel={i < index ? t('roulette.face', { face }) : ' '} />
+    <div className="roulette-steps">
+      {topics.slice(0, step).map((_, k) => (
+        <div key={k} className="roulette-done-line">
+          ✔ {resultText(k)}
+        </div>
       ))}
+      <TopicGuide topic={topic} index={topics.length > 1 ? step : undefined} />
+      <Roulette value={stage === 'ready' ? null : face} spinning={stage === 'spinning' && turned} canSpin={false} onSpin={() => {}} resultLabel=" " />
+      {stage === 'ready' && <button onClick={() => setStage('spinning')}>{t('roulette.spin')}</button>}
+      {stage === 'done' && (
+        <>
+          <div className="roulette-result">{resultText(step)}</div>
+          {!last ? (
+            <button
+              onClick={() => {
+                setStep(step + 1);
+                setStage('ready');
+              }}
+            >
+              {t('roulette.next', { title: t(`roulette.${topics[step + 1]}.title`) })}
+            </button>
+          ) : (
+            <button onClick={onDone}>{t('roulette.seeResult')}</button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -123,18 +190,23 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
   const { title, text, squareType } = describeDecision(s);
   const options = getOptions(s);
   const single = options.length === 1 ? options[0] : null;
-  const params = s.decision?.params;
+  const d = s.decision!;
+  const params = d.params;
   const faces = [params?.face, params?.workFace].filter((f): f is number => typeof f === 'number');
-  /** ルーレットが止まるまでは、結果の文章とボタンを隠す */
-  const [revealed, setRevealed] = useState(faces.length === 0);
-  if (faces.length > 0 && !revealed) {
+  const topics = d.kind === 'notice' && d.messageKey ? topicsOf(d.messageKey).slice(0, faces.length) : [];
+  /** ルーレットを回し終わるまでは、結果の文章とボタンを隠す */
+  const [revealed, setRevealed] = useState(topics.length === 0);
+  if (topics.length > 0 && !revealed) {
+    const auto = d.messageKey!.startsWith('marriage.') || d.messageKey!.startsWith('birth.');
     return (
       <Overlay>
-        <h2>{t('roulette.spinning')}</h2>
-        <RouletteReveal faces={faces} onDone={() => setRevealed(true)} />
+        <h2>{t(`roulette.${topics[0]}.heading`)}</h2>
+        <RouletteSteps topics={topics} faces={faces} auto={auto} onDone={() => setRevealed(true)} />
       </Overlay>
     );
   }
+  // 結婚マス・出産マスで、ルーレットを回す前（何を決めるかを先に出す）
+  const before: Topic | null = d.kind === 'marriage' ? 'marriage' : d.kind === 'birth' ? 'birth' : null;
   return (
     <Overlay>
       {squareType && (
@@ -143,16 +215,22 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
         </span>
       )}
       <h2>{title}</h2>
-      {faces.length > 0 && (
-        <div className="die-faces">
-          {faces.map((f, i) => (
-            <div key={i} className="die-face" aria-label={t('roulette.face', { face: f })}>
-              {f}
+      {topics.length > 0 && (
+        <div className="roulette-done">
+          {topics.map((tp, k) => (
+            <div key={k} className="roulette-done-line">
+              ✔ {t(`roulette.${tp}.result.${outcomeOf(tp, faces[k])}`, { face: faces[k] })}
             </div>
           ))}
         </div>
       )}
       <p>{text}</p>
+      {before && (
+        <>
+          <TopicGuide topic={before} />
+          <Roulette value={null} spinning={false} canSpin={false} onSpin={() => {}} resultLabel=" " />
+        </>
+      )}
       {single && single.cash !== undefined && (
         <p className="summary-line">
           <MoneyDelta v={single.cash} big />
@@ -182,33 +260,102 @@ export function DecisionModal({ s, onChoose }: { s: GameState; onChoose: (id: st
 
 // ---------------------------------------------------------------- 年末の決算
 
-export function YearEndModal({ s, onNext, closeOnly }: { s: GameState; onNext: () => void; closeOnly?: boolean }) {
+/**
+ * 年末の決算（design.md 2.1）。今の純資産を一番上に大きく出し、純資産の中身と、去年から増えた・減ったわけを出す。
+ * 「取引タイムへ」と「次の年へ」のボタンを置く。最後の年は「結果を見る」だけ
+ */
+export function YearEndModal({ s, onNext, onTrade }: { s: GameState; onNext: () => void; onTrade?: () => void }) {
   const st = s.lastSettlement!;
   const rec = s.history[s.history.length - 1];
   const b = rec.breakdown;
-  const change = b.work + b.investment + b.revaluation + b.other;
-  const income = Object.values(st.income).reduce((a, v) => a + v, 0);
-  const expense = Object.values(st.expense).reduce((a, v) => a + v, 0);
   const last = s.year >= s.years;
+  const now = Math.round(rec.netWorth);
+  // 増えた・減ったわけ。画面に出す行を足したものを、去年からの増減にする（行と必ず合う）
+  const reasons = [
+    { key: 'work', icon: '💼', v: Math.round(b.work) },
+    { key: 'investment', icon: '💰', v: Math.round(b.investment) },
+    { key: 'revaluation', icon: '📈', v: Math.round(b.revaluation) },
+    { key: 'other', icon: '🎲', v: Math.round(b.other) },
+  ].filter((r) => r.v !== 0);
+  const change = reasons.reduce((a, r) => a + r.v, 0);
+  const investments = Object.entries(rec.assets).reduce((a, [k, v]) => a + (k === 'realEstate' ? 0 : v), 0);
+  const parts = [
+    { key: 'deposit', icon: '🏦', v: Math.round(rec.cash) },
+    { key: 'investments', icon: '📈', v: Math.round(investments) },
+    { key: 'home', icon: '🏠', v: Math.round(rec.assets.realEstate ?? 0) },
+    { key: 'debt', icon: '💳', v: -Math.round(rec.debt) },
+  ];
   return (
     <Overlay wide>
       <h2>{t('yearEnd.heading', { year: st.year })}</h2>
-      <MoneySummary income={income} expense={expense} />
-      <div className="summary-rows">
-        <div className="summary-row">
-          <span>{t('worth.line', { prev: formatMoney(rec.netWorth - change), now: formatMoney(rec.netWorth) })}</span>
-          <MoneyDelta v={change} big />
+      <div className="worth-hero">
+        <div className="muted">{t('yearEnd.nowWorth')}</div>
+        <div className="worth-hero-value">{formatMoney(now)}</div>
+        <div>
+          {t('yearEnd.fromLastYear')} <MoneyDelta v={change} big />
+          {change === 0 && formatMoney(0)}
+          <span className="muted">{t('yearEnd.lastYear', { amount: now - change })}</span>
         </div>
-        {st.sold > 0 && <div className="warning">{t('summary.sold', { amount: st.sold })}</div>}
-        {st.borrowed > 0 && <div className="warning">{t('summary.borrowed', { amount: st.borrowed })}</div>}
       </div>
-      <Details>
-        <LedgerTable income={st.income} expense={st.expense} />
-        <h4 className="section-title">{t('worth.title')}</h4>
-        <NetWorthTable s={s} />
+      <div className="year-end-grid">
+        <div className="card">
+          <h4>{t('yearEnd.parts')}</h4>
+          <table className="worth-table">
+            <tbody>
+              {parts.map((r) => (
+                <tr key={r.key}>
+                  <td>
+                    {r.icon} {t(`yearEnd.part.${r.key}`)}
+                  </td>
+                  <td className={`ledger-money${r.v < 0 ? ' minus' : ''}`}>{formatMoney(r.v)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <h4>{t('yearEnd.reasons')}</h4>
+          <table className="worth-table">
+            <tbody>
+              {reasons.map((r) => (
+                <tr key={r.key}>
+                  <td>
+                    {r.icon} {t(`yearEnd.reason.${r.key}`)}
+                  </td>
+                  <td className="ledger-money">
+                    <MoneyDelta v={r.v} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {st.sold > 0.5 && <div className="warning">{t('summary.sold', { amount: st.sold })}</div>}
+      {st.borrowed > 0.5 && <div className="warning">{t('summary.borrowed', { amount: st.borrowed })}</div>}
+      {st.talks.length > 0 && (
+        <div className="card talk-results">
+          <h4>{t('yearEnd.talks')}</h4>
+          {st.talks.map((r, i) => (
+            <div key={i} className="kv">
+              <span>{t(`talk.${r.id}.title`)}</span>
+              <span className={r.back >= r.amount ? 'plus' : 'minus'}>
+                {t(r.back < 0 ? 'yearEnd.talkDebt' : 'yearEnd.talkResult', { amount: r.amount, back: Math.abs(r.back) })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <Details label={t('yearEnd.ledger')}>
+        <VerticalLedger income={st.income} expense={st.expense} saved={st.saved} repaid={st.repaid} />
       </Details>
       <div className="options">
-        <button onClick={onNext}>{t(closeOnly ? 'news.close' : last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
+        {!last && onTrade && (
+          <button className="secondary" onClick={onTrade}>
+            {t('yearEnd.trade')}
+          </button>
+        )}
+        <button onClick={onNext}>{t(last ? 'yearEnd.finish' : 'yearEnd.next')}</button>
       </div>
     </Overlay>
   );

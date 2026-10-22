@@ -1157,11 +1157,55 @@ button.small {
   border-radius: 8px;
   padding: 0 4px;
 }
-.animated-money.flash-up {
+/* 弱: 色が一瞬うすく変わるだけ。中: 光って金額が浮かぶ。強: 大きく光ってゆれ、金額も大きく浮かぶ（design.md 2.2） */
+.animated-money.flash-weak-up {
+  animation: money-weak-up 0.8s ease-out;
+}
+.animated-money.flash-weak-down {
+  animation: money-weak-down 0.8s ease-out;
+}
+.animated-money.flash-medium-up {
   animation: money-flash-up 1.2s ease-out;
 }
-.animated-money.flash-down {
+.animated-money.flash-medium-down {
   animation: money-flash-down 1.2s ease-out;
+}
+.animated-money.flash-strong-up {
+  animation: money-flash-up 1.6s ease-out, money-shake 0.5s ease-in-out;
+}
+.animated-money.flash-strong-down {
+  animation: money-flash-down 1.6s ease-out, money-shake 0.5s ease-in-out;
+}
+@keyframes money-weak-up {
+  0% {
+    color: #2ec4b6;
+  }
+}
+@keyframes money-weak-down {
+  0% {
+    color: #ff6b6b;
+  }
+}
+@keyframes money-shake {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  20% {
+    transform: translateX(-4px) scale(1.15);
+  }
+  40% {
+    transform: translateX(4px) scale(1.15);
+  }
+  60% {
+    transform: translateX(-3px) scale(1.1);
+  }
+  80% {
+    transform: translateX(3px) scale(1.05);
+  }
+}
+.money-float.strong {
+  font-size: 20px;
 }
 @keyframes money-flash-up {
   0% {
@@ -1182,9 +1226,11 @@ button.small {
   }
 }
 .money-float {
+  /* 数字のすぐ右に出す（上に出すと、見出しや画面の端と重なるため） */
   position: absolute;
-  right: 0;
-  top: -4px;
+  left: calc(100% + 6px);
+  top: 50%;
+  margin-top: -0.7em;
   font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
@@ -1194,11 +1240,14 @@ button.small {
 @keyframes money-float {
   0% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
+  }
+  70% {
+    opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateY(-22px);
+    transform: translateX(8px);
   }
 }
 
@@ -1222,4 +1271,242 @@ button.small {
 /* 取引タイムの銘柄のチャート */
 .asset-chart {
   padding: 4px 0;
+}
+
+/* 年末の決算の、投資の話の結果 */
+.talk-results h4 {
+  margin: 0 0 4px;
+}
+
+/* ---------------- 段階3.7: 今月のまとめ、決算、取引タイム、ルーレット（design.md 2.1、2.3、3.8） */
+
+.turn-summary {
+  max-width: 560px;
+}
+.summary-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.summary-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.summary-item-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px 1fr auto 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+  border-radius: 0;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+}
+.summary-item-head.static {
+  cursor: default;
+}
+.summary-item-icon {
+  font-size: 20px;
+}
+.summary-item-amount {
+  font-weight: 800;
+}
+.summary-item-arrow {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+.summary-item-body {
+  padding: 8px 12px 10px;
+  background: #fffaf0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.summary-footer {
+  width: 100%;
+  border-top: 2px solid var(--text);
+  font-size: 16px;
+}
+.summary-footer td {
+  padding: 6px 4px;
+}
+
+/* 縦に並べた家計簿 */
+.vertical-ledger {
+  width: 100%;
+}
+.vertical-ledger td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.vertical-ledger .ledger-head td {
+  padding-top: 10px;
+  font-weight: 800;
+  border-bottom: 2px solid currentColor;
+}
+.vertical-ledger .ledger-head.income td {
+  color: #0f8a7e;
+}
+.vertical-ledger .ledger-head.expense td {
+  color: #c0392b;
+}
+.vertical-ledger .ledger-total td {
+  font-weight: 800;
+}
+.vertical-ledger .ledger-total.net td {
+  border-top: 2px solid var(--text);
+  font-size: 16px;
+}
+.vertical-ledger .ledger-sub td {
+  color: var(--text-sub);
+}
+
+/* 決算 */
+.worth-hero {
+  text-align: center;
+  padding: 8px 0 12px;
+}
+.worth-hero-value {
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+.year-end-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.year-end-grid h4 {
+  margin: 0 0 6px;
+}
+.worth-table td {
+  padding: 4px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 取引タイム */
+.trade-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+.trade-list th,
+.trade-list td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px;
+}
+.trade-row {
+  cursor: pointer;
+}
+.trade-row:hover {
+  background: #fff4e5;
+}
+.trade-row.selected {
+  background: #ffe6cc;
+  outline: 2px solid var(--primary);
+}
+.trade-name {
+  font-weight: 700;
+}
+.trade-sub {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+.trade-sub.plus {
+  color: #0f8a7e;
+}
+.trade-sub.minus {
+  color: #c0392b;
+}
+.trade-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  background: #fffaf0;
+}
+.trade-panel h4 {
+  margin: 0 0 4px;
+}
+.trade-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+.trade-step-label {
+  min-width: 64px;
+  font-weight: 700;
+}
+.trade-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-weight: 700;
+}
+
+/* ルーレットの説明 */
+.roulette-steps {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.roulette-steps .roulette {
+  position: static;
+  box-shadow: none;
+}
+.roulette-guide {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fffaf0;
+  border: 1px solid var(--line);
+}
+.roulette-guide-title {
+  font-weight: 800;
+  font-size: 16px;
+}
+.roulette-guide-faces {
+  margin-top: 4px;
+  font-weight: 700;
+}
+.roulette-result {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--primary);
+}
+.roulette-done-line {
+  font-weight: 700;
+  color: #0f8a7e;
+}
+.modal .roulette {
+  position: static;
+}
+/* 右側の資産の欄では、数字が右の端にあるので、浮かぶ金額は数字の左に出す */
+.side-panel .money-float {
+  left: auto;
+  right: calc(100% + 6px);
+}
+/* 純資産の右に浮かぶ金額が、となりの「景気」と重ならないよう、すき間をあける */
+.hud-worth {
+  padding-right: 90px;
+}
+/* 画面が低いとき（スマホなど）も、いちばん下のボタンが隠れないよう、下に固定する */
+.modal > .options:last-child {
+  position: sticky;
+  bottom: -18px;
+  margin-bottom: -18px;
+  padding: 10px 0 18px;
+  background: var(--surface);
 }

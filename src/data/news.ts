@@ -23,6 +23,8 @@ export function checkNews(raw: unknown, assetIds: string[] = ASSET_IDS): Problem
   const list = (raw as { news?: unknown }).news;
   if (!Array.isArray(list) || list.length === 0) return ['news がありません'];
   const problems: Problems = [];
+  const f = (raw as { frequency?: { count?: unknown; years?: unknown } }).frequency;
+  if (!f || !isNumber(f.count) || !isNumber(f.years) || f.count <= 0 || f.years <= 0) problems.push('frequency（count 回 / years 年）が正しくありません');
   const targets = new Set([...assetIds, 'realEstate']);
   list.forEach((n, i) => {
     const where = `news[${i}]`;
@@ -42,5 +44,7 @@ export function checkNews(raw: unknown, assetIds: string[] = ASSET_IDS): Problem
 
 assertValid('src/data/news.json', checkNews(data));
 
-/** 年末に1つ起きる政治・経済のニュース。design.md 7章 */
+/** 政治・経済のニュース。1年のどの月でもランダムに起きる。design.md 7章 */
 export const NEWS: NewsDef[] = data.news as NewsDef[];
+/** ニュースが1年に起きる回数（平均） */
+export const NEWS_PER_YEAR: number = data.frequency.count / data.frequency.years;

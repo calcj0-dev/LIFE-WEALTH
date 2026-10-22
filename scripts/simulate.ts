@@ -165,7 +165,7 @@ ${YEARS.map(section).join('\n')}
 
 ## テンポ
 
-- ポップアップで止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.popupsPerYear)).toFixed(1)}回（12ターンのうち。年末のニュースと決算は含まない）
+- ポップアップで止まった回数: 1年あたり平均 ${mean(rows.map((r) => r.popupsPerYear)).toFixed(1)}回（12ターンのうち。ニュース、大きなイベント、年末の決算は含まない）
 - カードを使った回数: 1年あたり平均 ${mean(rows.map((r) => r.cardsPerYear)).toFixed(1)}回（自動プレイは、ボーナスマスをねらうときと、手札がいっぱいのときに使う）
 
 ## 大きなイベント

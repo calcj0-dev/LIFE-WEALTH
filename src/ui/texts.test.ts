@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, dismissBigEvent, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade, tradeShares } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, dismissNews, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade, tradeShares } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
 import { describeDecision } from './decisionText';
@@ -16,6 +16,11 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
   let n = seed;
   const rand = () => ((n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
   while (s.phase !== 'finished') {
+    if (s.newsEvent) {
+      keys.add(`news.${s.newsEvent.id}.title`).add(`news.${s.newsEvent.id}.text`);
+      s = dismissNews(s);
+      continue;
+    }
     if (s.bigEvent) {
       keys.add(`bigEvent.${s.bigEvent.id}.title`).add(`bigEvent.${s.bigEvent.id}.text`);
       s = dismissBigEvent(s);
@@ -34,7 +39,6 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
       const enabled = opts.filter((o) => o.enabled);
       s = choose(s, enabled[Math.floor(rand() * enabled.length)].id);
     } else if (s.phase === 'yearEnd') {
-      keys.add(`news.${s.newsId}.title`);
       Object.keys(s.lastSettlement!.income).forEach((k) => keys.add(`settle.${k}`));
       Object.keys(s.lastSettlement!.expense).forEach((k) => keys.add(`settle.${k}`));
       // 取引タイムで、いろいろな操作をしてみる

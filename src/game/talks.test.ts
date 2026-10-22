@@ -3,7 +3,7 @@ import talksJson from '../data/investTalks.json';
 import { BOARD } from '../data/board';
 import { INVEST_TALKS, checkInvestTalks, expectedMultiplier } from '../data/investTalks';
 import { has } from '../i18n';
-import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, getOptions, roll, setSaving } from './engine';
+import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, getOptions, roll, setSaving } from './engine';
 import type { GameState } from './types';
 
 function started(cash = 500): GameState {
@@ -21,6 +21,7 @@ function onTalk(s: GameState, talkId: string): GameState {
 function toYearEnd(s: GameState): GameState {
   while (s.phase !== 'yearEnd') {
     if (s.bigEvent) s = dismissBigEvent(s);
+    if (s.newsEvent) s = dismissNews(s);
     if (s.phase === 'roll') s = roll(s);
     else if (s.phase === 'decision') {
       const opts = getOptions(s);
@@ -64,6 +65,8 @@ describe('投資の話（投資の落とし穴）', () => {
     s = toYearEnd(s);
     expect(s.player.talks).toHaveLength(0);
     expect([25, 100]).toContain(s.stats.talkReturned);
+    // 年末の決算にも、投資の話の結果が出る
+    expect(s.lastSettlement!.talks).toEqual([{ id: 'hype', amount: 50, back: s.stats.talkReturned }]);
   });
   it('借りて投資して外れると、借りた分が借金になる。当たると元手の3倍が戻る', () => {
     const results = new Set<number>();

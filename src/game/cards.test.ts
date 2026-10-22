@@ -13,6 +13,7 @@ import {
   closeTrade,
   createGame,
   dismissBigEvent,
+  dismissNews,
   getOptions,
   nextYear,
   openTradeCard,
@@ -72,6 +73,7 @@ describe('カード', () => {
       s = roll(farBonus(s));
       while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
       if (s.bigEvent) s = dismissBigEvent(s);
+      if (s.newsEvent) s = dismissNews(s);
     }
     const before = s.player.hand.length;
     s = nextYear(s);

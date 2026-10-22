@@ -15,6 +15,7 @@ import { playGame } from './autoplay';
 import {
   canSellHome,
   dismissBigEvent,
+  dismissNews,
   choose,
   chooseJob,
   chooseYears,
@@ -33,7 +34,8 @@ import {
   tradeShares,
 } from './engine';
 import { createLoan, netWorth, payLoanMonth } from './finance';
-import { newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { applyNews, maybeNews, newYearMarket, updateMarketMonth, updateMarketYear } from './market';
+import { NEWS_PER_YEAR } from '../data/news';
 import { maybeBigEvent } from './engine';
 import type { GameState } from './types';
 
@@ -44,8 +46,10 @@ function started(seed = 1, years = 20, job = 'employee', saving: Record<string, 
 /** 決定を、いちばん上の選べる選択肢で進める */
 function settle(s: GameState): GameState {
   if (s.bigEvent) s = dismissBigEvent(s);
+  if (s.newsEvent) s = dismissNews(s);
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
   if (s.bigEvent) s = dismissBigEvent(s);
+  if (s.newsEvent) s = dismissNews(s);
   return s;
 }
 
@@ -73,7 +77,7 @@ describe('データ（JSON）', () => {
   });
   it('まちがいがあれば見つけられる', () => {
     expect(checkAssets({ assets: [{ id: 'x', kind: 'coin' }] }).length).toBeGreaterThan(0);
-    expect(checkNews({ news: [{ id: 'n', weight: 1, shocks: { noSuchAsset: 0.1 } }] })).toEqual([
+    expect(checkNews({ frequency: { count: 2, years: 1.5 }, news: [{ id: 'n', weight: 1, shocks: { noSuchAsset: 0.1 } }] })).toEqual([
       'news[0]: shocks の「noSuchAsset」という銘柄はありません',
     ]);
     expect(checkEvents({ events: [{ id: 'e', size: 'huge', weight: 1, effects: [{ t: 'magic' }], when: { age: 30 } }] }).length).toBe(3);
@@ -191,7 +195,7 @@ describe('ゲームの進行', () => {
     expect(s.month).toBe(12);
     s = settle(roll(s));
     expect(s.phase).toBe('yearEnd');
-    expect(s.newsId).not.toBeNull();
+    expect(s.lastSettlement).not.toBeNull();
     s = settle(nextYear(s));
     expect(s.year).toBe(2);
     expect(s.month).toBe(1);
@@ -433,6 +437,71 @@ describe('1ターンの月数', () => {
   });
 });
 
+describe('段階3.7の細かいところ', () => {
+  const onGamble = (s: GameState, cash: number): GameState => ({ ...s, phase: 'decision', decision: { kind: 'gamble' }, decisionFrom: 'square', player: { ...s.player, cash } });
+  it('ギャンブルは、種類を選んでから金額を選ぶ。金額の画面から戻れる', () => {
+    let s = onGamble(started(), 100);
+    expect(getOptions(s).map((o) => o.id)).toEqual(['game:lottery', 'game:horse', 'game:pachinko', 'skip']);
+    s = choose(s, 'game:horse');
+    expect(s.decision).toEqual({ kind: 'gamble', gambleId: 'horse' });
+    expect(getOptions(s).map((o) => o.id)).toEqual(['horse:1', 'horse:10', 'horse:100', 'back']);
+    expect(choose(s, 'back').decision).toEqual({ kind: 'gamble' });
+  });
+  it('1万円もないときは、ギャンブルの種類も選べない', () => {
+    const opts = getOptions(onGamble(started(), 0));
+    expect(opts.filter((o) => o.enabled).map((o) => o.id)).toEqual(['skip']);
+  });
+  it('家の売り出しに、頭金と諸費用、毎月の返済額を出す', () => {
+    const s: GameState = { ...started(), phase: 'decision', decision: { kind: 'realEstate', offerPrice: 3000 }, decisionFrom: 'square' };
+    const loan = getOptions(s).find((o) => o.id === 'homeLoan')!;
+    expect(loan.params?.amount).toBe(450);
+    // 2,700万円を金利1%・35年で借りると、毎月の返済は約7.6万円（画面には約8万円と出す）
+    expect(loan.params?.payment).toBe(8);
+  });
+  it('カードを捨てる画面で、新しくもらったカード（手札の最後）に NEW が付く', () => {
+    const base = started();
+    const s: GameState = { ...base, phase: 'decision', decision: { kind: 'discard' }, decisionFrom: 'square', player: { ...base.player, hand: ['dash', 'dash', 'dash', 'dash'] } };
+    expect(getOptions(s).map((o) => o.key)).toEqual(['option.discard', 'option.discard', 'option.discard', 'option.discardNew']);
+  });
+  it('1ヶ月のお金の動き（今月のまとめに出すもの）を記録する', () => {
+    const s = settle(roll(started(1, 20, 'employee', { fund: 2 })));
+    expect(s.lastMonth?.income.salary).toBeCloseTo(250 / 12, 6);
+    expect(s.lastMonth?.saved).toBe(2);
+  });
+});
+
+describe('ニュース', () => {
+  it('1.5年に2回くらい、1年のどの月でもランダムに起きる', () => {
+    expect(NEWS_PER_YEAR).toBeCloseTo(2 / 1.5, 6);
+    let count = 0;
+    const months = new Set<number>();
+    const years = 30;
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = playGame(seed, 'employee', years);
+      const news = s.log.filter((l) => l.key === 'news.happened');
+      count += news.length;
+      news.forEach((l) => months.add(l.month));
+    }
+    const perYear = count / (20 * years);
+    expect(perYear).toBeGreaterThan(1.1);
+    expect(perYear).toBeLessThan(1.6);
+    expect(months.size).toBeGreaterThanOrEqual(10);
+  });
+  it('「平穏な一年」のニュースはない', () => {
+    expect(NEWS.some((n) => n.id === 'calm')).toBe(false);
+  });
+  it('ニュースが起きると、その月に値段と景気が動き、画面に出す内容が残る', () => {
+    const s = started();
+    const crisis = NEWS.find((n) => n.id === 'crisis')!;
+    const before = s.market.prices.fund;
+    applyNews(s, crisis);
+    expect(s.market.prices.fund).toBeCloseTo(before * (1 + crisis.shocks.fund!), 6);
+    expect(s.market.economy).toBe('recession');
+    expect(s.newsEvent?.id).toBe('crisis');
+    expect(() => roll(s)).toThrow();
+  });
+});
+
 describe('相場', () => {
   it('長い目で見ると、銘柄ごとの平均の値上がりに近くなる', () => {
     const years = 50;
@@ -442,6 +511,7 @@ describe('相場', () => {
       for (let y = 0; y < years; y++) {
         for (let m = 0; m < 12; m++) {
           updateMarketMonth(s);
+          maybeNews(s);
           maybeBigEvent(s);
         }
         updateMarketYear(s);

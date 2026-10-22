@@ -1,19 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, nextYear, openTradeCard, roll } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
 import type { GameState } from './game/types';
 import { t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { FeedPanel } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
-import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
+import { DecisionModal, HistoryModal, YearEndModal } from './ui/Modals';
 import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
-import { Toasts } from './ui/Toasts';
+import { TurnSummary, hasSomething, type TurnSummaryData } from './ui/TurnSummary';
+import { netWorth } from './game/finance';
 import { SavingSetup, TradeModal } from './ui/Trade';
 import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
+import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
@@ -33,20 +35,51 @@ export function App() {
   const [overview, setOverview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
-  /** 年末のニュースと決算を見た年。年末は「ニュース → 決算 → 取引タイム」の順に見せる（design.md 2.1） */
-  const [newsSeenYear, setNewsSeenYear] = useState<number | null>(null);
-  const [settleSeenYear, setSettleSeenYear] = useState<number | null>(null);
+  /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
+  const [tradeYear, setTradeYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
+  /** 前に見た記録の数（お金が光る強さを、新しく増えた記録から決めるため） */
+  const seenLog = useRef(0);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const busy = spinning || movingPos !== null;
-  // 大きなイベントの画面を出している間も、ほかの画面は止める
-  const paused = showHistory || showFeed || !!game?.bigEvent;
+  // 大きなイベントやニュースの画面を出している間も、ほかの画面は止める
+  /** ターンの始めの様子（今月のまとめで、前と後を比べるため。design.md 2.3） */
+  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number } | null>(null);
+  /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
+  const [turnMoving, setTurnMoving] = useState(false);
+  // ターンが終わった（選ぶ出来事も大きなイベントも残っていない）ら、今月のまとめを出す
+  const turnDone = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && !game.bigEvent && movingPos === null && !spinning;
+  const summary: TurnSummaryData | null =
+    game && turnStart && turnDone && hasSomething(game.log.slice(turnStart.logLen), game.newsEvent)
+      ? {
+          year: turnStart.year,
+          month: turnStart.month,
+          monthsPerTurn: game.monthsPerTurn,
+          entries: game.log.slice(turnStart.logLen),
+          news: game.newsEvent,
+          flow: game.lastMonth,
+          cashBefore: turnStart.cash,
+          cashAfter: game.player.cash,
+          worthBefore: turnStart.worth,
+          worthAfter: netWorth(game),
+        }
+      : null;
+  // 何も起きなかったターンは、まとめを出さずに終える
+  useEffect(() => {
+    if (turnDone && !summary) setTurnStart(null);
+  }, [turnDone, summary]);
+  // 大きなイベント、ニュース、今月のまとめを出している間は、ほかの画面は止める
+  const paused = showHistory || showFeed || !!game?.bigEvent || !!game?.newsEvent || !!summary;
   const yearEnd = game?.phase === 'yearEnd';
-  const newsStep = yearEnd && newsSeenYear !== game!.year;
-  const settleStep = yearEnd && !newsStep && settleSeenYear !== game!.year;
-  const tradeStep = yearEnd && !newsStep && !settleStep;
+  const tradeStep = yearEnd && tradeYear === game!.year;
+  const settleStep = yearEnd && !tradeStep;
+
+  const moneyLevel = useMemo(() => (game ? moneyLevelOf(game.log.slice(Math.min(seenLog.current, game.log.length))) : 'weak'), [game]);
+  useEffect(() => {
+    seenLog.current = game?.log.length ?? 0;
+  }, [game]);
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
@@ -54,11 +87,6 @@ export function App() {
     if (!s || s.phase === 'finished') setSaved(null);
   };
 
-  /** 決算を見たあと。最後の年は取引タイムを出さずに結果へ */
-  const afterSettlement = (s: GameState) => {
-    if (s.year >= s.years) setGame(nextYear(s));
-    else setSettleSeenYear(s.year);
-  };
 
   const later = (fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -70,11 +98,19 @@ export function App() {
     later(() => {
       setMovingPos(null);
       setGame(next);
+      setTurnMoving(false);
     }, STEP_MS * (next.lastPath.length + 1));
+  };
+
+  /** ターンの始めの様子を覚えておく */
+  const markTurnStart = (s: GameState) => {
+    setTurnMoving(true);
+    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month });
   };
 
   const spin = () => {
     if (!game || game.phase !== 'roll' || spinning || game.tradeOpen) return;
+    markTurnStart(game);
     const next = roll(game);
     setMoveLabel(null);
     setSpinValue(next.lastRoll);
@@ -89,6 +125,7 @@ export function App() {
   /** 移動のカードを使って進む。ダッシュとスーパーダッシュはルーレットを1回回し、ぴったりはすぐ動く */
   const moveWithCard = (index: number, exact?: number) => {
     if (!game || game.phase !== 'roll' || busy) return;
+    markTurnStart(game);
     const next = roll(game, { index, exact });
     const face = next.lastFace!;
     const times = next.lastRoll! / face;
@@ -141,7 +178,7 @@ export function App() {
     const ready = !busy && !paused;
     screen = (
       <div className="game">
-        <Hud s={game} />
+        <Hud s={game} level={moneyLevel} />
         <div className="game-body">
           <div className="board-area">
             <Board position={movingPos ?? game.player.position} overview={overview} bonus={game.bonusSquare} />
@@ -164,19 +201,27 @@ export function App() {
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
           </div>
-          <SidePanel s={game} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
+          <SidePanel s={game} level={moneyLevel} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
-        <Toasts log={game.log} />
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {!busy && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
+        {summary && !game.bigEvent && !showHistory && !showFeed && (
+          <TurnSummary
+            key={`${summary.year}-${summary.month}`}
+            data={summary}
+            onClose={() => {
+              if (game.newsEvent) setGame(dismissNews(game));
+              setTurnStart(null);
+            }}
+          />
+        )}
         {ready && game.phase === 'decision' && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
         {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
-        {ready && newsStep && <NewsModal s={game} onNext={() => setNewsSeenYear(game.year)} />}
-        {ready && settleStep && <YearEndModal s={game} onNext={() => afterSettlement(game)} />}
+        {ready && settleStep && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
         {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>
