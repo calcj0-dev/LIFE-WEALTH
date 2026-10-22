@@ -161,6 +161,13 @@ describe('画面', () => {
     expect(it).toContain('買った平均の値段（20万円）');
     expect(renderToString(<AssetPriceChart points={s.prices} id="fund" />)).toContain('ゲームの始めからの値動き');
   });
+  it('ライバルがいると、上の欄・決算・結果に順位が出る', () => {
+    const s = playGame(4, 'employee', 10);
+    expect(renderToString(<Hud s={s} />)).toContain('位');
+    const html = renderToString(<Result s={s} onAgain={noop} />);
+    for (const text of ['あなたは', 'コツコツさん', 'イケイケさん', '投資の成績', 'みんなの純資産の移り変わり']) expect(html).toContain(text);
+    expect(html).not.toMatch(RAW_KEY);
+  });
   it('結果画面に、最後の純資産が出る', () => {
     const s = playGame(11, 'engineer', 10);
     const html = renderToString(<Result s={s} onAgain={noop} />);

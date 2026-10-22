@@ -8,7 +8,7 @@ const SERIES_KEYS = ['deposit', ...ASSET_IDS, 'realEstate'];
 const valueOf = (r: YearRecord, key: string) => (key === 'deposit' ? Math.max(0, r.cash) : r.assets[key] ?? 0);
 
 /** 「1億」「5,000万」のような、目盛りに使う区切りのよい値 */
-function niceStep(max: number): number {
+export function niceStep(max: number): number {
   const raw = max / 4;
   const pow = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
   for (const m of [1, 2, 5, 10]) if (raw <= m * pow) return m * pow;

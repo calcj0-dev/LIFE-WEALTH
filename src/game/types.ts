@@ -353,8 +353,11 @@ export interface GameState {
   newsEvent: NewsEvent | null;
   /** ライバル（CPU）2人。いないときは空（design.md 12章） */
   rivals: Rival[];
-  /** ライバルの番の計算をしている間だけ true（月末の、全員に共通の処理を行わないため） */
-  cpuTurn: boolean;
+  /**
+   * ライバルの番の計算をしている間だけ、そのライバルの番号（していないときは -1）。
+   * 月末の、全員に共通の処理を行わないためと、その間あなたの記録がどこにあるかを知るため
+   */
+  cpuSeat: number;
 }
 
 /** 1ターンの月末の、お金の動き */

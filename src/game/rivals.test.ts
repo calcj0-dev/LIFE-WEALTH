@@ -4,6 +4,7 @@ import { playGame } from './autoplay';
 import { applyNews } from './market';
 import { NEWS } from '../data/news';
 import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, getOptions, roll, setSaving } from './engine';
+import { standings } from './standings';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20): GameState {
@@ -69,5 +70,29 @@ describe('ライバル（CPU）', () => {
     const a = playGame(7, 'employee', 10);
     const b = playGame(7, 'employee', 10);
     expect(a.rivals.map((r) => r.result!.netWorth)).toEqual(b.rivals.map((r) => r.result!.netWorth));
+  });
+  it('順位は純資産の多い順。結果には投資の成績も入る', () => {
+    const s = playGame(5, 'employee', 10);
+    const list = standings(s);
+    expect(list.map((x) => x.who).sort()).toEqual(['bold', 'steady', 'you']);
+    for (let i = 1; i < list.length; i++) expect(list[i - 1].worth).toBeGreaterThanOrEqual(list[i].worth);
+    expect(list[0].rank).toBe(1);
+    expect(typeof s.result!.investReturn).toBe('number');
+  });
+  it('ライバルがボーナスマスを取っても、次のボーナスマスはあなたの駒から10〜40マス先', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      let s = started(seed, 10);
+      for (let turn = 0; turn < 120 && s.phase !== 'finished'; turn++) {
+        if (s.phase === 'roll') s = roll(s);
+        while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+        s = dismissNews(dismissBigEvent(s));
+        if (s.phase === 'yearEnd') break;
+        const taken = s.rivals.some((r) => r.log.at(-1)?.key === 'bonus.get' && r.log.at(-1)?.month === s.month - 1);
+        if (taken) {
+          const d = (s.bonusSquare - s.player.position + 200) % 200;
+          expect(d).toBeLessThanOrEqual(BONUS.maxAhead);
+        }
+      }
+    }
   });
 });

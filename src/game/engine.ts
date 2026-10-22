@@ -186,7 +186,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number; riva
     bonusSquare: 0,
     prices: [],
     rivals: options.rivals === false ? [] : RIVAL_IDS.map((id) => ({ id, ...newSeat() })),
-    cpuTurn: false,
+    cpuSeat: -1,
     ...newSeat(),
   };
   for (const v of seatViews(s)) v.yearMarket = newYearMarket(s);
@@ -347,11 +347,16 @@ export function closeTrade(state: GameState): GameState {
   return s;
 }
 
-/** 次のボーナスマスを決める。今いる場所から10〜40マス先。スタートには付けない */
+/**
+ * 次のボーナスマスを決める。あなたの駒から10〜40マス先。スタートには付けない。
+ * ライバルが取ったときも、あなたがねらえるように、あなたの駒から数える（design.md 12.3）
+ */
 function placeBonus(s: GameState) {
+  // ライバルの番の間は、あなたの記録はそのライバルの場所に入れ替わっている
+  const me = s.cpuSeat >= 0 ? s.rivals[s.cpuSeat].player : s.player;
   for (let guard = 0; guard < 100; guard++) {
     const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
-    const index = (s.player.position + ahead) % BOARD.length;
+    const index = (me.position + ahead) % BOARD.length;
     const type = BOARD[index].type;
     if (type !== 'start') {
       s.bonusSquare = index;
@@ -917,14 +922,14 @@ function addFlows(target: Record<string, number>, items: Record<string, number>)
  */
 function endMonth(s: GameState) {
   // ライバルの番の中では、その人の月末だけを行う
-  if (s.cpuTurn) {
+  if (s.cpuSeat >= 0) {
     endSeatMonth(s);
     s.phase = 'roll';
     return;
   }
   s.rivals.forEach((r, i) => {
     const id = r.id;
-    asSeat(s, i, () => playCpuTurn(s, id));
+    asSeat(s, i, () => playCpuTurn(s, id, i));
   });
   endSeatMonth(s);
 
@@ -975,25 +980,25 @@ function endSeatMonth(s: GameState) {
 const monthlyExpense = (s: GameState) => sum(estimateMonth(s).expense) / s.monthsPerTurn;
 
 /** ライバル1人の番。ルーレットを回して進み、選ぶことは性格に合わせて自動で決め、その人の月末まで行う（design.md 12.2） */
-function playCpuTurn(s: GameState, id: RivalId) {
+function playCpuTurn(s: GameState, id: RivalId, seat: number) {
   const personality = PERSONALITIES[id];
   const phase = s.phase;
-  s.cpuTurn = true;
+  s.cpuSeat = seat;
   s.phase = 'roll';
   rollIn(s);
   for (let guard = 0; s.decision && guard < 30; guard++) chooseIn(s, cpuChoice(s, getOptions(s), personality, monthlyExpense(s)));
-  s.cpuTurn = false;
+  s.cpuSeat = -1;
   s.phase = phase;
 }
 
 /** ライバル1人の、年の始めのお知らせや選ぶこと（進学、手札を捨てる、引退など）を、自動で済ませる */
-function runCpuQueue(s: GameState, id: RivalId) {
+function runCpuQueue(s: GameState, id: RivalId, seat: number) {
   const personality = PERSONALITIES[id];
   const phase = s.phase;
-  s.cpuTurn = true;
+  s.cpuSeat = seat;
   nextFromQueue(s);
   for (let guard = 0; s.decision && guard < 30; guard++) chooseIn(s, cpuChoice(s, getOptions(s), personality, monthlyExpense(s)));
-  s.cpuTurn = false;
+  s.cpuSeat = -1;
   s.phase = phase;
 }
 
@@ -1225,7 +1230,7 @@ export function nextYear(state: GameState): GameState {
   s.month = 1;
   forEachSeat(s, () => newYearForSeat(s));
   // ライバルの、年の始めのお知らせや選ぶことは、自動で済ませる
-  ids.forEach((id, i) => asSeat(s, i, () => runCpuQueue(s, id)));
+  ids.forEach((id, i) => asSeat(s, i, () => runCpuQueue(s, id, i)));
   nextFromQueue(s);
   return s;
 }
