@@ -64,16 +64,70 @@ export function App() {
   /** このターンで月末が来た */
   const monthEnded = !!turnStart && flowKey === `${turnStart.year}-${turnStart.month}`;
 
-  // ライバルの番（design.md 12.2）。計算は済んでいるので、駒を1人ずつすばやく動かして見せる
+  // あなたの月末を見せる順番（design.md 2.2、12.2）: 給料と生活費のアクション → 今月のまとめ → ライバルの番
+  // → ライバルのお知らせ → 大きなイベント・ニュース。計算は全員分もう済んでいるので、見せる順番だけを決める
+
+  // 給料と生活費のアクション。銀行預金の横に「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
+  /** アクションを見せ終わった月 */
+  const [payShown, setPayShown] = useState<string | null>(null);
+  /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
+  const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
+  const paying = humanDone && monthEnded && payShown !== flowKey;
+  const payIndex = payStep?.key === flowKey ? payStep.i : 0;
+  /** 大きなイベントで動いた銀行預金（ライバルの番のあとに見せるので、それまでは引いておく） */
+  const bigEventCash = game?.bigEvent?.cash ?? 0;
+  let cashShown: { value: number; label?: string; level: MoneyLevel } | undefined;
+  if (paying && game && m) {
+    const income = shownTotal(m.income);
+    const expense = shownTotal(m.expense);
+    const end = game.player.cash - bigEventCash;
+    const start = end - (income - expense) + m.saved + m.repaid;
+    cashShown = [
+      { value: start, level: 'medium' as MoneyLevel },
+      { value: start + income, label: t('payFlow.salary'), level: 'medium' as MoneyLevel },
+      { value: start + income - expense, label: t('payFlow.expense'), level: 'medium' as MoneyLevel },
+      { value: end, level: 'weak' as MoneyLevel },
+    ][payIndex];
+  }
+  useEffect(() => {
+    if (!paying || !flowKey) return;
+    const id = window.setTimeout(() => (payIndex >= 3 ? setPayShown(flowKey) : setPayStep({ key: flowKey, i: payIndex + 1 })), PAY_STEP_MS[payIndex]);
+    return () => window.clearTimeout(id);
+  }, [paying, flowKey, payIndex]);
+
+  // 今月のまとめ。あなたの月の話なので、ライバルの番より先に出す
+  /** まとめを閉じた月 */
+  const [summaryClosed, setSummaryClosed] = useState<string | null>(null);
+  const big = game?.bigEvent;
+  // 大きなイベントとニュースは全員に起きるので、このあとの画面で見せる（まとめには入れない）
+  const monthEntries = game && turnStart ? game.log.slice(turnStart.logLen).filter((e) => !e.key.startsWith('bigEvent.')) : [];
+  const summary: TurnSummaryData | null =
+    game && turnStart && humanDone && monthEnded && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
+      ? {
+          year: turnStart.year,
+          month: turnStart.month,
+          monthsPerTurn: game.monthsPerTurn,
+          entries: monthEntries,
+          flow: game.lastMonth,
+          cashBefore: turnStart.cash,
+          cashAfter: game.player.cash - bigEventCash,
+          worthBefore: turnStart.worth,
+          worthAfter: netWorth(game) - (game.newsEvent?.moved ?? 0) - (big ? big.moved + big.cash : 0),
+        }
+      : null;
+
+  // ライバルの番（design.md 12.2）。駒を1人ずつすばやく動かして見せる
   /** ライバルの番を見せ終わった月 */
   const [rivalShown, setRivalShown] = useState<string | null>(null);
   /** 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前） */
   const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number } | null>(null);
-  const rivalsMoving = humanDone && monthEnded && game!.rivals.length > 0 && rivalShown !== flowKey;
+  const rivalsMoving = humanDone && monthEnded && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
   const rs = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
   const rivalPositions =
     game?.rivals.map((r, k) => {
-      if (!turnStart || !monthEnded || rivalShown === flowKey) return turnStart && !monthEnded ? turnStart.rivalPos[k] ?? r.player.position : r.player.position;
+      // ライバルの番を見せる前は、ターンの始めの場所に置いておく
+      if (!turnStart || !monthEnded || rivalShown === flowKey) return turnStart && rivalShown !== flowKey ? turnStart.rivalPos[k] ?? r.player.position : r.player.position;
+      if (!rivalsMoving) return turnStart.rivalPos[k] ?? r.player.position;
       if (k < rs.r) return r.player.position;
       if (k === rs.r && rs.i >= 0) return r.lastPath[rs.i] ?? r.player.position;
       return turnStart.rivalPos[k] ?? r.player.position;
@@ -90,61 +144,16 @@ export function App() {
     return () => window.clearTimeout(id);
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
-  /** 選ぶ出来事も大きなイベントも残っておらず、ライバルの番も見せ終わった */
-  const settled = humanDone && !game!.bigEvent && !rivalsMoving;
-
-  // 給料と生活費のアクション（design.md 2.2）。このターンで月末が来たら、銀行預金の横に
-  // 「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
-  /** アクションを見せ終わった月 */
-  const [payShown, setPayShown] = useState<string | null>(null);
-  /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
-  const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
-  const paying = settled && monthEnded && payShown !== flowKey;
-  const payIndex = payStep?.key === flowKey ? payStep.i : 0;
-  let cashShown: { value: number; label?: string; level: MoneyLevel } | undefined;
-  if (paying && game && m) {
-    const income = shownTotal(m.income);
-    const expense = shownTotal(m.expense);
-    const end = game.player.cash;
-    const start = end - (income - expense) + m.saved + m.repaid;
-    cashShown = [
-      { value: start, level: 'medium' as MoneyLevel },
-      { value: start + income, label: t('payFlow.salary'), level: 'medium' as MoneyLevel },
-      { value: start + income - expense, label: t('payFlow.expense'), level: 'medium' as MoneyLevel },
-      { value: end, level: 'weak' as MoneyLevel },
-    ][payIndex];
-  }
+  // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
+  const turnComplete = humanDone && monthEnded && !paying && !summary && !rivalsMoving;
   useEffect(() => {
-    if (!paying || !flowKey) return;
-    const id = window.setTimeout(() => (payIndex >= 3 ? setPayShown(flowKey) : setPayStep({ key: flowKey, i: payIndex + 1 })), PAY_STEP_MS[payIndex]);
-    return () => window.clearTimeout(id);
-  }, [paying, flowKey, payIndex]);
+    if (turnComplete) setTurnStart(null);
+  }, [turnComplete]);
 
-  // ターンが終わった（アクションも見せ終わった）ら、今月のまとめを出す
-  const turnDone = settled && !paying;
-  const summary: TurnSummaryData | null =
-    game && turnStart && turnDone && hasSomething(game.log.slice(turnStart.logLen))
-      ? {
-          year: turnStart.year,
-          month: turnStart.month,
-          monthsPerTurn: game.monthsPerTurn,
-          entries: game.log.slice(turnStart.logLen),
-          flow: game.lastMonth,
-          cashBefore: turnStart.cash,
-          cashAfter: game.player.cash,
-          worthBefore: turnStart.worth,
-          // ニュースで相場が動いた分は、このあとのニュースの画面で見せる（design.md 2.4）
-          worthAfter: netWorth(game) - (game.newsEvent?.moved ?? 0),
-        }
-      : null;
-  // 何も起きなかったターンは、まとめを出さずに終える
-  useEffect(() => {
-    if (turnDone && !summary) setTurnStart(null);
-  }, [turnDone, summary]);
-  // ライバルの大事な動き（結婚、ボーナスマス、大きな損）は、今月のまとめとニュースのあとに知らせる（design.md 12.2）
+  // ライバルの大事な動き（結婚、ボーナスマス、大きな損）は、ライバルの番のあと、大きなイベントとニュースの前に知らせる
   /** お知らせを見たところまでの、ライバルごとの記録の数 */
   const [rivalSeen, setRivalSeen] = useState<number[] | null>(null);
-  const alertReady = !!game && !!rivalSeen && !turnStart && !game.newsEvent && !game.bigEvent;
+  const alertReady = !!game && !!rivalSeen && !turnStart;
   const alerts = alertReady ? rivalLines(game!, rivalSeen!).filter((l) => isImportant(l.entry)) : [];
   useEffect(() => {
     if (!game) {
@@ -155,8 +164,10 @@ export function App() {
     // はじめて見るゲーム（続きからなど）は、今までの動きを知らせない。大事な動きがなければ、見たことにする
     if (!rivalSeen || (alertReady && alerts.length === 0 && lens.some((n, i) => n !== rivalSeen[i]))) setRivalSeen(lens);
   });
-  // 大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
-  const paused = showHistory || showFeed || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0;
+  /** ターンが終わり、ライバルのお知らせも見たあと（大きなイベントとニュースを出す） */
+  const afterTurn = !turnStart && alerts.length === 0;
+  // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
+  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0;
   const yearEnd = game?.phase === 'yearEnd';
   const tradeStep = yearEnd && tradeYear === game!.year;
   const settleStep = yearEnd && !tradeStep;
@@ -261,9 +272,12 @@ export function App() {
     screen = <Result s={game} onAgain={() => setGame(null)} />;
   } else {
     const ready = !busy && !paused;
+    /** あなたの番の途中で出す画面（マスの出来事など）を出せるか */
+    const readyInTurn = !busy && !showHistory && !showFeed && !game.bigEvent && !game.newsEvent;
     screen = (
       <div className="game">
-        <Hud s={game} level={moneyLevel} />
+        {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
+        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} />
         <div className="game-body">
           <div className="board-area">
             <Board
@@ -283,40 +297,44 @@ export function App() {
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
-              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && !rivalsMoving}
+              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
               onSpin={spin}
               resultLabel={moveLabel ?? undefined}
             />
             <CardHand
               s={game}
-              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && !rivalsMoving}
+              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
               onMove={moveWithCard}
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
           </div>
-          <SidePanel s={game} level={moneyLevel} cashShown={cashShown} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
+          <SidePanel
+            s={game}
+            level={moneyLevel}
+            cashShown={cashShown}
+            hideRivalMonth={turnStart && rivalShown !== flowKey ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
         </div>
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
-        {!busy && !rivalsMoving && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
+        {!busy && afterTurn && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
         {summary && !game.bigEvent && !showHistory && !showFeed && (
           <TurnSummary
             key={`${summary.year}-${summary.month}`}
             data={summary}
-            onClose={() => setTurnStart(null)}
+            onClose={() => setSummaryClosed(flowKey)}
           />
         )}
         {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
-        {!busy && !turnStart && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
+        {!busy && afterTurn && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}
-        {ready && game.phase === 'decision' && (
+        {readyInTurn && game.phase === 'decision' && alerts.length === 0 && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}
         {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
-        {ready && settleStep && !paying && !rivalsMoving && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
+        {ready && settleStep && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
         {ready && tradeStep && <TradeModal s={game} onChange={setGame} onDone={() => setGame(nextYear(game))} />}
         {ready && game.tradeOpen && <TradeModal s={game} onChange={setGame} onDone={() => setGame(closeTrade(game))} card />}
       </div>
