@@ -38,6 +38,7 @@ import {
   buyAsset,
   buyShares,
   createLoan,
+  loanPayment,
   financialAssets,
   netWorth,
   payLoanMonth,
@@ -85,6 +86,8 @@ const emptyFlows = (year: number): Settlement => ({
   borrowed: 0,
   revaluation: 0,
   talks: [],
+  saved: 0,
+  repaid: 0,
 });
 
 // ---------------------------------------------------------------- 開始
@@ -157,6 +160,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number } = {
     marketChange: null,
     bigEvent: null,
     newsEvent: null,
+    lastMonth: null,
   };
   s.yearMarket = newYearMarket(s);
   recordPrices(s, 0);
@@ -366,7 +370,8 @@ function handleSquare(s: GameState) {
     case 'large': {
       const ev = pickEvent(s, square.type);
       if (!ev) return notice('square.nothing');
-      return startDecision(s, { kind: 'event', eventId: ev.id }, 'square');
+      const params = ev.effects?.some((e) => e.t === 'sickness') ? { heavy: nextRandom(s) < SICKNESS.heavyChance ? 1 : 0 } : undefined;
+      return startDecision(s, { kind: 'event', eventId: ev.id, ...(params ? { params } : {}) }, 'square');
     }
     case 'stock': {
       // 4業種のうち1つの株が、割安に買える（design.md 3.4）
@@ -435,9 +440,14 @@ const jobChangeTargets = (s: GameState) => JOB_IDS.filter((j) => j !== s.player.
 const canAfford = (s: GameState, amount: number) => s.player.cash >= amount;
 
 /** 選ぶものがない出来事で、すぐに動くお金（分かる分だけ） */
-function previewCash(effects: Effect[]): number | undefined {
+function previewCash(s: GameState, effects: Effect[]): number | undefined {
   let cash = 0;
-  for (const e of effects) if (e.t === 'cash') cash += e.amount;
+  for (const e of effects) {
+    if (e.t === 'cash') cash += e.amount;
+    // 病気は、医療保険に入っていなければ治療費がかかる。災害は、火災・地震保険に入っていなければ損害がかかる
+    if (e.t === 'sickness' && s.player.medicalPremium === null) cash -= SICKNESS.cost;
+    if (e.t === 'disaster' && !s.player.home?.fireInsured) cash -= e.amount;
+  }
   return cash || undefined;
 }
 
@@ -469,27 +479,37 @@ export function getOptions(s: GameState): DecisionOption[] {
           { id: 'skip', key: 'option.skip', enabled: true },
         ];
       }
-      const cash = previewCash(ev.effects ?? []);
+      const cash = previewCash(s, ev.effects ?? []);
       return [{ id: 'ok', key: 'option.ok', enabled: true, ...(cash !== undefined ? { cash } : {}) }];
     }
     case 'gamble': {
-      const opts: DecisionOption[] = [];
-      for (const g of GAMBLE_IDS) {
-        for (const bet of GAMBLE_BETS) {
-          opts.push({ id: `${g}:${bet}`, key: `option.gamble.${g}`, params: { bet }, enabled: canAfford(s, bet) });
-        }
+      if (!d.gambleId) {
+        return [
+          // 一番小さい金額も賭けられないときは、種類も選べない（選んでも賭けられないため）
+          ...GAMBLE_IDS.map((g) => ({ id: `game:${g}`, key: `option.gamble.${g}`, enabled: canAfford(s, Math.min(...GAMBLE_BETS)) })),
+          { id: 'skip', key: 'option.skip', enabled: true },
+        ];
       }
-      opts.push({ id: 'skip', key: 'option.skip', enabled: true });
-      return opts;
+      return [
+        ...GAMBLE_BETS.map((bet) => ({ id: `${d.gambleId}:${bet}`, key: 'option.gamble.bet', params: { bet }, enabled: canAfford(s, bet), cash: -bet })),
+        { id: 'back', key: 'option.back', enabled: true },
+      ];
     }
     case 'realEstate': {
       const price = d.offerPrice!;
       const loanCash = price * (REAL_ESTATE.downPaymentRate + REAL_ESTATE.buyCostRate);
       const fullCash = price * (1 + REAL_ESTATE.buyCostRate);
-      const params = { price };
+      const borrow = price * (1 - REAL_ESTATE.downPaymentRate);
+      const payment = loanPayment(borrow, REAL_ESTATE.loan.rate, REAL_ESTATE.loan.years * MONTHS_PER_YEAR);
       return [
-        { id: 'homeLoan', key: 'option.realEstate.homeLoan', params, enabled: canAfford(s, loanCash), cash: -loanCash },
-        { id: 'homeCash', key: 'option.realEstate.homeCash', params, enabled: canAfford(s, fullCash), cash: -fullCash },
+        {
+          id: 'homeLoan',
+          key: 'option.realEstate.homeLoan',
+          params: { amount: Math.round(loanCash), payment: Math.round(payment), years: REAL_ESTATE.loan.years },
+          enabled: canAfford(s, loanCash),
+          cash: -loanCash,
+        },
+        { id: 'homeCash', key: 'option.realEstate.homeCash', params: { amount: Math.round(fullCash) }, enabled: canAfford(s, fullCash), cash: -fullCash },
         { id: 'skip', key: 'option.skip', enabled: true },
       ];
     }
@@ -505,7 +525,12 @@ export function getOptions(s: GameState): DecisionOption[] {
         { id: 'skip', key: 'option.talk.decline', enabled: true },
       ];
     case 'discard':
-      return s.player.hand.map((card, i) => ({ id: `discard:${i}`, key: 'option.discard', params: { card }, enabled: true }));
+      return s.player.hand.map((card, i) => ({
+        id: `discard:${i}`,
+        key: i === s.player.hand.length - 1 ? 'option.discardNew' : 'option.discard',
+        params: { card },
+        enabled: true,
+      }));
     case 'stock':
       return [
         ...STOCK_SQUARE.shares.map((shares) => {
@@ -613,6 +638,8 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
       return null;
     }
     case 'gamble':
+      if (optionId.startsWith('game:')) return { kind: 'gamble', gambleId: optionId.slice(5) };
+      if (optionId === 'back') return { kind: 'gamble' };
       if (optionId !== 'skip') gamble(s, optionId);
       return null;
     case 'realEstate':
@@ -681,7 +708,9 @@ function applyEffect(s: GameState, e: Effect, key: string) {
       log(s, key, { notice: true });
       return;
     case 'sickness': {
-      const heavy = nextRandom(s) < SICKNESS.heavyChance;
+      // ポップアップで先に決めた重さを使う。決めていなければ（小さな出来事など）、ここで決める
+      const decided = s.decision?.kind === 'event' ? s.decision.params?.heavy : undefined;
+      const heavy = decided !== undefined ? decided === 1 : nextRandom(s) < SICKNESS.heavyChance;
       if (heavy) p.noIncomeMonths = Math.max(p.noIncomeMonths, SICKNESS.heavyMonths);
       if (p.medicalPremium !== null) {
         s.stats.insurancePaid += SICKNESS.cost;
@@ -808,20 +837,21 @@ export function estimateMonth(s: GameState): {
 }
 
 /** 積み立て。預金が足りない月や、借金がある月は、自動で休む（借金はしない。design.md 6.3） */
-function accumulate(s: GameState) {
+function accumulate(s: GameState): number {
   const p = s.player;
   // 積み立ての金額は「毎月○万円」なので、1ターンの月数分をまとめて買う
   const total = sum(p.saving) * s.monthsPerTurn;
-  if (total <= 0) return;
+  if (total <= 0) return 0;
   if (p.cash < total || p.cardLoan > 0) {
     if (!p.savingPaused) log(s, 'saving.pause', { notice: true });
     p.savingPaused = true;
-    return;
+    return 0;
   }
   for (const id of ASSET_IDS) if (p.saving[id] > 0) buyAsset(s, id, p.saving[id] * s.monthsPerTurn);
   s.stats.savingTotal += total;
   if (p.savingPaused) log(s, 'saving.resume', { notice: true });
   p.savingPaused = false;
+  return total;
 }
 
 function addFlows(target: Record<string, number>, items: Record<string, number>) {
@@ -841,12 +871,16 @@ function endMonth(s: GameState) {
   p.noIncomeMonths = Math.max(0, p.noIncomeMonths - s.monthsPerTurn);
 
   // お金が余ったら、まずカードローンの返済に回す（design.md 8章）
+  let repaid = 0;
   if (p.cash > 0 && p.cardLoan > 0) {
-    const repay = Math.min(p.cash, p.cardLoan);
-    p.cardLoan -= repay;
-    p.cash -= repay;
+    repaid = Math.min(p.cash, p.cardLoan);
+    p.cardLoan -= repaid;
+    p.cash -= repaid;
   }
-  accumulate(s);
+  const saved = accumulate(s);
+  flows.saved += saved;
+  flows.repaid += repaid;
+  s.lastMonth = { year: s.year, month: s.month, income, expense, saved, repaid };
   coverShortfall(s);
   flows.revaluation += updateMarketMonth(s);
   // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
@@ -887,13 +921,13 @@ function coverShortfall(s: GameState) {
     if (p.cash >= 0) break;
     sold += sellAsset(s, id, -p.cash);
   }
-  if (sold > 0) log(s, 'shortfall.sell', { params: { amount: Math.round(sold) }, notice: true });
+  if (Math.round(sold) > 0) log(s, 'shortfall.sell', { params: { amount: Math.round(sold) }, notice: true });
   if (p.cash < 0) {
     const borrowed = -p.cash;
     p.cardLoan += borrowed;
     p.cash = 0;
     s.yearFlows.borrowed += borrowed;
-    log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
+    if (Math.round(borrowed) > 0) log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
   }
   s.yearFlows.sold += sold;
 }

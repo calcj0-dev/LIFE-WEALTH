@@ -50,7 +50,7 @@ export function FeedPanel({ s, onClose }: { s: GameState; onClose: () => void })
                 )}
                 {rec && open === endKey && (
                   <div className="feed-detail">
-                    <MoneySummary income={rec.incomeTotal} expense={rec.expenseTotal} />
+                    <MoneySummary income={{ total: rec.incomeTotal }} expense={{ total: rec.expenseTotal }} />
                     <table className="worth-table">
                       <tbody>
                         {(['work', 'investment', 'revaluation', 'other'] as const)

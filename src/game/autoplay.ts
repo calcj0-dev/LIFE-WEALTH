@@ -46,9 +46,13 @@ function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy,
 
   switch (d.kind) {
     case 'gamble': {
-      if (rand() >= strategy.gambleChance) return 'skip';
+      // 先に種類を選び、そのあと金額を選ぶ
+      if (!d.gambleId) {
+        const games = enabled.filter((o) => o.id.startsWith('game:'));
+        return games.length && rand() < strategy.gambleChance ? pick(games).id : 'skip';
+      }
       const bets = enabled.filter((o) => o.id !== 'skip' && Number(o.params?.bet) <= (cash > 200 ? 10 : 1));
-      return bets.length ? pick(bets).id : 'skip';
+      return bets.length ? pick(bets).id : 'back';
     }
     case 'realEstate': {
       const home = enabled.find((o) => o.id === 'homeLoan');

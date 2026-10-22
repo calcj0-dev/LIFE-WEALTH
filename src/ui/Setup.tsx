@@ -5,7 +5,7 @@ import { DEFAULT_YEARS, MONTHS_PER_YEAR, YEAR_OPTIONS } from '../data/rules';
 import { estimateMonth, rollJob } from '../game/engine';
 import type { GameState } from '../game/types';
 import { formatMoney, t } from '../i18n';
-import { Details, LedgerTable, MoneySummary } from './Ledger';
+import { Details, MoneySummary, VerticalLedger, shownTotal } from './Ledger';
 
 /** 1ターンにかかる時間の目安（秒）。design.md 1.1 */
 const SECONDS_PER_TURN = 8;
@@ -86,19 +86,21 @@ export function JobRoulette({ s, onDone }: { s: GameState; onDone: (next: GameSt
 // ---------------------------------------------------------------- 今月の家計
 
 export function BudgetCard({ s, title }: { s: GameState; title: string }) {
-  const { income, expense, net, saving } = estimateMonth(s);
-  const sum = (items: Record<string, number>) => Object.values(items).reduce((a, b) => a + b, 0);
+  const { income, expense, saving } = estimateMonth(s);
+  // 合計は、画面に出す行を足したもの（行と必ず合う）
+  const net = shownTotal(income) - shownTotal(expense);
+  const save = Math.round(saving);
   return (
     <div className="card budget">
       <h4>{title}</h4>
-      <MoneySummary income={sum(income)} expense={sum(expense)} plan />
-      {saving > 0 && (
-        <div className={`saving-line ${net - saving >= 0 ? '' : 'minus'}`}>
-          {t('budget.saving', { amount: saving, rest: formatMoney(net - saving) })}
+      <MoneySummary income={income} expense={expense} plan />
+      {save > 0 && (
+        <div className={`saving-line ${net - save >= 0 ? '' : 'minus'}`}>
+          {t('budget.saving', { amount: save, rest: formatMoney(net - save) })}
         </div>
       )}
-      <Details>
-        <LedgerTable income={income} expense={expense} />
+      <Details label={t('budget.details')}>
+        <VerticalLedger income={income} expense={expense} saved={saving} />
         <p className="muted">{t('budget.note')}</p>
       </Details>
     </div>

@@ -437,6 +437,39 @@ describe('1ターンの月数', () => {
   });
 });
 
+describe('段階3.7の細かいところ', () => {
+  const onGamble = (s: GameState, cash: number): GameState => ({ ...s, phase: 'decision', decision: { kind: 'gamble' }, decisionFrom: 'square', player: { ...s.player, cash } });
+  it('ギャンブルは、種類を選んでから金額を選ぶ。金額の画面から戻れる', () => {
+    let s = onGamble(started(), 100);
+    expect(getOptions(s).map((o) => o.id)).toEqual(['game:lottery', 'game:horse', 'game:pachinko', 'skip']);
+    s = choose(s, 'game:horse');
+    expect(s.decision).toEqual({ kind: 'gamble', gambleId: 'horse' });
+    expect(getOptions(s).map((o) => o.id)).toEqual(['horse:1', 'horse:10', 'horse:100', 'back']);
+    expect(choose(s, 'back').decision).toEqual({ kind: 'gamble' });
+  });
+  it('1万円もないときは、ギャンブルの種類も選べない', () => {
+    const opts = getOptions(onGamble(started(), 0));
+    expect(opts.filter((o) => o.enabled).map((o) => o.id)).toEqual(['skip']);
+  });
+  it('家の売り出しに、頭金と諸費用、毎月の返済額を出す', () => {
+    const s: GameState = { ...started(), phase: 'decision', decision: { kind: 'realEstate', offerPrice: 3000 }, decisionFrom: 'square' };
+    const loan = getOptions(s).find((o) => o.id === 'homeLoan')!;
+    expect(loan.params?.amount).toBe(450);
+    // 2,700万円を金利1%・35年で借りると、毎月の返済は約7.6万円（画面には約8万円と出す）
+    expect(loan.params?.payment).toBe(8);
+  });
+  it('カードを捨てる画面で、新しくもらったカード（手札の最後）に NEW が付く', () => {
+    const base = started();
+    const s: GameState = { ...base, phase: 'decision', decision: { kind: 'discard' }, decisionFrom: 'square', player: { ...base.player, hand: ['dash', 'dash', 'dash', 'dash'] } };
+    expect(getOptions(s).map((o) => o.key)).toEqual(['option.discard', 'option.discard', 'option.discard', 'option.discardNew']);
+  });
+  it('1ヶ月のお金の動き（今月のまとめに出すもの）を記録する', () => {
+    const s = settle(roll(started(1, 20, 'employee', { fund: 2 })));
+    expect(s.lastMonth?.income.salary).toBeCloseTo(250 / 12, 6);
+    expect(s.lastMonth?.saved).toBe(2);
+  });
+});
+
 describe('ニュース', () => {
   it('1.5年に2回くらい、1年のどの月でもランダムに起きる', () => {
     expect(NEWS_PER_YEAR).toBeCloseTo(2 / 1.5, 6);

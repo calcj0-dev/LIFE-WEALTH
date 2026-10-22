@@ -1,6 +1,6 @@
 // 積み立ての金額を決める画面と、取引タイムの画面（design.md 2.1、6.3）。
 
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { ASSETS, ASSET_IDS } from '../data/assets';
 import { TRADE } from '../data/rules';
 import {
@@ -77,6 +77,91 @@ export function SavingSetup({ s, onDone }: { s: GameState; onDone: (next: GameSt
 
 // ---------------------------------------------------------------- 取引タイム
 
+type Mode = 'buy' | 'sell';
+/** 選んだ数。金額の銘柄は万円、株は株数。'all' は「全部」 */
+type Qty = number | 'all';
+
+/** 売り買いの中身（確定の前に見せる）。units は株数（株のとき）、amount は動く金額 */
+function planOf(s: GameState, id: AssetId, mode: Mode, qty: Qty): { units: number; amount: number } {
+  const p = s.player;
+  const price = s.market.prices[id];
+  if (ASSETS[id].unit === 'share') {
+    const held = Math.round(p.holdings[id] ?? 0);
+    const want = qty === 'all' ? (mode === 'buy' ? Infinity : held) : qty;
+    const units = mode === 'buy' ? Math.min(want, Math.floor(Math.max(0, p.cash) / price + 1e-9)) : Math.min(want, held);
+    return { units, amount: units * price };
+  }
+  const value = assetValue(s, id);
+  const want = qty === 'all' ? Infinity : qty;
+  const amount = mode === 'buy' ? Math.min(want, Math.floor(Math.max(0, p.cash))) : Math.min(want, value);
+  return { units: 0, amount };
+}
+
+/** 銘柄を選んだあとに出す、売り買いの部分。「買う」「売る」を選んでから、金額（株数）を選び、「確定」で決める（design.md 2.1） */
+function TradePanel({ s, id, onChange }: { s: GameState; id: AssetId; onChange: (next: GameState) => void }) {
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [qty, setQty] = useState<Qty | null>(null);
+  const share = ASSETS[id].unit === 'share';
+  const held = s.player.holdings[id] ?? 0;
+  const value = assetValue(s, id);
+  const cost = costOf(s, id);
+  const choices: Qty[] = [...(share ? TRADE.shares : TRADE.amounts), 'all'];
+  const plan = mode && qty !== null ? planOf(s, id, mode, qty) : null;
+  const ok = !!plan && plan.amount >= 0.5;
+  const cashAfter = plan && mode ? s.player.cash + (mode === 'buy' ? -plan.amount : plan.amount) : s.player.cash;
+  const name = t(`asset.${id}`);
+  const confirm = () => {
+    if (!mode || !plan || !ok) return;
+    if (share) onChange(tradeShares(s, id, mode === 'buy' ? plan.units : -plan.units));
+    else onChange(trade(s, id, mode === 'buy' ? plan.amount : -(qty === 'all' ? value + 1 : plan.amount)));
+    setQty(null);
+  };
+  return (
+    <div className="trade-panel">
+      <h4>{name}</h4>
+      <AssetPriceChart points={s.prices} id={id} avgCost={held > 0 ? cost / held : undefined} />
+      <div className="trade-step">
+        <span className="trade-step-label">{t('trade.step.mode')}</span>
+        <button className={mode === 'buy' ? 'small' : 'secondary small'} onClick={() => setMode('buy')}>
+          {t('trade.buy')}
+        </button>
+        <button className={mode === 'sell' ? 'small' : 'secondary small'} disabled={value < 0.5} onClick={() => setMode('sell')}>
+          {t('trade.sell')}
+        </button>
+      </div>
+      {mode && (
+        <div className="trade-step">
+          <span className="trade-step-label">{t(share ? 'trade.step.shares' : 'trade.step.amount')}</span>
+          {choices.map((c) => (
+            <button key={String(c)} className={qty === c ? 'small' : 'secondary small'} onClick={() => setQty(c)}>
+              {c === 'all' ? t('trade.all') : share ? t('trade.sharesCount', { n: c }) : formatMoney(c)}
+            </button>
+          ))}
+        </div>
+      )}
+      {mode && plan && (
+        <div className={`trade-preview${ok ? '' : ' minus'}`}>
+          {ok ? (
+            <>
+              <div>
+                {share
+                  ? t(mode === 'buy' ? 'trade.preview.buyShares' : 'trade.preview.sellShares', { name, n: plan.units, amount: Math.round(plan.amount) })
+                  : t(mode === 'buy' ? 'trade.preview.buy' : 'trade.preview.sell', { name, amount: Math.round(plan.amount) })}
+              </div>
+              <div>{t('trade.preview.deposit', { from: formatMoney(s.player.cash), to: formatMoney(cashAfter) })}</div>
+            </>
+          ) : (
+            <div>{t(mode === 'buy' ? 'trade.preview.noCash' : 'trade.preview.noHolding')}</div>
+          )}
+          <button disabled={!ok} onClick={confirm}>
+            {t('trade.confirm')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TradeModal({
   s,
   onChange,
@@ -89,10 +174,8 @@ export function TradeModal({
   /** 取引カードで開いたとき */
   card?: boolean;
 }) {
-  const [unit, setUnit] = useState(TRADE.amounts[1]);
-  const [shareUnit, setShareUnit] = useState(TRADE.shares[0]);
-  /** チャートを開いている銘柄 */
-  const [chart, setChart] = useState<AssetId | null>(null);
+  /** 選んでいる銘柄 */
+  const [selected, setSelected] = useState<AssetId | null>(null);
   const p = s.player;
   const rates = s.marketChange?.rates;
 
@@ -104,87 +187,45 @@ export function TradeModal({
         <p className="summary-line">{t('trade.deposit', { amount: p.cash })}</p>
 
         <div className="card">
-          <div className="trade-units">
-            <span>{t('trade.unit')}</span>
-            {TRADE.amounts.map((a) => (
-              <button key={a} className={a === unit ? 'small' : 'secondary small'} onClick={() => setUnit(a)}>
-                {formatMoney(a)}
-              </button>
-            ))}
-            <span>{t('trade.shareUnit')}</span>
-            {TRADE.shares.map((n) => (
-              <button key={n} className={n === shareUnit ? 'small' : 'secondary small'} onClick={() => setShareUnit(n)}>
-                {t('trade.sharesCount', { n })}
-              </button>
-            ))}
-          </div>
-          <div className="return-table">
-            <table className="table trade-table">
-              <thead>
-                <tr>
-                  <th>{t('trade.asset')}</th>
-                  <th>{t('trade.price')}</th>
-                  <th>{t('trade.rate')}</th>
-                  <th>{t('trade.holding')}</th>
-                  <th>{t('trade.cost')}</th>
-                  <th>{t('trade.value')}</th>
-                  <th>{t('trade.profit')}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {ASSET_IDS.map((id) => {
-                  const share = ASSETS[id].unit === 'share';
-                  const price = s.market.prices[id];
-                  const value = assetValue(s, id);
-                  const cost = costOf(s, id);
-                  const profit = value - cost;
-                  const held = p.holdings[id] ?? 0;
-                  const r = rates?.[id];
-                  const canBuy = share ? p.cash >= price : p.cash >= unit;
-                  const buy = () => onChange(share ? tradeShares(s, id, shareUnit) : trade(s, id, unit));
-                  const sell = () => onChange(share ? tradeShares(s, id, -shareUnit) : trade(s, id, -unit));
-                  const sellAll = () => onChange(share ? tradeShares(s, id, -Math.round(held)) : trade(s, id, -value - 1));
-                  return (
-                    <Fragment key={id}>
-                      <tr>
-                        <td>{t(`asset.${id}`)}</td>
-                        <td className="ledger-money">{share ? t('trade.pricePerShare', { amount: price }) : '—'}</td>
-                        <td className={r === undefined ? '' : r >= 0 ? 'plus' : 'minus'}>{r === undefined ? '—' : `${formatSigned(r * 100)}%`}</td>
-                        <td className="ledger-money">{share ? t('trade.sharesCount', { n: Math.round(held) }) : value >= 0.5 ? formatMoney(value) : '—'}</td>
-                        <td className="ledger-money">{cost >= 0.5 ? formatMoney(cost) : '—'}</td>
-                        <td className="ledger-money">{value >= 0.5 ? formatMoney(value) : '—'}</td>
-                        <td className={`ledger-money ${profit >= 0 ? 'plus' : 'minus'}`}>
-                          {cost >= 0.5 ? `${profit > 0 ? '+' : ''}${formatMoney(profit)}（${formatSigned((profit / cost) * 100)}%）` : '—'}
-                        </td>
-                        <td className="trade-buttons">
-                          <button className="small" disabled={!canBuy} onClick={buy}>
-                            {t('trade.buy')}
-                          </button>
-                          <button className="secondary small" disabled={value < 0.5} onClick={sell}>
-                            {t('trade.sell')}
-                          </button>
-                          <button className="secondary small" disabled={value < 0.5} onClick={sellAll}>
-                            {t('trade.sellAll')}
-                          </button>
-                          <button className="secondary small" onClick={() => setChart(chart === id ? null : id)}>
-                            {t(chart === id ? 'trade.chartClose' : 'trade.chart')}
-                          </button>
-                        </td>
-                      </tr>
-                      {chart === id && (
-                        <tr>
-                          <td colSpan={8}>
-                            <AssetPriceChart points={s.prices} id={id} avgCost={held > 0 ? cost / held : undefined} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <p className="muted">{t('trade.pick')}</p>
+          <table className="table trade-list">
+            <thead>
+              <tr>
+                <th>{t('trade.asset')}</th>
+                <th>{t('trade.price')}</th>
+                <th>{t('trade.holding')}</th>
+                <th>{t('trade.profit')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ASSET_IDS.map((id) => {
+                const share = ASSETS[id].unit === 'share';
+                const value = assetValue(s, id);
+                const cost = costOf(s, id);
+                const profit = Math.round(value) - Math.round(cost);
+                const held = Math.round(p.holdings[id] ?? 0);
+                const r = rates?.[id];
+                return (
+                  <tr key={id} className={`trade-row${selected === id ? ' selected' : ''}`} onClick={() => setSelected(selected === id ? null : id)}>
+                    <td>
+                      <div className="trade-name">{t(`asset.${id}`)}</div>
+                      {r !== undefined && <div className={`trade-sub ${r >= 0 ? 'plus' : 'minus'}`}>{t('trade.yearRate', { rate: `${formatSigned(r * 100)}%` })}</div>}
+                    </td>
+                    <td className="ledger-money">{share ? t('trade.pricePerShare', { amount: s.market.prices[id] }) : '—'}</td>
+                    <td className="ledger-money">
+                      {value >= 0.5 ? formatMoney(value) : '—'}
+                      {share && held > 0 && <div className="trade-sub">{t('trade.sharesCount', { n: held })}</div>}
+                    </td>
+                    <td className={`ledger-money ${profit >= 0 ? 'plus' : 'minus'}`}>
+                      {cost >= 0.5 ? `${profit > 0 ? '+' : ''}${formatMoney(profit)}` : '—'}
+                      {cost >= 0.5 && <div className="trade-sub">{formatSigned((profit / cost) * 100)}%</div>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {selected && <TradePanel key={selected} s={s} id={selected} onChange={onChange} />}
         </div>
 
         <div className="card">

@@ -15,7 +15,7 @@ export function Hud({ s, level }: { s: GameState; level?: MoneyLevel }) {
         {dateLabel(s, s.year, s.month)}
         <span className="hud-years">{t('hud.years', { years: s.years })}</span>
       </div>
-      <div className="hud-item">
+      <div className="hud-item hud-worth">
         <span className="label">{t('hud.netWorth')}</span>
         <AnimatedMoney className="value" value={netWorth(s)} level={level} />
       </div>
