@@ -23,6 +23,7 @@ import { BonusModal, RivalAlertModal, isImportant, lookOf, rivalLines } from './
 import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
+import { TitleScene } from './ui/TitleScene';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
@@ -297,7 +298,8 @@ export function App() {
     );
   } else if (!game) {
     screen = (
-      <div className="center-screen">
+      <div className="center-screen title-screen">
+        <TitleScene />
         <h1 className="logo">
           LIFE <span>&amp;</span> WEALTH
         </h1>

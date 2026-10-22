@@ -2178,3 +2178,82 @@ button.small {
     top: 6px;
   }
 }
+
+/* ---------------- 全体の見た目（design.md 10.1） */
+
+/* 始めの画面（タイトル、キャラクター、年数、職業、積み立て）は、やわらかい水玉の背景にする */
+.center-screen {
+  background-image: radial-gradient(circle, rgba(255, 122, 69, 0.08) 2px, transparent 2.5px), radial-gradient(circle, rgba(46, 196, 182, 0.08) 2px, transparent 2.5px);
+  background-size: 36px 36px;
+  background-position: 0 0, 18px 18px;
+}
+.title-screen {
+  gap: 14px;
+}
+.title-scene {
+  width: min(560px, 92vw);
+  height: auto;
+}
+.title-screen .button-row button {
+  min-width: 160px;
+  padding: 12px 28px;
+  font-size: 17px;
+}
+.title-hop {
+  animation: title-hop 1.6s ease-in-out infinite;
+}
+.title-hop-1 {
+  animation-delay: 0.2s;
+}
+.title-hop-2 {
+  animation-delay: 0.4s;
+}
+@keyframes title-hop {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
+.title-coin {
+  animation: title-coin 2.4s ease-in-out infinite;
+}
+.title-coin-1 {
+  animation-delay: 0.8s;
+}
+.title-coin-2 {
+  animation-delay: 1.6s;
+}
+@keyframes title-coin {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+/* 見出しを少し太く、カードの角を少し丸く */
+h2 {
+  letter-spacing: 0.02em;
+}
+.card {
+  border-radius: 16px;
+}
+@media (max-height: 520px) {
+  .title-scene {
+    width: min(380px, 70vw);
+  }
+  .title-screen {
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-hop,
+  .title-coin {
+    animation: none;
+  }
+}

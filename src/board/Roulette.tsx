@@ -83,7 +83,7 @@ export function Roulette({ value, spinning, canSpin, onSpin, labels, buttonLabel
                 x={s.tx}
                 y={s.ty + (long ? 5 : 11)}
                 textAnchor="middle"
-                fontSize={long ? 13 : 32}
+                fontSize={long ? Math.min(13, 62 / s.label.length) : 32}
                 fontWeight="900"
                 fill="#fff"
                 transform={long ? `rotate(${(s.n - 0.5) * step} ${s.tx} ${s.ty})` : undefined}
