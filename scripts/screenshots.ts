@@ -73,6 +73,13 @@ for (const vp of VIEWPORTS) {
   await clickText(page, 'body', 'この金額で始める');
   await page.waitForTimeout(300);
   await shot('game');
+  // 盤面の全体図
+  if (await clickText(page, '.board-area', '全体図')) {
+    await page.waitForTimeout(600);
+    await shot('overview');
+    await clickText(page, '.board-area', /全体図|もどる|閉じる|駒/);
+    await page.waitForTimeout(600);
+  }
 
   let tradeShown = false;
   let lastTitle = '';

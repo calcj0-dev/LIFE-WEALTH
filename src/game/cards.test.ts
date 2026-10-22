@@ -113,12 +113,11 @@ describe('カード', () => {
 });
 
 describe('ボーナスマス', () => {
-  it('スタートと結婚マスには付かない。10〜40マス先に付く', () => {
+  it('スタートには付かない。10〜40マス先に付く', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const s = started(seed);
       const type = BOARD[s.bonusSquare].type;
       expect(type).not.toBe('start');
-      expect(type).not.toBe('stopMarriage');
       expect(bonusDistance(s)).toBeGreaterThanOrEqual(BONUS.minAhead);
       expect(bonusDistance(s)).toBeLessThanOrEqual(BONUS.maxAhead);
     }

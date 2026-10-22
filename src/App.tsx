@@ -217,7 +217,7 @@ export function App() {
         <Hud s={game} level={moneyLevel} />
         <div className="game-body">
           <div className="board-area">
-            <Board position={movingPos ?? game.player.position} overview={overview} bonus={game.bonusSquare} />
+            <Board position={movingPos ?? game.player.position} overview={overview} bonus={game.bonusSquare} married={game.player.married} />
             <div className="board-toolbar">
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
                 {t(overview ? 'board.follow' : 'board.overview')}

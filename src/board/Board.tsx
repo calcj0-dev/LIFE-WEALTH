@@ -7,8 +7,7 @@ import { t } from '../i18n';
 
 export const SQUARE_COLORS: Record<SquareType, string> = {
   start: '#ffb703',
-  stopMarriage: '#ff6b9a',
-  birth: '#ff9fc2',
+  family: '#ff6b9a',
   small: '#8ecae6',
   card: '#ffd166',
   luckyCard: '#ffb703',
@@ -22,8 +21,7 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
 
 export const SQUARE_ICONS: Record<SquareType, string> = {
   start: '🏁',
-  stopMarriage: '💍',
-  birth: '👶',
+  family: '💍',
   small: '🪙',
   card: '🃏',
   luckyCard: '🍀',
@@ -39,6 +37,8 @@ const SIZE = 74;
 /** 画面に映す範囲の大きさ（駒を追うとき） */
 const VIEW = { width: 1000, height: 560 };
 const FOLLOW_SCALE = 1;
+/** 全体図で、盤面を収める横の幅（PC やスマホの横向きの枠で、左右が切れても見える幅） */
+const OVERVIEW_WIDTH = 780;
 
 // ---------------------------------------------------------------- 背景の飾り（毎回同じ配置）
 
@@ -60,7 +60,9 @@ function buildDecorations(): Deco[] {
     }
     return false;
   };
-  for (let i = 0; i < 400 && items.length < 70; i++) {
+  // 盤面の広さに合わせて、飾りの数を決める
+  const want = Math.round((BOARD_WORLD.width * BOARD_WORLD.height) / 60000);
+  for (let i = 0; i < want * 6 && items.length < want; i++) {
     const x = 40 + rand() * (BOARD_WORLD.width - 80);
     const y = 40 + rand() * (BOARD_WORLD.height - 80);
     if (nearRoad(x, y) || nearSquare(x, y, 80) || items.some((d) => Math.hypot(d.x - x, d.y - y) < 60)) continue;
@@ -116,11 +118,15 @@ interface Props {
   bonus?: number;
   /** true なら盤面全体を映す。false なら駒の周りを拡大して追いかける */
   overview: boolean;
+  /** 結婚しているか（結婚・出産マスの絵を、指輪から赤ちゃんに変える） */
+  married?: boolean;
 }
 
-export function Board({ position, overview, bonus }: Props) {
+export function Board({ position, overview, bonus, married }: Props) {
   const here = BOARD[position];
-  const fit = Math.min(VIEW.width / BOARD_WORLD.width, VIEW.height / BOARD_WORLD.height);
+  // 盤面の枠は画面より縦長になることが多く、そのときは左右が切れて映る（slice）。
+  // 全体図では、切れても全部が入るように、横は OVERVIEW_WIDTH の幅に収める
+  const fit = Math.min(OVERVIEW_WIDTH / BOARD_WORLD.width, VIEW.height / BOARD_WORLD.height);
   const scale = overview ? fit : FOLLOW_SCALE;
   const tx = overview ? (VIEW.width - BOARD_WORLD.width * fit) / 2 : VIEW.width / 2 - here.x * scale;
   const ty = overview ? (VIEW.height - BOARD_WORLD.height * fit) / 2 : VIEW.height / 2 - here.y * scale;
@@ -141,7 +147,7 @@ export function Board({ position, overview, bonus }: Props) {
             <rect x={-SIZE / 2} y={-SIZE / 2 + 5} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.12)" />
             <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx="16" fill={SQUARE_COLORS[sq.type]} stroke="#fff" strokeWidth="5" />
             <text y="12" textAnchor="middle" fontSize="34">
-              {SQUARE_ICONS[sq.type]}
+              {sq.type === 'family' && married ? '👶' : SQUARE_ICONS[sq.type]}
             </text>
             {sq.id === bonus && (
               <g>
