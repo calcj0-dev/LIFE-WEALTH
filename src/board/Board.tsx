@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
+import { SquareIcon } from './SquareIcon';
 import { BOARD, BOARD_WORLD, ROUTE_POINTS } from '../data/board';
 import type { SquareType } from '../game/types';
 import { t } from '../i18n';
@@ -27,29 +28,8 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
   realEstate: '#f9a03f',
 };
 
-export const SQUARE_ICONS: Record<SquareType, string> = {
-  start: '🏁',
-  family: '💍',
-  // 出来事の大きさ（小・中・大）は、絵の数で見せる
-  plusSmall: '🪙',
-  plusMedium: '🪙🪙',
-  plusLarge: '🪙🪙🪙',
-  minusSmall: '💸',
-  minusMedium: '💸💸',
-  minusLarge: '💸💸💸',
-  chance: '✨',
-  card: '🃏',
-  luckyCard: '🍀',
-  stock: '📈',
-  investTalk: '🗣️',
-  gamble: '🎰',
-  realEstate: '🏠',
-};
 
 const SIZE = 74;
-/** マスの絵の数（出来事の大きさ）と、その文字の大きさ */
-const SQUARE_ICON_COUNT = (type: SquareType) => (type.endsWith('Large') ? 3 : type.endsWith('Medium') ? 2 : 1);
-const ICON_FONT: Record<number, { size: number; y: number }> = { 1: { size: 34, y: 12 }, 2: { size: 26, y: 9 }, 3: { size: 19, y: 7 } };
 /** 画面に映す範囲の大きさ（駒を追うとき） */
 const VIEW = { width: 1000, height: 560 };
 const FOLLOW_SCALE = 1;
@@ -58,7 +38,7 @@ const OVERVIEW_WIDTH = 780;
 
 // ---------------------------------------------------------------- 背景の飾り（毎回同じ配置）
 
-type Deco = { kind: 'tree' | 'house' | 'flower'; x: number; y: number; color: string; size: number };
+type Deco = { kind: 'tree' | 'pine' | 'house' | 'flower' | 'bush' | 'pond' | 'grass'; x: number; y: number; color: string; size: number };
 
 function buildDecorations(): Deco[] {
   let seed = 7;
@@ -66,32 +46,37 @@ function buildDecorations(): Deco[] {
   const roofColors = ['#ff6b6b', '#4d96ff', '#ffb703', '#9b5de5', '#2ec4b6'];
   const items: Deco[] = [];
   const nearSquare = (x: number, y: number, d: number) => BOARD.some((sq) => Math.hypot(sq.x - x, sq.y - y) < d);
-  const nearRoad = (x: number, y: number) => {
+  const nearRoad = (x: number, y: number, d = 70) => {
     for (let i = 1; i < ROUTE_POINTS.length; i++) {
       const a = ROUTE_POINTS[i - 1];
       const b = ROUTE_POINTS[i];
       const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
       const r = Math.max(0, Math.min(1, ((x - a.x) * (b.x - a.x) + (y - a.y) * (b.y - a.y)) / len2));
-      if (Math.hypot(x - (a.x + r * (b.x - a.x)), y - (a.y + r * (b.y - a.y))) < 70) return true;
+      if (Math.hypot(x - (a.x + r * (b.x - a.x)), y - (a.y + r * (b.y - a.y))) < d) return true;
     }
     return false;
   };
+  const free = (x: number, y: number, road: number, gap: number) =>
+    !nearRoad(x, y, road) && !nearSquare(x, y, road + 10) && !items.some((d) => Math.hypot(d.x - x, d.y - y) < gap + (d.kind === 'pond' ? 60 : 0));
+  // 池は大きいので、先に、道から離れた場所に少しだけ置く
+  for (let i = 0; i < 400 && items.filter((d) => d.kind === 'pond').length < 4; i++) {
+    const x = 120 + rand() * (BOARD_WORLD.width - 240);
+    const y = 120 + rand() * (BOARD_WORLD.height - 240);
+    if (free(x, y, 120, 200)) items.push({ kind: 'pond', x, y, color: '#8fd3f4', size: 0.9 + rand() * 0.4 });
+  }
   // 盤面の広さに合わせて、飾りの数を決める
-  const want = Math.round((BOARD_WORLD.width * BOARD_WORLD.height) / 60000);
-  for (let i = 0; i < want * 6 && items.length < want; i++) {
+  const want = Math.round((BOARD_WORLD.width * BOARD_WORLD.height) / 45000);
+  for (let i = 0; i < want * 8 && items.length < want; i++) {
     const x = 40 + rand() * (BOARD_WORLD.width - 80);
     const y = 40 + rand() * (BOARD_WORLD.height - 80);
-    if (nearRoad(x, y) || nearSquare(x, y, 80) || items.some((d) => Math.hypot(d.x - x, d.y - y) < 60)) continue;
     const r = rand();
-    items.push({
-      kind: r < 0.5 ? 'tree' : r < 0.8 ? 'house' : 'flower',
-      x,
-      y,
-      color: roofColors[Math.floor(rand() * roofColors.length)],
-      size: 0.8 + rand() * 0.5,
-    });
+    const kind: Deco['kind'] = r < 0.3 ? 'tree' : r < 0.42 ? 'pine' : r < 0.62 ? 'house' : r < 0.74 ? 'flower' : r < 0.86 ? 'bush' : 'grass';
+    if (!free(x, y, kind === 'grass' ? 60 : 70, kind === 'grass' ? 30 : 60)) continue;
+    items.push({ kind, x, y, color: roofColors[Math.floor(rand() * roofColors.length)], size: 0.8 + rand() * 0.5 });
   }
-  return items.sort((a, b) => a.y - b.y);
+  // 池と草は下に、ほかは奥（上）から順に描く
+  const flat = (d: Deco) => (d.kind === 'pond' ? 0 : d.kind === 'grass' ? 1 : 2);
+  return items.sort((a, b) => flat(a) - flat(b) || a.y - b.y);
 }
 
 const DECORATIONS = buildDecorations();
@@ -104,6 +89,44 @@ function Decoration({ d }: { d: Deco }) {
         <rect x="-5" y="4" width="10" height="20" rx="3" fill="#a0673a" />
         <circle cx="0" cy="-6" r="22" fill="#5cc275" />
         <circle cx="-9" cy="-12" r="9" fill="#7fd690" />
+      </g>
+    );
+  }
+  if (d.kind === 'pine') {
+    return (
+      <g transform={`translate(${d.x} ${d.y}) scale(${s})`}>
+        <rect x="-4" y="10" width="8" height="14" rx="2" fill="#8a5a33" />
+        <polygon points="0,-34 -20,0 20,0" fill="#3fa65c" />
+        <polygon points="0,-20 -24,14 24,14" fill="#4cb86a" />
+      </g>
+    );
+  }
+  if (d.kind === 'bush') {
+    return (
+      <g transform={`translate(${d.x} ${d.y}) scale(${s})`}>
+        <circle cx="-12" cy="4" r="12" fill="#6fcf7f" />
+        <circle cx="10" cy="4" r="13" fill="#62c473" />
+        <circle cx="0" cy="-6" r="14" fill="#7fd690" />
+        <circle cx="-4" cy="-2" r="2.5" fill="#ff6b6b" />
+        <circle cx="8" cy="-6" r="2.5" fill="#ff6b6b" />
+      </g>
+    );
+  }
+  if (d.kind === 'pond') {
+    return (
+      <g transform={`translate(${d.x} ${d.y}) scale(${s})`}>
+        <ellipse rx="78" ry="44" fill="#b8e6c1" />
+        <ellipse rx="66" ry="34" fill={d.color} />
+        <ellipse cx="-18" cy="-10" rx="22" ry="6" fill="#fff" opacity="0.45" />
+        <ellipse cx="34" cy="10" rx="9" ry="5" fill="#5cc275" />
+        <circle cx="34" cy="8" r="2.5" fill="#ff9fc2" />
+      </g>
+    );
+  }
+  if (d.kind === 'grass') {
+    return (
+      <g transform={`translate(${d.x} ${d.y}) scale(${s})`} stroke="#8fd19e" strokeWidth="3" strokeLinecap="round" fill="none">
+        <path d="M-8,6 L-10,-4 M-2,6 L-2,-8 M4,6 L7,-3" />
       </g>
     );
   }
@@ -280,15 +303,16 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
           {DECORATIONS.map((d, i) => (
             <Decoration key={i} d={d} />
           ))}
-          <polyline points={road} fill="none" stroke="#e9d3a5" strokeWidth="104" strokeLinejoin="round" strokeLinecap="round" />
-          <polyline points={road} fill="none" stroke="#f6e7c4" strokeWidth="92" strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points={road} fill="none" stroke="#d9bf8c" strokeWidth="110" strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points={road} fill="none" stroke="#efdcae" strokeWidth="102" strokeLinejoin="round" strokeLinecap="round" />
+          <polyline points={road} fill="none" stroke="#f8ecd0" strokeWidth="88" strokeLinejoin="round" strokeLinecap="round" />
           {BOARD.map((sq) => (
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
-              <rect x={-SIZE / 2} y={-SIZE / 2 + 5} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.12)" />
+              <rect x={-SIZE / 2} y={-SIZE / 2 + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.14)" />
               <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx="16" fill={SQUARE_COLORS[sq.type]} stroke="#fff" strokeWidth="5" />
-              <text y={ICON_FONT[SQUARE_ICON_COUNT(sq.type)].y} textAnchor="middle" fontSize={ICON_FONT[SQUARE_ICON_COUNT(sq.type)].size}>
-                {sq.type === 'family' && married ? '👶' : SQUARE_ICONS[sq.type]}
-              </text>
+              {/* 上のほうを少し明るくして、ふっくらした見た目にする */}
+              <path d={`M${-SIZE / 2 + 6},${-SIZE / 2 + 18} Q${-SIZE / 2 + 6},${-SIZE / 2 + 6} ${-SIZE / 2 + 18},${-SIZE / 2 + 6} L${SIZE / 2 - 18},${-SIZE / 2 + 6} Q${SIZE / 2 - 6},${-SIZE / 2 + 6} ${SIZE / 2 - 6},${-SIZE / 2 + 18} L${SIZE / 2 - 6},-4 L${-SIZE / 2 + 6},-4 Z`} fill="#fff" opacity="0.16" />
+              <SquareIcon type={sq.type} married={married} />
               {sq.id === bonus && (
                 <g>
                   <rect x={-SIZE / 2 - 6} y={-SIZE / 2 - 6} width={SIZE + 12} height={SIZE + 12} rx="20" fill="none" stroke="#ff4d6d" strokeWidth="6" strokeDasharray="10 6" />
