@@ -88,7 +88,7 @@
   "news.table.rate": "このニュースでの値動き",
   "news.table.mine": "あなたの資産",
   "news.economy": "景気: {prev} → {now}",
-  "news.noHoldings": "まだ資産を持っていないので、あなたの資産への影響はありません。",
+  "news.noHoldings": "このニュースで値段が動いた資産は持っていないので、あなたの資産への影響はありません。",
   "news.boom.title": "景気拡大",
   "news.boom.text": "企業の業績が好調です。株や投資信託が上がり、特に IT 株と銀行株が伸びています。",
   "news.slowdown.title": "景気後退",

@@ -31,7 +31,9 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
   const ev = s.newsEvent!;
   const news = newsById(ev.id);
   const keys = [...ASSET_IDS, 'realEstate'].filter((k) => Math.abs(ev.rates[k] ?? 0) >= 0.005);
-  const owned = keys.filter((k) => Math.abs(ev.amounts[k] ?? 0) >= 0.5);
+  const owned = keys.filter((k) => Math.round(ev.amounts[k] ?? 0) !== 0);
+  // 合計は、表に出す行（1万円単位に丸めたもの）を足して出す（design.md 2.2）
+  const total = owned.reduce((a, k) => a + Math.round(ev.amounts[k]), 0);
   return (
     <Overlay>
       <div className="muted">{t('news.heading', { year: ev.year, month: ev.month })}</div>
@@ -59,7 +61,7 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
       )}
       {owned.length > 0 ? (
         <p className="summary-line">
-          {t('news.table.mine')}: <MoneyDelta v={ev.moved} big />
+          {t('news.table.mine')}: <MoneyDelta v={total} big />
         </p>
       ) : (
         <p className="muted">{t('news.noHoldings')}</p>

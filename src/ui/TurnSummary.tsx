@@ -1,11 +1,9 @@
 // 今月のまとめ。何かが起きたターンの最後に、そのターンに起きたことを1枚にまとめて出す（design.md 2.3）。
-// 自動では消えない。各行は、押すと詳しい内容が開く。
+// 自動では消えない。各行は、押すと詳しい内容が開く。ニュースは全員に関係するので、ここには入れず、別の画面で出す（2.4）。
 
 import { useState } from 'react';
-import { ASSET_IDS } from '../data/assets';
-import { newsById } from '../game/market';
-import type { LogEntry, MonthFlow, NewsEvent } from '../game/types';
-import { formatMoney, formatSigned, has, t } from '../i18n';
+import type { LogEntry, MonthFlow } from '../game/types';
+import { formatMoney, has, t } from '../i18n';
 import { dateLabel } from './dateLabel';
 import { MoneyDelta } from './Delta';
 import { VerticalLedger, shownTotal } from './Ledger';
@@ -17,16 +15,16 @@ export interface TurnSummaryData {
   monthsPerTurn: number;
   /** このターンに増えた記録 */
   entries: LogEntry[];
-  news: NewsEvent | null;
   /** このターンの月末のお金の動き */
   flow: MonthFlow | null;
   cashBefore: number;
   cashAfter: number;
   worthBefore: number;
+  /** ニュースで相場が動く前の純資産 */
   worthAfter: number;
 }
 
-/** まとめに、お給料など以外の行として出さない記録（ニュースは別の行で出す。積み立ての金額の変更などは出さない） */
+/** まとめに、お給料など以外の行として出さない記録（ニュースは別の画面で出す。積み立ての金額の変更などは出さない） */
 const HIDDEN = ['news.happened', 'saving.change', 'stock.skip', 'card.use'];
 
 function iconOf(key: string): string {
@@ -55,12 +53,12 @@ function detailOf(e: LogEntry): string | null {
 }
 
 /** まとめを出すか（何かが起きたターンだけ） */
-export function hasSomething(entries: LogEntry[], news: NewsEvent | null): boolean {
-  return !!news || visibleEntries(entries).some((e) => !HIDDEN.includes(e.key));
+export function hasSomething(entries: LogEntry[]): boolean {
+  return visibleEntries(entries).some((e) => !HIDDEN.includes(e.key));
 }
 
-function Row({ icon, label, amount, children, open: startOpen = false }: { icon: string; label: string; amount?: React.ReactNode; children?: React.ReactNode; open?: boolean }) {
-  const [open, setOpen] = useState(startOpen);
+function Row({ icon, label, amount, children }: { icon: string; label: string; amount?: React.ReactNode; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   const canOpen = !!children;
   return (
     <div className="summary-item">
@@ -75,45 +73,11 @@ function Row({ icon, label, amount, children, open: startOpen = false }: { icon:
   );
 }
 
-function NewsDetail({ ev }: { ev: NewsEvent }) {
-  const keys = [...ASSET_IDS, 'realEstate'].filter((k) => Math.abs(ev.rates[k] ?? 0) >= 0.005);
-  const owned = keys.filter((k) => Math.round(ev.amounts[k] ?? 0) !== 0);
-  const total = owned.reduce((a, k) => a + Math.round(ev.amounts[k]), 0);
-  return (
-    <>
-      <p>{t(`news.${ev.id}.text`)}</p>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('news.table.asset')}</th>
-            <th>{t('news.table.rate')}</th>
-            <th>{t('news.table.mine')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((k) => (
-            <tr key={k}>
-              <td>{t(`asset.${k}`)}</td>
-              <td className={ev.rates[k] >= 0 ? 'plus' : 'minus'}>{formatSigned(ev.rates[k] * 100)}%</td>
-              <td>{owned.includes(k) ? <MoneyDelta v={ev.amounts[k]} /> : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {owned.length === 0 ? <p className="muted">{t('news.noHoldings')}</p> : <p>{t('news.table.mineTotal', { amount: formatMoney(total) })}</p>}
-      {newsById(ev.id).economy && newsById(ev.id).economy !== ev.prevEconomy && (
-        <p className="muted">{t('news.economy', { prev: t(`economy.${ev.prevEconomy}`), now: t(`economy.${newsById(ev.id).economy}`) })}</p>
-      )}
-    </>
-  );
-}
-
 export function TurnSummary({ data, onClose }: { data: TurnSummaryData; onClose: () => void }) {
   const rows = visibleEntries(data.entries).filter((e) => !HIDDEN.includes(e.key));
   const m = data.flow;
   // お給料などの行は、積み立てと借金の返済を引いたあとの「銀行預金に残った」金額（一番下の銀行預金とつじつまを合わせる）
   const salaryNet = m ? shownTotal(m.income) - shownTotal(m.expense) - Math.round(m.saved) - Math.round(m.repaid) : 0;
-  const newsAmount = data.news ? Object.values(data.news.amounts).reduce((a, v) => a + Math.round(v), 0) : 0;
   return (
     <div className="overlay">
       <div className="modal turn-summary">
@@ -127,16 +91,6 @@ export function TurnSummary({ data, onClose }: { data: TurnSummaryData; onClose:
               </Row>
             );
           })}
-          {data.news && (
-            <Row
-              icon="📰"
-              label={t('turnSummary.news', { title: t(`news.${data.news.id}.title`) })}
-              amount={newsAmount !== 0 ? <MoneyDelta v={newsAmount} /> : undefined}
-              open={!!newsById(data.news.id).important}
-            >
-              <NewsDetail ev={data.news} />
-            </Row>
-          )}
           {m && (
             <Row icon="💼" label={t('turnSummary.salary')} amount={salaryNet !== 0 ? <MoneyDelta v={salaryNet} /> : formatMoney(0)}>
               <VerticalLedger income={m.income} expense={m.expense} saved={m.saved} repaid={m.repaid} />
