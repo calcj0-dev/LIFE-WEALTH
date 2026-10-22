@@ -97,11 +97,11 @@ export function PriceChart({ points }: { points: PricePoint[] }) {
  * 1つの銘柄の値段のグラフ（取引タイムの「チャート」ボタンで開く。design.md 2.1）。
  * 株は1株の値段、ほかは1口の値段を、ゲームの始めからの割合（％）で出す。avgCost を渡すと、買った平均の値段を点線で出す
  */
-export function AssetPriceChart({ points, id, avgCost }: { points: PricePoint[]; id: string; avgCost?: number }) {
+export function AssetPriceChart({ points, id, avgCost, compact }: { points: PricePoint[]; id: string; avgCost?: number; /** 取引タイムの右側など、せまい場所に出すとき */ compact?: boolean }) {
   if (points.length < 2) return <p className="muted">{t('history.empty')}</p>;
-  const W = 560;
-  const H = 180;
-  const pad = { l: 64, r: 12, t: 10, b: 24 };
+  const W = compact ? 360 : 560;
+  const H = compact ? 140 : 180;
+  const pad = { l: compact ? 52 : 64, r: 12, t: 10, b: 24 };
   const share = ASSETS[id].unit === 'share';
   const values = points.map((p) => p.prices[id]);
   // 株は値段（万円）、ほかは始めからの値上がり（％）で見せる

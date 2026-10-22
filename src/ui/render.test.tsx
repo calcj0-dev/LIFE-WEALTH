@@ -96,6 +96,9 @@ describe('画面', () => {
     expect(saving).toContain('投資信託');
     expect(saving).toContain('ゴールド');
     expect(saving).not.toContain('IT株');
+    expect(saving).not.toContain('おすすめ（');
+    const tradeHtml = renderToString(<TradeModal s={setSaving(athlete, { gold: 2 })} onChange={noop} onDone={noop} />);
+    for (const text of ['売り買い', '積み立て', '保険・家', '持っている', '持っていない', '投資の合計']) expect(tradeHtml).toContain(text);
     expect(renderToString(<BudgetCard s={setSaving(athlete, { fund: 3 })} title="家計" />)).toContain('積み立てで毎月 3万円');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
