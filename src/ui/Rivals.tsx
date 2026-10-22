@@ -57,11 +57,14 @@ function Line({ line }: { line: RivalLine }) {
   );
 }
 
-/** 右側の「ライバルの動き」の欄。新しい順に4行。自動では消えない */
-export function RivalFeed({ s }: { s: GameState }) {
+/**
+ * 右側の「ライバルの動き」の欄。新しい順に4行。自動では消えない。
+ * hideMonth を渡すと、その月の動きは出さない（ライバルの番を見せる前に、結果が見えないように）
+ */
+export function RivalFeed({ s, hideMonth }: { s: GameState; hideMonth?: { year: number; month: number } }) {
   const [all, setAll] = useState(false);
   if (!s.rivals.length) return null;
-  const lines = rivalLines(s);
+  const lines = rivalLines(s).filter((l) => !hideMonth || l.entry.year * 100 + l.entry.month < hideMonth.year * 100 + hideMonth.month);
   return (
     <div className="card rival-feed">
       <h4>{t('rivalFeed.title')}</h4>

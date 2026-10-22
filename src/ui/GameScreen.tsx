@@ -8,12 +8,12 @@ import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
 /** 画面の上。何年目・純資産・景気・借金だけを出す。銀行預金と資産の内訳は右側に出す（design.md 0.1） */
-export function Hud({ s, level }: { s: GameState; level?: MoneyLevel }) {
+export function Hud({ s, level, date }: { s: GameState; level?: MoneyLevel; /** 見せる月（なければ今の月） */ date?: { year: number; month: number } }) {
   const p = s.player;
   return (
     <div className="hud">
       <div className="hud-age">
-        {dateLabel(s, s.year, s.month)}
+        {dateLabel(s, date?.year ?? s.year, date?.month ?? s.month)}
         <span className="hud-years">{t('hud.years', { years: s.years })}</span>
       </div>
       <div className="hud-item hud-worth">
@@ -57,11 +57,14 @@ export function SidePanel({
   onOpenFeed,
   level,
   cashShown,
+  hideRivalMonth,
 }: {
   s: GameState;
   onOpenHistory: () => void;
   onOpenFeed: () => void;
   level?: MoneyLevel;
+  /** ライバルの番を見せる前は、その月のライバルの動きを出さない */
+  hideRivalMonth?: { year: number; month: number };
   /** 給料と生活費のアクションの間だけ、銀行預金をこの金額で見せる（design.md 2.2） */
   cashShown?: { value: number; label?: string; level: MoneyLevel };
 }) {
@@ -80,7 +83,7 @@ export function SidePanel({
           {t('feed.open')}
         </button>
       </div>
-      <RivalFeed s={s} />
+      <RivalFeed s={s} hideMonth={hideRivalMonth} />
       <div className="card">
         <h4>{t('panel.assets')}</h4>
         <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} />} />
