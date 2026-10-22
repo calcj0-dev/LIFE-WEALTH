@@ -279,6 +279,26 @@ describe('結婚と出産', () => {
     expect(married).toBeGreaterThan(30);
     expect(single).toBeGreaterThan(30);
   });
+  it('結婚したら、毎月の支出（共働きなら収入も）がいくらからいくらになるかを出す', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = landOn(started(seed), MARRIAGE_STOP_INDEX);
+      s = choose({ ...s, rngState: seed * 7919 }, 'spin');
+      if (!s.player.married) continue;
+      const pr = s.decision!.params!;
+      expect(Number(pr.expenseTo)).toBeGreaterThan(Number(pr.expenseFrom));
+      if (s.player.spouse!.work === 'full') expect(Number(pr.incomeTo)).toBeGreaterThan(Number(pr.incomeFrom));
+      return;
+    }
+    throw new Error('結婚する例が見つからない');
+  });
+  it('小さな出来事のマスでも、出来事の画面を出してから起こす', () => {
+    const index = BOARD.findIndex((sq) => sq.type === 'small');
+    const s = landOn(started(), index);
+    expect(s.decision?.kind).toBe('event');
+    const after = choose(s, 'ok');
+    expect(after.phase).toBe('roll');
+    expect(after.log.some((l) => l.key.startsWith(`event.${s.decision!.eventId}`))).toBe(true);
+  });
   it('独身で出産マスに止まると、出産祝いを払う', () => {
     const index = BOARD.findIndex((sq) => sq.type === 'birth');
     const s = landOn(started(), index);

@@ -22,9 +22,9 @@ export function moneyLevelOf(entries: LogEntry[]): MoneyLevel {
   return 'weak';
 }
 
-export function AnimatedMoney({ value, level = 'medium', className }: { value: number; level?: MoneyLevel; className?: string }) {
+export function AnimatedMoney({ value, level = 'medium', className, label }: { value: number; level?: MoneyLevel; className?: string; /** 浮かぶ金額に添える言葉（例: お給料） */ label?: string }) {
   const prev = useRef(value);
-  const [delta, setDelta] = useState<{ v: number; level: MoneyLevel; key: number } | null>(null);
+  const [delta, setDelta] = useState<{ v: number; level: MoneyLevel; key: number; label?: string } | null>(null);
   const timer = useRef<number>();
 
   useEffect(() => {
@@ -34,10 +34,10 @@ export function AnimatedMoney({ value, level = 'medium', className }: { value: n
     // 1万円より小さい動きは出さない（千円以下は扱わない）
     if (Math.round(d) === 0) return;
     const big = Math.abs(before) >= 1 && Math.abs(d) >= Math.abs(before) * STRONG_SHARE;
-    setDelta({ v: d, level: big ? 'strong' : level, key: Date.now() });
+    setDelta({ v: d, level: big && !label ? 'strong' : level, key: Date.now(), label });
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setDelta(null), FLOAT_MS);
-    // level は value と一緒に変わるので、依存には入れていない
+    // level と label は value と一緒に変わるので、依存には入れていない
   }, [value]);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -50,6 +50,7 @@ export function AnimatedMoney({ value, level = 'medium', className }: { value: n
         <span className={`money-float ${delta.v > 0 ? 'plus' : 'minus'}${delta.level === 'strong' ? ' strong' : ''}`}>
           {delta.v > 0 ? '+' : ''}
           {formatMoney(delta.v)}
+          {delta.label && ` ${delta.label}`}
         </span>
       )}
     </span>

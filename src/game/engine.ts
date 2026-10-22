@@ -328,7 +328,7 @@ function startDecision(s: GameState, d: Decision, from: 'queue' | 'square') {
   s.phase = 'decision';
 }
 
-/** 止まったマスの出来事。小さな出来事は止めずにすぐ起こし、月末に進む（design.md 2.2） */
+/** 止まったマスの出来事。小さな出来事も、マスの出来事の画面で見せてから起こす（design.md 2.2） */
 function handleSquare(s: GameState) {
   const p = s.player;
   const square = BOARD[p.position];
@@ -363,8 +363,7 @@ function handleSquare(s: GameState) {
     case 'small': {
       const ev = pickEvent(s, 'small');
       if (!ev) return notice('square.nothing');
-      for (const e of ev.effects ?? []) applyEffect(s, e, `event.${ev.id}`);
-      return endMonth(s);
+      return startDecision(s, { kind: 'event', eventId: ev.id }, 'square');
     }
     case 'medium':
     case 'large': {
@@ -602,11 +601,15 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
       }
       const workFace = rollDie(s);
       const work: SpouseWork = faceResult(SPOUSE_WORK_FACES, workFace);
+      const before = shownMonth(s);
       p.married = true;
       p.spouse = { work, income: work === 'full' ? SPOUSE.fullStartIncome * s.market.wageIndex : 0, halfThisYear: false };
       log(s, 'marriage.marry', { notice: true });
       addCash(s, -MARRIAGE.cost, 'marriage.cost');
-      return { kind: 'notice', messageKey: `marriage.yes.${work}`, params: { face, workFace, cost: MARRIAGE.cost }, fromSquare: true };
+      // 家計がどう変わるかを、画面右の「今月の家計」と同じ数字で見せる（design.md 3.5）
+      const after = shownMonth(s);
+      const params = { face, workFace, cost: MARRIAGE.cost, incomeFrom: before.income, incomeTo: after.income, expenseFrom: before.expense, expenseTo: after.expense };
+      return { kind: 'notice', messageKey: `marriage.yes.${work}`, params, fromSquare: true };
     }
     case 'birth': {
       const face = rollDie(s);
@@ -834,6 +837,13 @@ export function estimateMonth(s: GameState): {
 } {
   const { income, expense } = computeMonth(s, true);
   return { income, expense, net: sum(income) - sum(expense), saving: sum(s.player.saving) * s.monthsPerTurn };
+}
+
+/** 今月の収入と支出の合計を、画面に出すのと同じ形（各行を1万円単位に丸めて足す）で出す */
+function shownMonth(s: GameState): { income: number; expense: number } {
+  const plan = estimateMonth(s);
+  const total = (rows: Record<string, number>) => Object.values(rows).reduce((a, v) => a + Math.round(v), 0);
+  return { income: total(plan.income), expense: total(plan.expense) };
 }
 
 /** 積み立て。預金が足りない月や、借金がある月は、自動で休む（借金はしない。design.md 6.3） */

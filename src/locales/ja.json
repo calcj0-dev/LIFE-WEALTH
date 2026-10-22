@@ -195,9 +195,9 @@
   "marriage.no.title": "今回はご縁がありませんでした",
   "marriage.no.text": "また次のチャンスを待とう。",
   "marriage.yes.full.title": "結婚しました！",
-  "marriage.yes.full.text": "配偶者も働くので、家の収入が増えます。結婚の費用は {cost}。",
+  "marriage.yes.full.text": "結婚の費用は {cost}。配偶者も働くので、毎月の収入が {incomeFrom} → {incomeTo} に増えます。生活費も増えて、毎月の支出が {expenseFrom} → {expenseTo} になります。",
   "marriage.yes.none.title": "結婚しました！",
-  "marriage.yes.none.text": "配偶者は家庭に専念します（収入なし）。結婚の費用は {cost}。",
+  "marriage.yes.none.text": "結婚の費用は {cost}。配偶者は家庭に専念します（収入なし）。生活費が増えて、毎月の支出が {expenseFrom} → {expenseTo} になります。",
   "birth.title": "家族が増えるかも",
   "birth.text": "家族が増えるかもしれません。",
   "birth.no.title": "今回は見送り",
@@ -223,7 +223,7 @@
   "school.university.private.title": "子どもの大学進学",
   "school.university.private.text": "私立大学に進みます。教育費が増えます。",
   "event.points.title": "ポイント還元",
-  "event.points.text": "買い物のポイントが5千円分たまっていました。",
+  "event.points.text": "買い物のポイントが1万円分たまっていました。",
   "event.flea.title": "フリマで売れた",
   "event.flea.text": "使わなくなった服がフリマで売れて、2万円になりました。",
   "event.prize.title": "懸賞が当たった",
@@ -577,5 +577,7 @@
   "trade.did.sell": "{name}を {amount} 売りました",
   "trade.did.buyShares": "{name}を {n}株（{amount}）買いました",
   "trade.did.sellShares": "{name}を {n}株（{amount}）売りました",
-  "trade.home.none": "家は持っていません。家の売り出しのマスで買えます。"
+  "trade.home.none": "家は持っていません。家の売り出しのマスで買えます。",
+  "payFlow.salary": "お給料",
+  "payFlow.expense": "生活費"
 }

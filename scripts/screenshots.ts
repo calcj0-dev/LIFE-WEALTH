@@ -145,7 +145,13 @@ for (const vp of VIEWPORTS) {
     if (await clickText(page, '.board-area', 'ルーレットを回す')) {
       if (process.env.TRACE) console.log(`  ${step} ルーレット (${await page.locator('.hud-age').textContent()})`);
       await page.waitForTimeout(2600);
-      await page.waitForTimeout(280 * 7);
+      // 給料と生活費のアクション（浮かぶ金額）を、1回ずつ撮る
+      for (let i = 0; i < 12; i++) {
+        for (const word of ['お給料', '生活費']) {
+          if (!shots.has(`pay-${word}`) && (await page.locator('.side-panel .money-float', { hasText: word }).count())) await shot(`pay-${word}`);
+        }
+        await page.waitForTimeout(150);
+      }
       if (step === 5) await shot('game-after-turns', true);
       continue;
     }
