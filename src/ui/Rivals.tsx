@@ -8,6 +8,7 @@ import { formatMoney, formatSigned, t } from '../i18n';
 import { niceStep } from './AssetChart';
 import { yearTickStep } from './chartColors';
 import { Confetti } from './Confetti';
+import { sfx } from './sound';
 import { AvatarIcon } from '../board/Avatar';
 import { RIVAL_LOOKS, lookById, type Look } from '../data/characters';
 import { MoneyDelta } from './Delta';
@@ -105,6 +106,9 @@ export function RivalFeed({ s, hideMonth }: { s: GameState; hideMonth?: { year: 
 export function RivalAlertModal({ lines, onClose }: { lines: RivalLine[]; onClose: () => void }) {
   // ボーナスマスを取られたときは、見出しを変えて、少し派手にする
   const taker = lines.find((l) => l.entry.key === 'bonus.get');
+  useEffect(() => {
+    if (taker) sfx.bonusTaken();
+  }, [!!taker]);
   return (
     <div className={`overlay${taker ? ' shake' : ''}`}>
       <div className={`modal rival-alert${taker ? ' bonus-taken' : ''}`}>
@@ -155,7 +159,10 @@ export function RankStrip({ s }: { s: GameState }) {
   const prev = useRef(myRank);
   const [flash, setFlash] = useState(0);
   useEffect(() => {
-    if (myRank < prev.current) setFlash(Date.now());
+    if (myRank < prev.current) {
+      setFlash(Date.now());
+      sfx.rankUp();
+    }
     prev.current = myRank;
   }, [myRank]);
   if (!s.rivals.length) return null;
@@ -210,6 +217,7 @@ export function FinalRanking({ s }: { s: GameState }) {
   return (
     <div className="final-ranking">
       {me.rank === 1 && <Confetti count={70} seed={7} />}
+      {me.rank === 1 && <FanfareOnce />}
       <div className="final-headline">{t('result.yourRank', { n: me.rank })}</div>
       <div className="final-list">
         {list.map((x) => (
@@ -301,6 +309,9 @@ export function WorthRaceChart({ s }: { s: GameState }) {
 
 /** あなたがボーナスマスに止まったときの画面（design.md 3.10） */
 export function BonusModal({ amount, onClose }: { amount: number; onClose: () => void }) {
+  useEffect(() => {
+    sfx.bonus();
+  }, []);
   return (
     <div className="overlay">
       <Confetti count={60} seed={3} />
@@ -315,4 +326,12 @@ export function BonusModal({ amount, onClose }: { amount: number; onClose: () =>
       </div>
     </div>
   );
+}
+
+/** 表示されたときに1回だけファンファーレを鳴らす */
+function FanfareOnce() {
+  useEffect(() => {
+    sfx.fanfare();
+  }, []);
+  return null;
 }

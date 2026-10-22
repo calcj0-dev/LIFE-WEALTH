@@ -611,5 +611,7 @@
   "bonus.getText": "ボーナスマスにぴったり止まりました。次のボーナスマスも、カードを使ってねらいましょう。",
   "bonus.announce": "次のボーナスマスはここ！",
   "bonus.announceDistance": "あなたの駒から あと{n}マス",
-  "rivalAlert.bonusTaken": "{name}にボーナスを取られた！"
+  "rivalAlert.bonusTaken": "{name}にボーナスを取られた！",
+  "sound.on": "音を消す",
+  "sound.off": "音を出す"
 }

@@ -12,6 +12,7 @@ import { MoneyDelta } from './Delta';
 import { HistoryTabs } from './HistoryTabs';
 import { Details, VerticalLedger } from './Ledger';
 import { EveryoneMoved, RankTable } from './Rivals';
+import { sfx } from './sound';
 
 function Overlay({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
@@ -149,6 +150,7 @@ function RouletteSteps({ topics, faces, auto, onDone }: { topics: Topic[]; faces
     if (stage !== 'spinning') return;
     // 描いたあとに回し始める（止まっている向きから、出目の向きへ動かすため）
     setTurned(false);
+    sfx.spin(SPIN_DURATION_MS);
     const start = window.setTimeout(() => setTurned(true), 50);
     const stop = window.setTimeout(() => setStage('done'), SPIN_DURATION_MS + 400);
     return () => {

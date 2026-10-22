@@ -88,7 +88,7 @@ export function SidePanel({
       <RivalFeed s={s} hideMonth={hideRivalMonth} />
       <div className="card panel-assets">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} />} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} sound />} />
         {owned.map((id) => (
           <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}

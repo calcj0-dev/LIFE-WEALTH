@@ -2257,3 +2257,16 @@ h2 {
     animation: none;
   }
 }
+
+/* 音を消すボタン（盤面の絵の大きさの決まりより、こちらを優先する） */
+.board-toolbar .mute-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  padding: 0;
+}
+.board-area .mute-button svg {
+  width: 20px;
+  height: 20px;
+}

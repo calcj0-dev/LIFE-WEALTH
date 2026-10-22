@@ -24,6 +24,8 @@ import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
 import { TitleScene } from './ui/TitleScene';
+import { MuteButton } from './ui/MuteButton';
+import { sfx } from './ui/sound';
 
 /** ルーレットが回る時間と、駒が1マス進む時間（ミリ秒） */
 const SPIN_MS = SPIN_DURATION_MS + 300;
@@ -154,7 +156,10 @@ export function App() {
     }
     const path = game.rivals[rs.r].lastPath;
     const next = rs.i + 1 < path.length ? { key: flowKey, r: rs.r, i: rs.i + 1 } : { key: flowKey, r: rs.r + 1, i: -1 };
-    const id = window.setTimeout(() => setRivalStep(next), rs.i < 0 || next.r !== rs.r ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
+    const id = window.setTimeout(() => {
+      setRivalStep(next);
+      if (next.r === rs.r) sfx.step(true);
+    }, rs.i < 0 || next.r !== rs.r ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
     return () => window.clearTimeout(id);
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
@@ -231,7 +236,12 @@ export function App() {
 
   /** 駒を1マスずつ動かしてから、新しい状態にする */
   const move = (next: GameState) => {
-    next.lastPath.forEach((pos, i) => later(() => setMovingPos(pos), STEP_MS * (i + 1)));
+    next.lastPath.forEach((pos, i) =>
+      later(() => {
+        setMovingPos(pos);
+        sfx.step();
+      }, STEP_MS * (i + 1)),
+    );
     later(() => {
       setMovingPos(null);
       setGame(next);
@@ -252,6 +262,7 @@ export function App() {
     setMoveLabel(null);
     setSpinValue(next.lastRoll);
     setSpinning(true);
+    sfx.spin(SPIN_DURATION_MS);
     setOverview(false);
     later(() => {
       setSpinning(false);
@@ -279,6 +290,7 @@ export function App() {
       return;
     }
     setSpinning(true);
+    sfx.spin(SPIN_DURATION_MS);
     later(() => {
       setSpinning(false);
       move(next);
@@ -357,6 +369,7 @@ export function App() {
               <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
                 {t(overview ? 'board.follow' : 'board.overview')}
               </button>
+              <MuteButton />
             </div>
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}

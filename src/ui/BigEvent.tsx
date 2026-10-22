@@ -6,6 +6,8 @@ import { formatMoney, formatSigned, has, t } from '../i18n';
 import { MoneyDelta } from './Delta';
 import { EveryoneMoved } from './Rivals';
 import { Confetti } from './Confetti';
+import { useEffect } from 'react';
+import { sfx } from './sound';
 
 const ICONS: Record<string, string> = {
   crash: '📉',
@@ -22,6 +24,10 @@ const CELEBRATE = ['surge', 'inheritance'];
 
 export function BigEventModal({ s, onClose }: { s: GameState; onClose: () => void }) {
   const ev = s.bigEvent!;
+  useEffect(() => {
+    if (SHAKE.includes(ev.id)) sfx.boom();
+    else if (CELEBRATE.includes(ev.id)) sfx.fanfare();
+  }, [ev.id]);
   const rates = Object.entries(ev.rates);
   const hasTradeCard = s.player.hand.some((c) => CARDS_BY_ID[c]?.kind === 'trade');
   return (

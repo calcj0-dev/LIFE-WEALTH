@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LogEntry } from '../game/types';
 import { formatMoney } from '../i18n';
+import { sfx } from './sound';
 
 export type MoneyLevel = 'weak' | 'medium' | 'strong';
 
@@ -22,7 +23,21 @@ export function moneyLevelOf(entries: LogEntry[]): MoneyLevel {
   return 'weak';
 }
 
-export function AnimatedMoney({ value, level = 'medium', className, label }: { value: number; level?: MoneyLevel; className?: string; /** 浮かぶ金額に添える言葉（例: お給料） */ label?: string }) {
+export function AnimatedMoney({
+  value,
+  level = 'medium',
+  className,
+  label,
+  sound,
+}: {
+  value: number;
+  level?: MoneyLevel;
+  className?: string;
+  /** 浮かぶ金額に添える言葉（例: お給料） */
+  label?: string;
+  /** 動いたときに音を鳴らす（銀行預金の数字だけ） */
+  sound?: boolean;
+}) {
   const prev = useRef(value);
   const [delta, setDelta] = useState<{ v: number; level: MoneyLevel; key: number; label?: string } | null>(null);
   const timer = useRef<number>();
@@ -34,7 +49,10 @@ export function AnimatedMoney({ value, level = 'medium', className, label }: { v
     // 1万円より小さい動きは出さない（千円以下は扱わない）
     if (Math.round(d) === 0) return;
     const big = Math.abs(before) >= 1 && Math.abs(d) >= Math.abs(before) * STRONG_SHARE;
-    setDelta({ v: d, level: big && !label ? 'strong' : level, key: Date.now(), label });
+    const shown = big && !label ? 'strong' : level;
+    setDelta({ v: d, level: shown, key: Date.now(), label });
+    // 給料と生活費のアクション（label あり）は毎月なので、音は鳴らさない（240回聞くとうるさいため）
+    if (sound && !label && shown !== 'weak') (d > 0 ? sfx.coin : sfx.loss)();
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setDelta(null), FLOAT_MS);
     // level と label は value と一緒に変わるので、依存には入れていない
