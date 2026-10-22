@@ -7,7 +7,7 @@ import { t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { FeedPanel } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
-import { DecisionModal, HistoryModal, YearEndModal } from './ui/Modals';
+import { DecisionModal, HistoryModal, NewsModal, YearEndModal } from './ui/Modals';
 import { Result } from './ui/Result';
 import { JobRoulette, YearsSetup } from './ui/Setup';
 import { TurnSummary, hasSomething, type TurnSummaryData } from './ui/TurnSummary';
@@ -52,18 +52,18 @@ export function App() {
   // ターンが終わった（選ぶ出来事も大きなイベントも残っていない）ら、今月のまとめを出す
   const turnDone = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && !game.bigEvent && movingPos === null && !spinning;
   const summary: TurnSummaryData | null =
-    game && turnStart && turnDone && hasSomething(game.log.slice(turnStart.logLen), game.newsEvent)
+    game && turnStart && turnDone && hasSomething(game.log.slice(turnStart.logLen))
       ? {
           year: turnStart.year,
           month: turnStart.month,
           monthsPerTurn: game.monthsPerTurn,
           entries: game.log.slice(turnStart.logLen),
-          news: game.newsEvent,
           flow: game.lastMonth,
           cashBefore: turnStart.cash,
           cashAfter: game.player.cash,
           worthBefore: turnStart.worth,
-          worthAfter: netWorth(game),
+          // ニュースで相場が動いた分は、このあとのニュースの画面で見せる（design.md 2.4）
+          worthAfter: netWorth(game) - (game.newsEvent?.moved ?? 0),
         }
       : null;
   // 何も起きなかったターンは、まとめを出さずに終える
@@ -210,12 +210,11 @@ export function App() {
           <TurnSummary
             key={`${summary.year}-${summary.month}`}
             data={summary}
-            onClose={() => {
-              if (game.newsEvent) setGame(dismissNews(game));
-              setTurnStart(null);
-            }}
+            onClose={() => setTurnStart(null)}
           />
         )}
+        {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
+        {!busy && !turnStart && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
         {ready && game.phase === 'decision' && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />

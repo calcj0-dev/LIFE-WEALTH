@@ -66,7 +66,9 @@ for (const vp of VIEWPORTS) {
   await shot('job-result');
   await clickText(page, 'body', 'この人生で始める');
   await page.waitForTimeout(200);
-  await clickText(page, 'body', /おすすめ/);
+  // ゴールドを毎月2万円積み立てる（取引タイムに「持っている」銘柄が出るように）
+  await clickText(page, 'body', '＋1万');
+  await clickText(page, 'body', '＋1万');
   await shot('saving');
   await clickText(page, 'body', 'この金額で始める');
   await page.waitForTimeout(300);
@@ -101,7 +103,7 @@ for (const vp of VIEWPORTS) {
         await clickText(page, '.overlay', '取引タイムへ');
         await page.waitForTimeout(200);
         await shot('trade');
-        await page.locator('.trade-row').nth(2).click();
+        await page.locator('.trade-item').nth(1).click();
         await page.waitForTimeout(200);
         await clickText(page, '.trade-panel', '買う');
         await clickText(page, '.trade-panel', '10万円');
@@ -110,6 +112,11 @@ for (const vp of VIEWPORTS) {
         await clickText(page, '.trade-panel', '確定');
         await page.waitForTimeout(100);
         await shot('trade-after');
+        for (const tab of ['積み立て', '保険・家']) {
+          await clickText(page, '.trade-modal .tabs', tab);
+          await page.waitForTimeout(100);
+          await shot(`trade-${tab}`);
+        }
         await clickText(page, '.overlay', '次の年へ');
         continue;
       }

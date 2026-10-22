@@ -30,7 +30,7 @@ describe('段階3.7の画面', () => {
     expect(rowsOf(items).map((r) => r.v)).toEqual([31, 1, 3]);
     expect(shownTotal(items)).toBe(35);
   });
-  it('今月のまとめに、出来事・ニュース・お給料・銀行預金と純資産の前後が出る', () => {
+  it('今月のまとめに、出来事・お給料・銀行預金と純資産の前後が出る（ニュースは出さない）', () => {
     const html = renderToString(
       <TurnSummary
         data={{
@@ -38,7 +38,6 @@ describe('段階3.7の画面', () => {
           month: 4,
           monthsPerTurn: 1,
           entries: [{ year: 3, month: 4, key: 'event.appliance', cash: -10 }],
-          news: { id: 'rateUp', year: 3, month: 4, prevEconomy: 'normal', rates: { it: -0.1 }, amounts: { it: -22 }, moved: -22 },
           flow: { year: 3, month: 4, income: { salary: 21 }, expense: { living: 17 }, saved: 3, repaid: 0 },
           cashBefore: 221,
           cashAfter: 212,
@@ -48,8 +47,15 @@ describe('段階3.7の画面', () => {
         onClose={noop}
       />,
     );
-    for (const text of ['3年目 4月のまとめ', '家電の故障', '利上げ', 'お給料など', '221万円', '212万円', '441万円', '410万円']) expect(html).toContain(text);
+    expect(html).not.toContain('ニュース');
+    for (const text of ['3年目 4月のまとめ', '家電の故障', 'お給料など', '221万円', '212万円', '441万円', '410万円']) expect(html).toContain(text);
     expect(html).not.toMatch(RAW_KEY);
+  });
+  it('ニュースの画面の「あなたの資産」は、表の行を足した数と合う', () => {
+    const s = { newsEvent: { id: 'rateUp', year: 3, month: 4, prevEconomy: 'normal', rates: { gold: 0.1, bank: 0.1 }, amounts: { gold: 0.6, bank: 0.6 }, moved: 1.2 } } as unknown as GameState;
+    const html = renderToString(<NewsModal s={s} onNext={noop} />);
+    expect(html).toContain('利上げ');
+    expect(html).toMatch(/\+(<!-- -->)?2万円/);
   });
 });
 
@@ -90,6 +96,9 @@ describe('画面', () => {
     expect(saving).toContain('投資信託');
     expect(saving).toContain('ゴールド');
     expect(saving).not.toContain('IT株');
+    expect(saving).not.toContain('おすすめ（');
+    const tradeHtml = renderToString(<TradeModal s={setSaving(athlete, { gold: 2 })} onChange={noop} onDone={noop} />);
+    for (const text of ['売り買い', '積み立て', '保険・家', '持っている', '持っていない', '投資の合計']) expect(tradeHtml).toContain(text);
     expect(renderToString(<BudgetCard s={setSaving(athlete, { fund: 3 })} title="家計" />)).toContain('積み立てで毎月 3万円');
   });
   it('1年の流れのどの場面も、エラーなく描ける', () => {
