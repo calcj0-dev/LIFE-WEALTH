@@ -5,7 +5,7 @@ import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, zeroHoldings } from '../data/ass
 import { BOARD } from '../data/board';
 import { CARDS, CARDS_BY_ID, HAND_MAX } from '../data/cards';
 import { INVEST_TALKS, INVEST_TALKS_BY_ID, TALK_AMOUNTS } from '../data/investTalks';
-import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSize } from '../data/events';
+import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSign, type EventSize } from '../data/events';
 import { GAMBLES, GAMBLE_BETS, GAMBLE_IDS, type GambleId } from '../data/gamble';
 import { ATHLETE_NEXT_JOBS, ATHLETE_RETIRE_YEAR, JOBS, JOB_IDS, salaryAtYear } from '../data/jobs';
 import {
@@ -56,7 +56,7 @@ import { PERSONALITIES, RIVAL_IDS } from '../data/rivals';
 import { BIG_EVENTS, BIG_EVENTS_BY_ID, turnChance } from '../data/bigEvents';
 import { nextRandom, pickWeighted, randomInt } from './rng';
 import { computeResult } from './score';
-import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, RivalId, SeatData, Settlement, SpouseWork } from './types';
+import type { AssetId, Child, Decision, DecisionOption, GameState, JobId, RivalId, SeatData, Settlement, SpouseWork, SquareType } from './types';
 
 const clone = (s: GameState): GameState => structuredClone(s);
 
@@ -403,14 +403,15 @@ function handleSquare(s: GameState) {
       if (!p.married) return startDecision(s, { kind: 'marriage' }, 'square');
       if (p.children.length >= MAX_CHILDREN) return notice('square.birth.full');
       return startDecision(s, { kind: 'birth' }, 'square');
-    case 'small': {
-      const ev = pickEvent(s, 'small');
-      if (!ev) return notice('square.nothing');
-      return startDecision(s, { kind: 'event', eventId: ev.id }, 'square');
-    }
-    case 'medium':
-    case 'large': {
-      const ev = pickEvent(s, square.type);
+    case 'plusSmall':
+    case 'minusSmall':
+    case 'plusMedium':
+    case 'minusMedium':
+    case 'plusLarge':
+    case 'minusLarge':
+    case 'chance': {
+      // 出来事のマス。マスの色（プラス・マイナス・チャンス）と大きさに合う出来事が起きる（design.md 3.3）
+      const ev = pickEvent(s, EVENT_SQUARES[square.type]!.sign, EVENT_SQUARES[square.type]!.size);
       if (!ev) return notice('square.nothing');
       const params = ev.effects?.some((e) => e.t === 'sickness') ? { heavy: nextRandom(s) < SICKNESS.heavyChance ? 1 : 0 } : undefined;
       return startDecision(s, { kind: 'event', eventId: ev.id, ...(params ? { params } : {}) }, 'square');
@@ -466,12 +467,29 @@ function eventWeight(s: GameState, ev: EventDef): number {
   return ev.weight;
 }
 
-function pickEvent(s: GameState, size: EventSize): EventDef | null {
-  return pickWeighted(
-    s,
-    EVENTS.filter((e) => e.size === size),
-    (e) => eventWeight(s, e),
-  );
+/** 出来事のマスの、色と大きさ */
+const EVENT_SQUARES: Partial<Record<SquareType, { sign: EventSign; size: EventSize }>> = {
+  plusSmall: { sign: 'plus', size: 'small' },
+  minusSmall: { sign: 'minus', size: 'small' },
+  plusMedium: { sign: 'plus', size: 'medium' },
+  minusMedium: { sign: 'minus', size: 'medium' },
+  plusLarge: { sign: 'plus', size: 'large' },
+  minusLarge: { sign: 'minus', size: 'large' },
+  chance: { sign: 'chance', size: 'large' },
+};
+const SMALLER: Record<EventSize, EventSize | null> = { large: 'medium', medium: 'small', small: null };
+
+/** 色と大きさに合う出来事を選ぶ。条件に合う出来事がなければ、同じ色の1つ小さい出来事にする（design.md 3.3） */
+function pickEvent(s: GameState, sign: EventSign, size: EventSize): EventDef | null {
+  for (let z: EventSize | null = size; z; z = SMALLER[z]) {
+    const ev = pickWeighted(
+      s,
+      EVENTS.filter((e) => e.sign === sign && e.size === z),
+      (e) => eventWeight(s, e),
+    );
+    if (ev) return ev;
+  }
+  return null;
 }
 
 const jobChangeTargets = (s: GameState) => JOB_IDS.filter((j) => j !== s.player.jobId && JOBS[j].canTransferTo);

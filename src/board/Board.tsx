@@ -9,13 +9,18 @@ import { t } from '../i18n';
 export const SQUARE_COLORS: Record<SquareType, string> = {
   start: '#ffb703',
   family: '#ff6b9a',
-  small: '#8ecae6',
-  card: '#ffd166',
-  luckyCard: '#ffb703',
-  medium: '#4d96ff',
-  large: '#3a0ca3',
+  // 出来事のマス: プラスは緑、マイナスは赤、チャンスは黄色（design.md 3.3）
+  plusSmall: '#58c35c',
+  plusMedium: '#58c35c',
+  plusLarge: '#58c35c',
+  minusSmall: '#f25c54',
+  minusMedium: '#f25c54',
+  minusLarge: '#f25c54',
+  chance: '#ffc94d',
+  card: '#8ecae6',
+  luckyCard: '#4d96ff',
   stock: '#2ec4b6',
-  investTalk: '#ff6b6b',
+  investTalk: '#6c7a89',
   gamble: '#9b5de5',
   realEstate: '#f9a03f',
 };
@@ -23,11 +28,16 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
 export const SQUARE_ICONS: Record<SquareType, string> = {
   start: '🏁',
   family: '💍',
-  small: '🪙',
+  // 出来事の大きさ（小・中・大）は、絵の数で見せる
+  plusSmall: '🪙',
+  plusMedium: '🪙🪙',
+  plusLarge: '🪙🪙🪙',
+  minusSmall: '💸',
+  minusMedium: '💸💸',
+  minusLarge: '💸💸💸',
+  chance: '✨',
   card: '🃏',
   luckyCard: '🍀',
-  medium: '⭐',
-  large: '🌟',
   stock: '📈',
   investTalk: '🗣️',
   gamble: '🎰',
@@ -35,6 +45,9 @@ export const SQUARE_ICONS: Record<SquareType, string> = {
 };
 
 const SIZE = 74;
+/** マスの絵の数（出来事の大きさ）と、その文字の大きさ */
+const SQUARE_ICON_COUNT = (type: SquareType) => (type.endsWith('Large') ? 3 : type.endsWith('Medium') ? 2 : 1);
+const ICON_FONT: Record<number, { size: number; y: number }> = { 1: { size: 34, y: 12 }, 2: { size: 26, y: 9 }, 3: { size: 19, y: 7 } };
 /** 画面に映す範囲の大きさ（駒を追うとき） */
 const VIEW = { width: 1000, height: 560 };
 const FOLLOW_SCALE = 1;
@@ -266,7 +279,7 @@ export function Board({ position, overview, bonus, married, color = '#ff7a45', o
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
               <rect x={-SIZE / 2} y={-SIZE / 2 + 5} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.12)" />
               <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx="16" fill={SQUARE_COLORS[sq.type]} stroke="#fff" strokeWidth="5" />
-              <text y="12" textAnchor="middle" fontSize="34">
+              <text y={ICON_FONT[SQUARE_ICON_COUNT(sq.type)].y} textAnchor="middle" fontSize={ICON_FONT[SQUARE_ICON_COUNT(sq.type)].size}>
                 {sq.type === 'family' && married ? '👶' : SQUARE_ICONS[sq.type]}
               </text>
               {sq.id === bonus && (

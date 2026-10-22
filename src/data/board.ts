@@ -1,14 +1,21 @@
 import type { Square, SquareType } from '../game/types';
 
-/** マスの種類ごとの数（合計200）。design.md 3.3。数を変えれば、盤面のマスの数も変わる */
+/**
+ * マスの種類ごとの数（合計200）。design.md 3.3。数を変えれば、盤面のマスの数も変わる。
+ * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。数の割合は、出来事の重みのプラスとマイナスの割合に合わせた
+ */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
   family: 6,
-  small: 66,
+  plusSmall: 26,
+  minusSmall: 40,
+  plusMedium: 13,
+  minusMedium: 20,
+  plusLarge: 6,
+  minusLarge: 7,
+  chance: 4,
   card: 28,
   luckyCard: 5,
-  medium: 33,
-  large: 17,
   stock: 17,
   investTalk: 8,
   gamble: 8,
@@ -27,7 +34,22 @@ function buildOrder(): SquareType[] {
 
   // 種類ごとに「盤面上の理想の位置」を等間隔に並べ、近い順に空きマスへ割り当てる
   const wanted: { type: SquareType; pos: number }[] = [];
-  const order: SquareType[] = ['small', 'card', 'medium', 'large', 'stock', 'realEstate', 'gamble', 'investTalk', 'family', 'luckyCard'];
+  const order: SquareType[] = [
+    'minusSmall',
+    'plusSmall',
+    'card',
+    'minusMedium',
+    'plusMedium',
+    'minusLarge',
+    'plusLarge',
+    'stock',
+    'realEstate',
+    'gamble',
+    'investTalk',
+    'family',
+    'chance',
+    'luckyCard',
+  ];
   order.forEach((type, k) => {
     const n = SQUARE_COUNTS[type];
     for (let j = 0; j < n; j++) {

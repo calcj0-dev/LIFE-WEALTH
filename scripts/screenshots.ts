@@ -166,6 +166,14 @@ for (const vp of VIEWPORTS) {
       if (await page.locator('.roulette-steps').count()) await page.waitForTimeout(2700);
       continue;
     }
+    // ぴったりカードがあれば、数を選ぶ画面（進んだ先のマスの色）を1回撮る
+    const exactCard = page.locator('.game-card', { hasText: 'ぴったり' }).locator('button:not([disabled])', { hasText: '使う' });
+    if (!shots.has('exact') && (await exactCard.count())) {
+      await exactCard.first().click();
+      await page.waitForTimeout(150);
+      await shot('exact');
+      await clickText(page, '.exact-buttons', 'やめる');
+    }
     // ふつうのターン: ルーレットを回して、駒の移動を待つ
     if (await clickText(page, '.board-area', 'ルーレットを回す')) {
       if (process.env.TRACE) console.log(`  ${step} ルーレット (${await page.locator('.hud-age').textContent()})`);
