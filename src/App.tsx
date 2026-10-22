@@ -329,7 +329,7 @@ export function App() {
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
         <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} />
         <div className="game-body">
-          <div className="board-area">
+          <div className={`board-area${overview ? ' overview' : ''}`}>
             <Board
               position={movingPos ?? game.player.position}
               overview={overview}

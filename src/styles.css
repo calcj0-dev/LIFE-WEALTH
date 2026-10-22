@@ -2113,3 +2113,68 @@ button.small {
     animation: none;
   }
 }
+
+/* ---------------- 全体図: ルーレットと手札をかくして、盤面を広く見せる（design.md 3.1） */
+.board-area.overview .roulette,
+.board-area.overview .card-hand {
+  display: none;
+}
+
+/* ---------------- スマホの横向き（design.md 10.2）。高さが低いので、すき間を詰め、大事なものを上に出す */
+@media (max-height: 520px) {
+  .game-body {
+    grid-template-columns: 1fr minmax(200px, 230px);
+    gap: 6px;
+    padding: 6px;
+  }
+  .hud {
+    gap: 10px;
+    padding-left: 10px;
+  }
+  .hud-age {
+    font-size: 17px;
+  }
+  .hud-years {
+    display: none;
+  }
+  .hud-item .value {
+    font-size: 15px;
+  }
+  /* 右側は、銀行預金と資産を一番上に出す（給料のアクションが見えるように） */
+  .side-panel {
+    gap: 6px;
+    font-size: 13px;
+  }
+  .side-panel .card {
+    padding: 8px 10px;
+  }
+  .side-panel .panel-assets {
+    order: -2;
+  }
+  .side-panel .budget {
+    order: -1;
+  }
+  /* 手札は小さくし、カードの説明の文は省く */
+  .card-hand {
+    max-width: 52%;
+    padding: 6px;
+  }
+  .card-hand .game-card-text,
+  .card-hand .muted {
+    display: none;
+  }
+  .card-hand .exact-buttons .exact-hint {
+    display: none;
+  }
+  .roulette {
+    padding: 4px 8px 8px;
+  }
+  .roulette button {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+  .board-toolbar {
+    left: 6px;
+    top: 6px;
+  }
+}
