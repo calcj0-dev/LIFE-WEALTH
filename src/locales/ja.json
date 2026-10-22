@@ -576,5 +576,7 @@
   "trade.home.none": "家は持っていません。家の売り出しのマスで買えます。",
   "payFlow.salary": "お給料",
   "payFlow.expense": "生活費",
-  "squareType.family": "結婚・出産"
+  "squareType.family": "結婚・出産",
+  "board.zoomIn": "拡大",
+  "board.zoomOut": "縮小"
 }
