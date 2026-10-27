@@ -614,5 +614,10 @@
   "sound.on": "音を消す",
   "sound.off": "音を出す",
   "board.pan": "視点を移動",
-  "board.back": "戻る"
+  "board.back": "戻る",
+  "fork.title": "分かれ道",
+  "fork.text": "矢印を押して、進む道を選んでください。",
+  "option.fork": "この道へ進む",
+  "route.risk": "ハイリスクの道",
+  "route.invest": "投資の道"
 }

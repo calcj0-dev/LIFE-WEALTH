@@ -175,6 +175,15 @@ for (const vp of VIEWPORTS) {
       if (await page.locator('.roulette-steps').count()) await page.waitForTimeout(2700);
       continue;
     }
+    // 分かれ道: 矢印を撮って、順番に道を選ぶ（いろいろな道を通るように）
+    const arrows = page.locator('.fork-arrow');
+    if (await arrows.count()) {
+      await shot('fork');
+      await arrows.nth(step % (await arrows.count())).click({ force: true });
+      if (process.env.TRACE) console.log(`  ${step} 分かれ道`);
+      await page.waitForTimeout(280 * 7);
+      continue;
+    }
     // ぴったりカードがあれば、数を選ぶ画面（進んだ先のマスの色）を1回撮る
     const exactCard = page.locator('.game-card', { hasText: 'ぴったり' }).locator('button:not([disabled])', { hasText: '使う' });
     if (!shots.has('exact') && (await exactCard.count())) {

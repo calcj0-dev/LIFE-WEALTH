@@ -3,7 +3,7 @@ import { BONUS } from '../data/rules';
 import { playGame } from './autoplay';
 import { applyNews } from './market';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, getOptions, roll, setSaving } from './engine';
+import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, distanceOnBoard, getOptions, roll, setSaving } from './engine';
 import { standings } from './standings';
 import type { GameState } from './types';
 
@@ -89,7 +89,7 @@ describe('ライバル（CPU）', () => {
         if (s.phase === 'yearEnd') break;
         const taken = s.rivals.some((r) => r.log.at(-1)?.key === 'bonus.get' && r.log.at(-1)?.month === s.month - 1);
         if (taken) {
-          const d = (s.bonusSquare - s.player.position + 200) % 200;
+          const d = distanceOnBoard(s.player.position, s.bonusSquare);
           expect(d).toBeLessThanOrEqual(BONUS.maxAhead);
         }
       }

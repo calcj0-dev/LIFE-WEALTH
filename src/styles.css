@@ -2351,3 +2351,28 @@ h2 {
     animation: none;
   }
 }
+
+/* 分かれ道の矢印（design.md 3.11） */
+.fork-arrow {
+  cursor: pointer;
+}
+.fork-arrow-pulse {
+  animation: fork-pulse 0.9s ease-in-out infinite;
+}
+.fork-arrow:hover .fork-arrow-pulse path {
+  fill: #e8602b;
+}
+@keyframes fork-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fork-arrow-pulse {
+    animation: none;
+  }
+}

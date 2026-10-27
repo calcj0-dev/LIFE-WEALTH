@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board, type PieceFloat } from './board/Board';
+import { BOARD } from './data/board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
 import type { GameState, LogEntry } from './game/types';
@@ -425,6 +426,14 @@ export function App() {
               focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
               landed={humanDone ? game.player.position : undefined}
               floats={floats}
+              forks={readyInTurn && game.phase === 'decision' && game.decision?.kind === 'fork' ? BOARD[game.player.position].next : []}
+              onFork={(to) => {
+                // 選んだ道へ、残りのマス数だけ進む（駒を1マスずつ動かす）
+                const next = choose(game, `path:${to}`);
+                setTurnMoving(true);
+                setMovingPos(game.player.position);
+                move(next);
+              }}
             />
             {announcing && (
               <div className="bonus-announce" role="status">
@@ -488,7 +497,7 @@ export function App() {
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}
-        {readyInTurn && game.phase === 'decision' && alerts.length === 0 && (
+        {readyInTurn && game.phase === 'decision' && game.decision?.kind !== 'fork' && alerts.length === 0 && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}

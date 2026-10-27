@@ -28,9 +28,14 @@ export interface Square {
   /** 盤面上の位置 */
   x: number;
   y: number;
-  /** 次のマス。将来の分かれ道に備えて複数持てる */
+  /** 次のマス。2つあるマスは分かれ道で、1つ目が元の道（まっすぐ）、2つ目が分かれた道（design.md 3.11） */
   next: number[];
+  /** どの道のマスか。main は元の道 */
+  route: RouteKind;
 }
+
+/** 道の種類（design.md 3.11）。main は元の道、back は戻る道、shortcut は近道、risk はハイリスクの道、invest は投資の道 */
+export type RouteKind = 'main' | 'back' | 'shortcut' | 'risk' | 'invest';
 
 export type HighSchoolType = 'public' | 'private';
 export type UniversityType = 'national' | 'private' | 'none';
@@ -227,7 +232,9 @@ export type DecisionKind =
   | 'talk'
   | 'discard'
   | 'athleteRetire'
-  | 'notice';
+  | 'notice'
+  /** 分かれ道で、どちらの道を進むか（design.md 3.11）。params.steps は残りのマス数 */
+  | 'fork';
 
 export interface Decision {
   kind: DecisionKind;

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
 import { SquareIcon } from './SquareIcon';
-import { BOARD, BOARD_WORLD, ROUTE_POINTS } from '../data/board';
+import { BOARD, BOARD_WORLD, BRANCH_POINTS, ROUTE_POINTS } from '../data/board';
 import type { SquareType } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { BONUS } from '../data/rules';
@@ -48,9 +48,10 @@ function buildDecorations(): Deco[] {
   const items: Deco[] = [];
   const nearSquare = (x: number, y: number, d: number) => BOARD.some((sq) => Math.hypot(sq.x - x, sq.y - y) < d);
   const nearRoad = (x: number, y: number, d = 70) => {
-    for (let i = 1; i < ROUTE_POINTS.length; i++) {
-      const a = ROUTE_POINTS[i - 1];
-      const b = ROUTE_POINTS[i];
+    for (const line of [ROUTE_POINTS, ...BRANCH_POINTS])
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
       const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
       const r = Math.max(0, Math.min(1, ((x - a.x) * (b.x - a.x) + (y - a.y) * (b.y - a.y)) / len2));
       if (Math.hypot(x - (a.x + r * (b.x - a.x)), y - (a.y + r * (b.y - a.y))) < d) return true;
@@ -174,6 +175,9 @@ interface Props {
   landed?: number;
   /** 駒の頭の上に浮かべる文字（お金の動き、もらったカード。design.md 10.1） */
   floats?: PieceFloat[];
+  /** 分かれ道で選べる道（次のマス）。あれば、あなたの駒のマスから矢印を出す（design.md 3.11） */
+  forks?: number[];
+  onFork?: (to: number) => void;
 }
 
 /** 駒の頭の上に浮かべる文字 */
@@ -269,7 +273,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [] }: Props) {
+export function Board({ position, overview, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -340,6 +344,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
   const tx = free ? camera.tx : VIEW.width / 2 - here.x * scale;
   const ty = free ? camera.ty : VIEW.height / 2 - here.y * scale;
   const road = ROUTE_POINTS.map((p) => `${p.x},${p.y}`).join(' ');
+  const branchRoads = BRANCH_POINTS.map((line) => line.map((p) => `${p.x},${p.y}`).join(' '));
 
   return (
     <>
@@ -370,6 +375,23 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
           <polyline points={road} fill="none" stroke="#d9bf8c" strokeWidth="110" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#efdcae" strokeWidth="102" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#f8ecd0" strokeWidth="88" strokeLinejoin="round" strokeLinecap="round" />
+          {/* 分かれた道（design.md 3.11）。元の道より少し細く */}
+          {branchRoads.map((pts, i) => (
+            <g key={i}>
+              <polyline points={pts} fill="none" stroke="#d9bf8c" strokeWidth="98" strokeLinejoin="round" strokeLinecap="round" />
+              <polyline points={pts} fill="none" stroke="#f3e2b8" strokeWidth="80" strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          ))}
+          {/* 別の道の入り口の看板 */}
+          {BOARD.filter((sq) => (sq.route === 'risk' || sq.route === 'invest') && BOARD.some((f) => f.next[1] === sq.id)).map((sq) => (
+            // 道の入り口の横に立てる（マスと重ならないように）
+            <g key={`sign-${sq.id}`} transform={`translate(${sq.x + (sq.route === 'risk' ? -125 : 125)} ${sq.y})`}>
+              <rect x="-70" y="-17" width="140" height="30" rx="8" fill={sq.route === 'risk' ? '#d6336c' : '#2ec4b6'} stroke="#fff" strokeWidth="3" />
+              <text y="5" textAnchor="middle" fontSize="16" fontWeight="900" fill="#fff">
+                {t(`route.${sq.route}`)}
+              </text>
+            </g>
+          ))}
           {BOARD.filter((sq) => sq.id !== bonus).map((sq) => (
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
               <rect x={-SIZE / 2} y={-SIZE / 2 + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.14)" />
@@ -395,6 +417,21 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
             const same = all.filter((o) => o.position === piece.position);
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
             return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
+          })}
+          {/* 分かれ道の矢印（文字は出さない）。押すと、その道へ進む */}
+          {forks.map((to) => {
+            const here = BOARD[position];
+            const next = BOARD[to];
+            const angle = (Math.atan2(next.y - here.y, next.x - here.x) * 180) / Math.PI;
+            const mx = here.x + (next.x - here.x) * 0.55;
+            const my = here.y + (next.y - here.y) * 0.55;
+            return (
+              <g key={`fork-${to}`} transform={`translate(${mx} ${my}) rotate(${angle})`} className="fork-arrow" onClick={() => onFork?.(to)} role="button" aria-label={t('fork.title')}>
+                <g className="fork-arrow-pulse">
+                  <path d="M-30,-16 L6,-16 L6,-32 L40,0 L6,32 L6,16 L-30,16 Z" fill="#ff7a45" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+                </g>
+              </g>
+            );
           })}
           {/* 駒の頭の上の文字。全体図では駒が小さいので出さない */}
           {!overview &&

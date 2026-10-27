@@ -300,14 +300,61 @@ function rollIn(s: GameState, card?: { index: number; exact?: number }) {
   s.lastFace = face;
   s.lastRoll = steps;
   s.lastPath = [];
+  advance(s, steps);
+}
+
+/**
+ * steps マス進む（design.md 3.11）。分かれ道に来たら、あなたは止まって道を選ぶ（決定 fork。残りのマス数を覚えておく）。
+ * ライバルは、ボーナスマスまで近くなるほうの道を選んで、止まらずに進む。next を渡すと、最初の1マスはその道へ進む
+ */
+function advance(s: GameState, steps: number, next?: number) {
   let pos = s.player.position;
   for (let i = 0; i < steps; i++) {
-    pos = BOARD[pos].next[0];
+    const choices = BOARD[pos].next;
+    let to: number;
+    if (i === 0 && next !== undefined) to = next;
+    else if (choices.length === 1) to = choices[0];
+    else if (s.cpuSeat >= 0) to = closerToBonus(s, choices);
+    else {
+      s.player.position = pos;
+      startDecision(s, { kind: 'fork', params: { steps: steps - i } }, 'square');
+      return;
+    }
+    pos = to;
     if (pos === 0) s.player.lap += 1;
     s.lastPath.push(pos);
   }
   s.player.position = pos;
   handleSquare(s);
+}
+
+/** 道の上の、from から to までのマス数（一番近い道で数える。たどり着けなければ Infinity） */
+export function distanceOnBoard(from: number, to: number): number {
+  if (from === to) return 0;
+  const dist = new Map<number, number>([[from, 0]]);
+  const queue = [from];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    for (const n of BOARD[cur].next) {
+      if (dist.has(n)) continue;
+      dist.set(n, dist.get(cur)! + 1);
+      if (n === to) return dist.get(n)!;
+      queue.push(n);
+    }
+  }
+  return Infinity;
+}
+
+/** 分かれ道で、ボーナスマスまで近くなるほうの道（同じなら元の道） */
+function closerToBonus(s: GameState, choices: number[]): number {
+  return choices.reduce((best, c) => (distanceOnBoard(c, s.bonusSquare) < distanceOnBoard(best, s.bonusSquare) ? c : best), choices[0]);
+}
+
+/** 元の道を、まっすぐ n マス進んだ先のマス（ぴったりカードの数のボタンの色などに使う） */
+export function aheadOnMain(from: number, n: number): number {
+  let pos = from;
+  for (let i = 0; i < n; i++) pos = BOARD[pos].next[0];
+  return pos;
 }
 
 // ---------------------------------------------------------------- カードとボーナスマス（design.md 3.9、3.10）
@@ -357,9 +404,10 @@ function placeBonus(s: GameState) {
   const me = s.cpuSeat >= 0 ? s.rivals[s.cpuSeat].player : s.player;
   for (let guard = 0; guard < 100; guard++) {
     const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
-    const index = (me.position + ahead) % BOARD.length;
+    // 元の道をまっすぐ数える。分かれた道の上には置かない（design.md 3.10）
+    const index = aheadOnMain(me.position, ahead);
     const type = BOARD[index].type;
-    if (type !== 'start') {
+    if (type !== 'start' && BOARD[index].route === 'main') {
       s.bonusSquare = index;
       return;
     }
@@ -368,7 +416,8 @@ function placeBonus(s: GameState) {
 
 /** ボーナスマスまで、あと何マスか */
 export function bonusDistance(s: GameState): number {
-  return (s.bonusSquare - s.player.position + BOARD.length) % BOARD.length;
+  // 分かれた道も使った、一番近い道で数える（design.md 3.10）
+  return distanceOnBoard(s.player.position, s.bonusSquare);
 }
 
 function startDecision(s: GameState, d: Decision, from: 'queue' | 'square') {
@@ -518,6 +567,9 @@ export function getOptions(s: GameState): DecisionOption[] {
   switch (d.kind) {
     case 'notice':
       return [{ id: 'ok', key: 'option.ok', enabled: true }];
+    case 'fork':
+      // 矢印で選ぶ（文字は出さない。design.md 3.11）。1つ目が元の道
+      return BOARD[s.player.position].next.map((n) => ({ id: `path:${n}`, key: 'option.fork', params: { to: n }, enabled: true }));
     case 'marriage':
     case 'birth':
       return [{ id: 'spin', key: 'option.spin', enabled: true }];
@@ -641,6 +693,15 @@ function chooseIn(s: GameState, optionId: string) {
   const option = getOptions(s).find((o) => o.id === optionId);
   if (!option) throw new Error(`unknown option: ${optionId}`);
   if (!option.enabled) throw new Error(`option not available: ${optionId}`);
+  if (s.decision!.kind === 'fork') {
+    const steps = Number(s.decision!.params!.steps);
+    s.decision = null;
+    s.decisionFrom = null;
+    s.phase = 'roll';
+    s.lastPath = [];
+    advance(s, steps, Number(optionId.slice(5)));
+    return;
+  }
   const followUp = applyDecision(s, s.decision!, optionId);
   if (followUp) {
     // ルーレットの結果を、同じ流れの中でお知らせとして見せる
@@ -659,6 +720,7 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
   const p = s.player;
   switch (d.kind) {
     case 'notice':
+    case 'fork':
       return null;
     case 'marriage': {
       const face = rollDie(s);

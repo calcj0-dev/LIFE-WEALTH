@@ -1,7 +1,7 @@
-import type { Square, SquareType } from '../game/types';
+import type { RouteKind, Square, SquareType } from '../game/types';
 
 /**
- * マスの種類ごとの数（合計200）。design.md 3.3。数を変えれば、盤面のマスの数も変わる。
+ * 元の道のマスの種類ごとの数（合計200）。design.md 3.3。分かれた道のマスは、下の BRANCHES に書く。数を変えれば、盤面のマスの数も変わる。
  * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。数の割合は、出来事の重みのプラスとマイナスの割合に合わせた
  */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
@@ -84,9 +84,58 @@ const ROUTE: [number, number][] = [
   [1, 0], [22, 0], [22, 2], [1, 2], [1, 4], [22, 4], [22, 6], [1, 6], [1, 8], [22, 8],
   [22, 10], [1, 10], [1, 12], [22, 12], [22, 14], [-1, 14], [-1, 0], [1, 0],
 ];
-const ROUTE_MIN_X = Math.min(...ROUTE.map((p) => p[0]));
-const ROUTE_MAX_X = Math.max(...ROUTE.map((p) => p[0]));
-const ROUTE_MAX_Y = Math.max(...ROUTE.map((p) => p[1]));
+
+/**
+ * 分かれ道（design.md 3.11）。from の近くの元の道のマスが分かれ道になり、via を通って、to の近くの元の道のマスに合流する。
+ * 座標は ROUTE と同じ（1マス分の長さが1）。偶数の段（y = 0, 4, 8, 12）は左から右へ、奇数の段は右から左へ進む
+ */
+interface BranchDef {
+  route: Exclude<RouteKind, 'main'>;
+  from: [number, number];
+  via: [number, number][];
+  to: [number, number];
+  /** 分かれた道のマス（並ぶ順） */
+  types: SquareType[];
+}
+
+export const BRANCHES: BranchDef[] = [
+  // ハイリスクの道: 盤面の上の外側をまわる。お金が大きく動く
+  {
+    route: 'risk',
+    from: [4, 0],
+    via: [
+      [4, -1.6],
+      [15, -1.6],
+    ],
+    to: [15, 0],
+    types: ['plusLarge', 'minusLarge', 'gamble', 'minusLarge', 'plusLarge', 'minusMedium', 'plusLarge', 'minusLarge', 'gamble', 'plusMedium', 'minusLarge', 'plusLarge'],
+  },
+  // 近道: 下の段へ（少し先へ進む）
+  { route: 'shortcut', from: [17, 0], via: [], to: [17, 2], types: ['minusSmall', 'card'] },
+  // 戻る道: 上の段へ（少し手前に戻る）
+  { route: 'back', from: [6, 4], via: [], to: [6, 2], types: ['plusSmall', 'card'] },
+  { route: 'shortcut', from: [17, 4], via: [], to: [17, 6], types: ['plusSmall', 'minusMedium'] },
+  { route: 'back', from: [6, 8], via: [], to: [6, 6], types: ['minusSmall', 'plusMedium'] },
+  { route: 'shortcut', from: [17, 8], via: [], to: [17, 10], types: ['card', 'plusSmall'] },
+  { route: 'back', from: [6, 12], via: [], to: [6, 10], types: ['card', 'minusSmall'] },
+  // 投資の道: 盤面の下の外側をまわる。株のマスと投資の話のマスが多い
+  {
+    route: 'invest',
+    from: [18, 14],
+    via: [
+      [18, 15.6],
+      [5, 15.6],
+    ],
+    to: [5, 14],
+    types: ['stock', 'investTalk', 'stock', 'card', 'stock', 'investTalk', 'plusSmall', 'stock', 'investTalk', 'stock', 'minusSmall', 'stock', 'investTalk', 'stock'],
+  },
+];
+
+const ALL_POINTS = [...ROUTE, ...BRANCHES.flatMap((b) => [b.from, ...b.via, b.to])];
+const ROUTE_MIN_X = Math.min(...ALL_POINTS.map((p) => p[0]));
+const ROUTE_MAX_X = Math.max(...ALL_POINTS.map((p) => p[0]));
+const ROUTE_MIN_Y = Math.min(...ALL_POINTS.map((p) => p[1]));
+const ROUTE_MAX_Y = Math.max(...ALL_POINTS.map((p) => p[1]));
 
 /** 1マス分の長さ（画面上の大きさ） */
 const UNIT = 130;
@@ -95,12 +144,12 @@ const MARGIN = 150;
 /** 盤面全体の大きさ */
 export const BOARD_WORLD = {
   width: (ROUTE_MAX_X - ROUTE_MIN_X) * UNIT + MARGIN * 2,
-  height: ROUTE_MAX_Y * UNIT + MARGIN * 2,
+  height: (ROUTE_MAX_Y - ROUTE_MIN_Y) * UNIT + MARGIN * 2,
 };
 
 /** 座標を画面上の位置にする */
 export function toWorld(x: number, y: number): { x: number; y: number } {
-  return { x: (x - ROUTE_MIN_X) * UNIT + MARGIN, y: y * UNIT + MARGIN };
+  return { x: (x - ROUTE_MIN_X) * UNIT + MARGIN, y: (y - ROUTE_MIN_Y) * UNIT + MARGIN };
 }
 
 /** 道に沿って、マスを等間隔に置く */
@@ -128,16 +177,61 @@ function positionsAlongRoute(count: number): { x: number; y: number }[] {
 
 /** 道の折れ線（画面上の位置） */
 export const ROUTE_POINTS = ROUTE.map(([x, y]) => toWorld(x, y));
+/** 分かれた道の折れ線（画面上の位置。道を描くのと、飾りを道からはなすのに使う） */
+export const BRANCH_POINTS = BRANCHES.map((b) => [b.from, ...b.via, b.to].map(([x, y]) => toWorld(x, y)));
+
+/** 折れ線の上に、端を除いて n 個のマスを等間隔に置く */
+function positionsAlong(points: [number, number][], n: number): { x: number; y: number }[] {
+  const segs = points.slice(1).map((p, i) => ({ a: points[i], b: p, len: Math.hypot(p[0] - points[i][0], p[1] - points[i][1]) }));
+  const total = segs.reduce((a, x) => a + x.len, 0);
+  const out: { x: number; y: number }[] = [];
+  for (let j = 0; j < n; j++) {
+    let d = ((j + 1) / (n + 1)) * total;
+    for (const seg of segs) {
+      if (d <= seg.len) {
+        const r = d / seg.len;
+        const pos = toWorld(seg.a[0] + (seg.b[0] - seg.a[0]) * r, seg.a[1] + (seg.b[1] - seg.a[1]) * r);
+        out.push({ x: Math.round(pos.x), y: Math.round(pos.y) });
+        break;
+      }
+      d -= seg.len;
+    }
+  }
+  return out;
+}
 
 export function buildBoard(): Square[] {
   const types = buildOrder();
   const positions = positionsAlongRoute(types.length);
-  return types.map((type, i) => ({
+  const squares: Square[] = types.map((type, i) => ({
     id: i,
     type,
     ...positions[i],
     next: [(i + 1) % types.length],
+    route: 'main',
   }));
+  /** 座標にいちばん近い、元の道のマス */
+  const nearestMain = ([x, y]: [number, number]) => {
+    const w = toWorld(x, y);
+    let best = 0;
+    for (let i = 0; i < types.length; i++) {
+      if (Math.hypot(squares[i].x - w.x, squares[i].y - w.y) < Math.hypot(squares[best].x - w.x, squares[best].y - w.y)) best = i;
+    }
+    return best;
+  };
+  for (const b of BRANCHES) {
+    const fork = nearestMain(b.from);
+    const join = nearestMain(b.to);
+    const pts = positionsAlong([b.from, ...b.via, b.to], b.types.length);
+    const first = squares.length;
+    b.types.forEach((type, j) => {
+      const id = first + j;
+      squares.push({ id, type, ...pts[j], next: [j === b.types.length - 1 ? join : id + 1], route: b.route });
+    });
+    // 分かれ道: 1つ目が元の道（まっすぐ）、2つ目が分かれた道
+    squares[fork].next = [squares[fork].next[0], first];
+  }
+  return squares;
 }
 
 export const BOARD: Square[] = buildBoard();
