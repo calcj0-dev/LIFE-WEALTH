@@ -2270,3 +2270,35 @@ h2 {
   width: 20px;
   height: 20px;
 }
+
+/* ボーナスマス（design.md 3.10）: 光の輪がゆっくり光り、キラキラが回る */
+.bonus-glow {
+  animation: bonus-glow 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes bonus-glow {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+.bonus-sparkles {
+  animation: bonus-spin 6s linear infinite;
+}
+@keyframes bonus-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bonus-glow,
+  .bonus-sparkles {
+    animation: none;
+  }
+}

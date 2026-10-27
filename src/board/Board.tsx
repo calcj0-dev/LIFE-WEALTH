@@ -7,7 +7,8 @@ import { AvatarBody } from './Avatar';
 import { SquareIcon } from './SquareIcon';
 import { BOARD, BOARD_WORLD, ROUTE_POINTS } from '../data/board';
 import type { SquareType } from '../game/types';
-import { t } from '../i18n';
+import { formatMoney, t } from '../i18n';
+import { BONUS } from '../data/rules';
 
 export const SQUARE_COLORS: Record<SquareType, string> = {
   start: '#ffb703',
@@ -171,6 +172,38 @@ interface Props {
   landed?: number;
 }
 
+/** ボーナスマス。金色のマスに大きな星。光の輪とキラキラが回り、上に「BONUS ＋30万円」の札を立てる */
+function BonusTile({ x, y, landed, overview }: { x: number; y: number; landed: boolean; overview: boolean }) {
+  const r = SIZE / 2;
+  return (
+    // 全体図ではマスが小さいので、ボーナスマスだけ大きく描いて目立たせる
+    <g transform={`translate(${x} ${y}) scale(${overview ? 1.9 : 1.18})`}>
+      <circle className="bonus-glow" r={r + 16} fill="#ffe066" opacity="0.45" />
+      <rect x={-r} y={-r + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.16)" />
+      <rect x={-r} y={-r} width={SIZE} height={SIZE} rx="16" fill="url(#bonus-gold)" stroke="#fff" strokeWidth="5" />
+      <path
+        d="M0,-26 L7.6,-10.5 L24.7,-8 L12.4,4 L15.3,21 L0,13 L-15.3,21 L-12.4,4 L-24.7,-8 L-7.6,-10.5 Z"
+        fill="#fff8d6"
+        stroke="#c98a00"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      <g className="bonus-sparkles">
+        {[0, 72, 144, 216, 288].map((deg) => (
+          <path key={deg} transform={`rotate(${deg}) translate(0 ${-r - 14})`} d="M0,-6 Q1,-1 6,0 Q1,1 0,6 Q-1,1 -6,0 Q-1,-1 0,-6 Z" fill="#fffbe6" stroke="#e0a800" strokeWidth="1" />
+        ))}
+      </g>
+      {landed && <rect className="square-landed" x={-r - 4} y={-r - 4} width={SIZE + 8} height={SIZE + 8} rx="19" fill="none" stroke="#fff6a8" strokeWidth="6" />}
+      <g transform={`translate(0 ${-r - 30})`}>
+        <rect x="-68" y="-15" width="136" height="26" rx="13" fill="#ff4d6d" stroke="#fff" strokeWidth="3" />
+        <text y="4" textAnchor="middle" fontSize="15" fontWeight="900" fill="#fff">
+          {`BONUS +${formatMoney(BONUS.amount)}`}
+        </text>
+      </g>
+    </g>
+  );
+}
+
 /** 人の駒（キャラクター）。家族は、うしろに小さく並んで一緒に歩く（design.md 10.1） */
 function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; family?: FamilyMember[] }) {
   return (
@@ -302,6 +335,12 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
+        <defs>
+          <linearGradient id="bonus-gold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#ffe27a" />
+            <stop offset="1" stopColor="#f5a800" />
+          </linearGradient>
+        </defs>
         <rect width={VIEW.width} height={VIEW.height} fill="#bfe8c8" />
         <g style={{ transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: dragging ? 'none' : 'transform 0.3s ease', transformOrigin: '0 0' }}>
           <rect width={BOARD_WORLD.width} height={BOARD_WORLD.height} rx="40" fill="#c9eccf" />
@@ -311,7 +350,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
           <polyline points={road} fill="none" stroke="#d9bf8c" strokeWidth="110" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#efdcae" strokeWidth="102" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#f8ecd0" strokeWidth="88" strokeLinejoin="round" strokeLinecap="round" />
-          {BOARD.map((sq) => (
+          {BOARD.filter((sq) => sq.id !== bonus).map((sq) => (
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
               <rect x={-SIZE / 2} y={-SIZE / 2 + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.14)" />
               <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx="16" fill={SQUARE_COLORS[sq.type]} stroke="#fff" strokeWidth="5" />
@@ -321,14 +360,6 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
               {sq.id === landed && (
                 <rect className="square-landed" x={-SIZE / 2 - 4} y={-SIZE / 2 - 4} width={SIZE + 8} height={SIZE + 8} rx="19" fill="none" stroke="#fff6a8" strokeWidth="6" />
               )}
-              {sq.id === bonus && (
-                <g>
-                  <rect x={-SIZE / 2 - 6} y={-SIZE / 2 - 6} width={SIZE + 12} height={SIZE + 12} rx="20" fill="none" stroke="#ff4d6d" strokeWidth="6" strokeDasharray="10 6" />
-                  <text y={-SIZE / 2 - 12} textAnchor="middle" fontSize="20" fontWeight="900" fill="#ff4d6d">
-                    BONUS
-                  </text>
-                </g>
-              )}
               {sq.type === 'start' && (
                 <text y={-SIZE / 2 - 10} textAnchor="middle" fontSize="20" fontWeight="900" fill="#b36b00">
                   START
@@ -336,6 +367,8 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
               )}
             </g>
           ))}
+          {/* ボーナスマスは、元のマスの見た目を残さず、専用の見た目で、ほかのマスより手前に少し大きく描く（design.md 3.10） */}
+          {bonus !== undefined && BOARD[bonus] && <BonusTile x={BOARD[bonus].x} y={BOARD[bonus].y} landed={landed === bonus} overview={overview} />}
           {/* 同じマスにいる駒は、横に少しずらして重ならないようにする。あなたの駒は一番手前 */}
           {[...others.map((o) => ({ ...o, me: false })), { position, look, family, me: true }].map((piece, k, all) => {
             const sq = BOARD[piece.position];
