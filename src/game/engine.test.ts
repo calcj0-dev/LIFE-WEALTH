@@ -101,11 +101,53 @@ describe('データ（JSON）', () => {
 });
 
 describe('盤面', () => {
-  it('200マスで、種類ごとの数が設計どおり', () => {
-    expect(BOARD).toHaveLength(200);
+  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約235マス', () => {
+    const main = BOARD.filter((sq) => sq.route === 'main');
+    expect(main).toHaveLength(200);
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
-      expect(BOARD.filter((sq) => sq.type === type)).toHaveLength(n);
+      expect(main.filter((sq) => sq.type === type)).toHaveLength(n);
     }
+    expect(BOARD.length).toBeGreaterThan(225);
+    expect(BOARD.length).toBeLessThan(245);
+  });
+  it('分かれ道は8か所。分かれた道は、どれも元の道に合流する', () => {
+    const forks = BOARD.filter((sq) => sq.next.length > 1);
+    expect(forks).toHaveLength(8);
+    for (const f of forks) {
+      let pos = f.next[1];
+      for (let i = 0; i < 30 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
+      expect(BOARD[pos].route).toBe('main');
+    }
+    // 戻る道は手前に、近道は先に合流する
+    for (const f of forks) {
+      const route = BOARD[f.next[1]].route;
+      let pos = f.next[1];
+      while (BOARD[pos].route !== 'main') pos = BOARD[pos].next[0];
+      if (route === 'back') expect(pos).toBeLessThan(f.id);
+      if (route === 'shortcut' || route === 'risk' || route === 'invest') expect(pos).toBeGreaterThan(f.id);
+    }
+  });
+  it('分かれ道では止まって道を選び、残りのマス数だけ選んだ道を進む', () => {
+    const fork = BOARD.find((sq) => sq.next.length > 1 && BOARD[sq.next[1]].route === 'back')!;
+    for (let seed = 1; seed < 300; seed++) {
+      const base = started();
+      const s = roll({ ...base, rngState: seed, player: { ...base.player, position: fork.id - 1 } });
+      if (s.lastRoll! < 3) continue;
+      expect(s.decision?.kind).toBe('fork');
+      expect(s.player.position).toBe(fork.id);
+      const left = Number(s.decision!.params!.steps);
+      const after = choose(s, `path:${fork.next[1]}`);
+      expect(after.lastPath[0]).toBe(fork.next[1]);
+      expect(after.lastPath).toHaveLength(left);
+      return;
+    }
+    throw new Error('not found');
+  });
+  it('ライバルは、分かれ道で止まらずに、ボーナスマスに近い道を選ぶ', () => {
+    const s = playGame(9, 'employee', 10);
+    expect(s.phase).toBe('finished');
+    // ライバルも、分かれた道のマスを通ることがある
+    expect(s.rivals.some((r) => r.log.length > 0)).toBe(true);
   });
   it('スタートは0番', () => {
     expect(BOARD[0].type).toBe('start');
@@ -119,7 +161,7 @@ describe('盤面', () => {
   });
   it('1周つながっている', () => {
     let pos = 0;
-    for (let i = 0; i < BOARD.length; i++) pos = BOARD[pos].next[0];
+    for (let i = 0; i < 200; i++) pos = BOARD[pos].next[0];
     expect(pos).toBe(0);
   });
 });
@@ -431,13 +473,14 @@ describe('株は1株単位、買った額を覚える', () => {
   it('株は1株単位で売り買いし、金額では売り買いできない', () => {
     const y = toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } });
     const s = tradeShares(y, 'it', 3);
-    expect(s.player.holdings.it).toBe(3);
-    expect(s.player.cost.it).toBeCloseTo(3 * y.market.prices.it, 6);
+    expect(s.player.holdings.it - y.player.holdings.it).toBe(3);
+    expect(s.player.cost.it - y.player.cost.it).toBeCloseTo(3 * y.market.prices.it, 6);
     expect(() => trade(y, 'it', 10)).toThrow();
     const sold = tradeShares(s, 'it', -1);
-    expect(sold.player.holdings.it).toBe(2);
-    // 売った割合（3株のうち1株）の分だけ、買った額が減る
-    expect(sold.player.cost.it).toBeCloseTo((s.player.cost.it * 2) / 3, 6);
+    const held = s.player.holdings.it;
+    expect(sold.player.holdings.it).toBe(held - 1);
+    // 売った割合（持っている株のうち1株）の分だけ、買った額が減る
+    expect(sold.player.cost.it).toBeCloseTo((s.player.cost.it * (held - 1)) / held, 6);
   });
   it('お金が足りないときは、株も1株単位で売る', () => {
     let s = tradeShares(toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } }), 'it', 10);

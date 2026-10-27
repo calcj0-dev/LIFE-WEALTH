@@ -79,7 +79,11 @@ for (const vp of VIEWPORTS) {
   await page.waitForTimeout(300);
   await shot('game');
   // 盤面の全体図
-  if (await clickText(page, '.board-area', '全体図')) {
+  // 視点を移動 → 全体図
+  await clickText(page, '.board-toolbar', '視点を移動');
+  await page.waitForTimeout(400);
+  await shot('pan');
+  if (await clickText(page, '.board-toolbar', '全体図')) {
     await page.waitForTimeout(600);
     await shot('overview');
     // ホイールで拡大し、ドラッグで動かす
@@ -100,7 +104,7 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(400);
       await shot('overview-zoomout');
     }
-    await clickText(page, '.board-toolbar', '駒を追う');
+    await clickText(page, '.board-toolbar', '戻る');
     await page.waitForTimeout(600);
   }
 
@@ -169,6 +173,15 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(150);
       // ルーレットが回るのを待つ
       if (await page.locator('.roulette-steps').count()) await page.waitForTimeout(2700);
+      continue;
+    }
+    // 分かれ道: 矢印を撮って、順番に道を選ぶ（いろいろな道を通るように）
+    const arrows = page.locator('.fork-arrow');
+    if (await arrows.count()) {
+      await shot('fork');
+      await arrows.nth(step % (await arrows.count())).click({ force: true });
+      if (process.env.TRACE) console.log(`  ${step} 分かれ道`);
+      await page.waitForTimeout(280 * 7);
       continue;
     }
     // ぴったりカードがあれば、数を選ぶ画面（進んだ先のマスの色）を1回撮る

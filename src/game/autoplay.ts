@@ -10,6 +10,7 @@ import {
   createGame,
   dismissBigEvent,
   dismissNews,
+  distanceOnBoard,
   getOptions,
   nextYear,
   openTradeCard,
@@ -69,6 +70,11 @@ function pickOption(s: GameState, options: DecisionOption[], strategy: Strategy,
       // 預金に余裕があれば、ときどき買う
       const buy = enabled.find((o) => o.id !== 'skip' && -(o.cash ?? 0) * 5 <= cash);
       return buy && strategy.investRate > 0 && rand() < 0.5 ? buy.id : 'skip';
+    }
+    case 'fork': {
+      // 分かれ道では、ボーナスマスに近くなるほうの道を選ぶ（ライバルと同じ）
+      const best = enabled.reduce((a, o) => (distanceOnBoard(Number(o.params?.to), s.bonusSquare) < distanceOnBoard(Number(a.params?.to), s.bonusSquare) ? o : a));
+      return best.id;
     }
     case 'event': {
       if (d.eventId === 'jobChange') {

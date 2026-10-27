@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Board } from './board/Board';
+import { Board, type PieceFloat } from './board/Board';
+import { BOARD } from './data/board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
-import type { GameState } from './game/types';
-import { t } from './i18n';
+import type { GameState, LogEntry } from './game/types';
+import { formatMoney, t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { FeedPanel } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
@@ -35,8 +36,30 @@ const PAY_STEP_MS = [300, 650, 650, 250];
 /** ライバルの駒が1マス進む時間と、ライバルの番の前後の間（ミリ秒。design.md 12.2） */
 const RIVAL_STEP_MS = 130;
 const RIVAL_PAUSE_MS = 400;
+/** 駒の頭の上の文字を出しておく時間（ミリ秒） */
+const FLOAT_MS = 1800;
 /** 次のボーナスマスの発表を見せる時間（ミリ秒） */
 const ANNOUNCE_MS = 1800;
+
+/** 記録から、駒の頭の上に出す文字を作る（お金の合計、もらったカード、ボーナス） */
+function floatsOf(entries: LogEntry[], position: number, small: boolean): Omit<PieceFloat, 'key'>[] {
+  const out: Omit<PieceFloat, 'key'>[] = [];
+  let cash = 0;
+  for (const e of entries) {
+    if (e.key.startsWith('bigEvent.') || e.key.startsWith('news.')) continue;
+    if (e.key === 'bonus.get') {
+      out.push({ position, text: `★ +${formatMoney(e.cash ?? 0)}`, tone: 'bonus', small });
+      continue;
+    }
+    if ((e.key === 'card.get' || e.key === 'card.getLucky') && typeof e.params?.card === 'string') {
+      out.push({ position, text: `${cardIcon(e.params.card)} ${t(`card.${e.params.card}`)}`, tone: 'card', small });
+      continue;
+    }
+    if (e.cash !== undefined) cash += e.cash;
+  }
+  if (Math.round(cash) !== 0) out.unshift({ position, text: `${cash > 0 ? '+' : ''}${formatMoney(cash)}`, tone: cash > 0 ? 'plus' : 'minus', small });
+  return out;
+}
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -48,7 +71,9 @@ export function App() {
   const [spinValue, setSpinValue] = useState<number | null>(null);
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
   const [moveLabel, setMoveLabel] = useState<string | null>(null);
-  const [overview, setOverview] = useState(false);
+  /** 盤面の見え方（design.md 3.1）。follow: 駒の周り、pan: 視点を移動、overview: 全体図 */
+  const [viewMode, setViewMode] = useState<'follow' | 'pan' | 'overview'>('follow');
+  const overview = viewMode === 'overview';
   /** はじめから: キャラクターを選んでいる間 */
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -56,6 +81,18 @@ export function App() {
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
   const [tradeYear, setTradeYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
+  // 駒の頭の上に浮かべる文字（design.md 10.1）。出してから FLOAT_MS で消す
+  const [floats, setFloats] = useState<PieceFloat[]>([]);
+  const floatKey = useRef(0);
+  const addFloats = (list: Omit<PieceFloat, 'key'>[]) => {
+    if (!list.length) return;
+    const items = list.map((f) => ({ ...f, key: ++floatKey.current }));
+    setFloats((fs) => [...fs, ...items]);
+    const keys = new Set(items.map((f) => f.key));
+    timers.current.push(window.setTimeout(() => setFloats((fs) => fs.filter((f) => !keys.has(f.key))), FLOAT_MS));
+  };
+  /** 駒の頭の上に出したところまでの、あなたの記録の数 */
+  const floatSeen = useRef<number | null>(null);
   /** 前に見た記録の数（お金が光る強さを、新しく増えた記録から決めるため） */
   const seenLog = useRef(0);
 
@@ -64,7 +101,7 @@ export function App() {
   const busy = spinning || movingPos !== null;
   // 大きなイベントやニュースの画面を出している間も、ほかの画面は止める
   /** ターンの始めの様子（今月のまとめで、前と後を比べるため。design.md 2.3） */
-  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[] } | null>(null);
+  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[]; rivalLogLen: number[] } | null>(null);
   /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
   const [turnMoving, setTurnMoving] = useState(false);
   /** あなたの番が終わった（選ぶ出来事が残っていない） */
@@ -163,6 +200,35 @@ export function App() {
     return () => window.clearTimeout(id);
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
+  // 駒の頭の上の文字（design.md 10.1）
+  // あなた: 新しく増えた記録から、お金の動き、もらったカード、ボーナスを出す。大きなイベントとニュースは、あとの画面で見せるので出さない
+  useEffect(() => {
+    if (!game) {
+      floatSeen.current = null;
+      return;
+    }
+    const seen = floatSeen.current;
+    floatSeen.current = game.log.length;
+    // はじめて見るゲーム（続きからなど）は、今までの記録を出さない
+    if (seen === null || seen >= game.log.length) return;
+    addFloats(floatsOf(game.log.slice(seen), movingPos ?? game.player.position, false));
+  }, [game?.log.length]);
+  // 給料と生活費のアクションも、駒の頭の上に出す
+  useEffect(() => {
+    if (!paying || !cashShown?.label || !game || !m) return;
+    const v = payIndex === 1 ? shownTotal(m.income) : -shownTotal(m.expense);
+    if (v === 0) return;
+    addFloats([{ position: game.player.position, text: `${v > 0 ? '+' : ''}${formatMoney(v)} ${cashShown.label}`, tone: v > 0 ? 'plus' : 'minus' }]);
+  }, [paying, payIndex]);
+  // ライバル: 1人の番を見せ終わったら、その人の駒の上に、その月の動きを小さく出す
+  useEffect(() => {
+    if (!rivalsMoving || !game || !turnStart || rs.r === 0 || rs.i !== -1) return;
+    const k = rs.r - 1;
+    const r = game.rivals[k];
+    if (!r) return;
+    addFloats(floatsOf(r.log.slice(turnStart.rivalLogLen[k] ?? r.log.length), r.player.position, true));
+  }, [rivalsMoving, rs.r, rs.i]);
+
   // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
   const turnComplete = humanDone && monthEnded && !celebrating && !paying && !summary && !rivalsMoving;
   useEffect(() => {
@@ -252,7 +318,7 @@ export function App() {
   /** ターンの始めの様子を覚えておく */
   const markTurnStart = (s: GameState) => {
     setTurnMoving(true);
-    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position) });
+    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position), rivalLogLen: s.rivals.map((r) => r.log.length) });
   };
 
   const spin = () => {
@@ -263,7 +329,7 @@ export function App() {
     setSpinValue(next.lastRoll);
     setSpinning(true);
     sfx.spin(SPIN_DURATION_MS);
-    setOverview(false);
+    setViewMode('follow');
     later(() => {
       setSpinning(false);
       move(next);
@@ -277,7 +343,7 @@ export function App() {
     const next = roll(game, { index, exact });
     const face = next.lastFace!;
     const times = next.lastRoll! / face;
-    setOverview(false);
+    setViewMode('follow');
     setSpinValue(face);
     setMoveLabel(
       times > 1
@@ -347,6 +413,7 @@ export function App() {
             <Board
               position={movingPos ?? game.player.position}
               overview={overview}
+              pan={viewMode === 'pan'}
               bonus={game.bonusSquare}
               married={game.player.married}
               look={lookOf(game, 'you')}
@@ -358,6 +425,15 @@ export function App() {
               }))}
               focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
               landed={humanDone ? game.player.position : undefined}
+              floats={floats}
+              forks={readyInTurn && game.phase === 'decision' && game.decision?.kind === 'fork' ? BOARD[game.player.position].next : []}
+              onFork={(to) => {
+                // 選んだ道へ、残りのマス数だけ進む（駒を1マスずつ動かす）
+                const next = choose(game, `path:${to}`);
+                setTurnMoving(true);
+                setMovingPos(game.player.position);
+                move(next);
+              }}
             />
             {announcing && (
               <div className="bonus-announce" role="status">
@@ -366,21 +442,33 @@ export function App() {
               </div>
             )}
             <div className="board-toolbar">
-              <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
-                {t(overview ? 'board.follow' : 'board.overview')}
-              </button>
+              {viewMode === 'follow' && (
+                <button className="secondary" onClick={() => setViewMode('pan')} disabled={busy}>
+                  {t('board.pan')}
+                </button>
+              )}
+              {viewMode === 'pan' && (
+                <button className="secondary" onClick={() => setViewMode('overview')}>
+                  {t('board.overview')}
+                </button>
+              )}
+              {viewMode !== 'follow' && (
+                <button className="secondary" onClick={() => setViewMode('follow')}>
+                  {t('board.back')}
+                </button>
+              )}
               <MuteButton />
             </div>
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
-              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
+              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && viewMode === 'follow'}
               onSpin={spin}
               resultLabel={moveLabel ?? undefined}
             />
             <CardHand
               s={game}
-              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
+              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && viewMode === 'follow'}
               onMove={moveWithCard}
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
@@ -409,7 +497,7 @@ export function App() {
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}
-        {readyInTurn && game.phase === 'decision' && alerts.length === 0 && (
+        {readyInTurn && game.phase === 'decision' && game.decision?.kind !== 'fork' && alerts.length === 0 && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
           <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
         )}

@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
 import { SquareIcon } from './SquareIcon';
-import { BOARD, BOARD_WORLD, ROUTE_POINTS } from '../data/board';
+import { BOARD, BOARD_WORLD, BRANCH_POINTS, ROUTE_POINTS } from '../data/board';
 import type { SquareType } from '../game/types';
-import { t } from '../i18n';
+import { formatMoney, t } from '../i18n';
+import { BONUS } from '../data/rules';
 
 export const SQUARE_COLORS: Record<SquareType, string> = {
   start: '#ffb703',
@@ -47,9 +48,10 @@ function buildDecorations(): Deco[] {
   const items: Deco[] = [];
   const nearSquare = (x: number, y: number, d: number) => BOARD.some((sq) => Math.hypot(sq.x - x, sq.y - y) < d);
   const nearRoad = (x: number, y: number, d = 70) => {
-    for (let i = 1; i < ROUTE_POINTS.length; i++) {
-      const a = ROUTE_POINTS[i - 1];
-      const b = ROUTE_POINTS[i];
+    for (const line of [ROUTE_POINTS, ...BRANCH_POINTS])
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
       const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
       const r = Math.max(0, Math.min(1, ((x - a.x) * (b.x - a.x) + (y - a.y) * (b.y - a.y)) / len2));
       if (Math.hypot(x - (a.x + r * (b.x - a.x)), y - (a.y + r * (b.y - a.y))) < d) return true;
@@ -157,6 +159,8 @@ interface Props {
   bonus?: number;
   /** true なら盤面全体を映す。false なら駒の周りを拡大して追いかける */
   overview: boolean;
+  /** true なら、駒の周りの大きさのまま、盤面をドラッグして先を見られる（視点を移動。design.md 3.1） */
+  pan?: boolean;
   /** 結婚しているか（結婚・出産マスの絵を、指輪から赤ちゃんに変える） */
   married?: boolean;
   /** あなたのキャラクター（design.md 10.1） */
@@ -169,6 +173,55 @@ interface Props {
   focus?: number;
   /** 止まったばかりのマス（光らせる） */
   landed?: number;
+  /** 駒の頭の上に浮かべる文字（お金の動き、もらったカード。design.md 10.1） */
+  floats?: PieceFloat[];
+  /** 分かれ道で選べる道（次のマス）。あれば、あなたの駒のマスから矢印を出す（design.md 3.11） */
+  forks?: number[];
+  onFork?: (to: number) => void;
+}
+
+/** 駒の頭の上に浮かべる文字 */
+export interface PieceFloat {
+  /** 何回目か（同じ文字でも、出すたびに動きをやり直すため） */
+  key: number;
+  /** どのマスの駒の上か */
+  position: number;
+  text: string;
+  tone: 'plus' | 'minus' | 'card' | 'bonus';
+  /** ライバルの分は小さめ */
+  small?: boolean;
+}
+
+/** ボーナスマス。金色のマスに大きな星。光の輪とキラキラが回り、上に「BONUS ＋30万円」の札を立てる */
+function BonusTile({ x, y, landed, overview }: { x: number; y: number; landed: boolean; overview: boolean }) {
+  const r = SIZE / 2;
+  return (
+    // 全体図ではマスが小さいので、ボーナスマスだけ大きく描いて目立たせる
+    <g transform={`translate(${x} ${y}) scale(${overview ? 1.9 : 1.18})`}>
+      <circle className="bonus-glow" r={r + 16} fill="#ffe066" opacity="0.45" />
+      <rect x={-r} y={-r + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.16)" />
+      <rect x={-r} y={-r} width={SIZE} height={SIZE} rx="16" fill="url(#bonus-gold)" stroke="#fff" strokeWidth="5" />
+      <path
+        d="M0,-26 L7.6,-10.5 L24.7,-8 L12.4,4 L15.3,21 L0,13 L-15.3,21 L-12.4,4 L-24.7,-8 L-7.6,-10.5 Z"
+        fill="#fff8d6"
+        stroke="#c98a00"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      <g className="bonus-sparkles">
+        {[0, 72, 144, 216, 288].map((deg) => (
+          <path key={deg} transform={`rotate(${deg}) translate(0 ${-r - 14})`} d="M0,-6 Q1,-1 6,0 Q1,1 0,6 Q-1,1 -6,0 Q-1,-1 0,-6 Z" fill="#fffbe6" stroke="#e0a800" strokeWidth="1" />
+        ))}
+      </g>
+      {landed && <rect className="square-landed" x={-r - 4} y={-r - 4} width={SIZE + 8} height={SIZE + 8} rx="19" fill="none" stroke="#fff6a8" strokeWidth="6" />}
+      <g transform={`translate(0 ${-r - 30})`}>
+        <rect x="-68" y="-15" width="136" height="26" rx="13" fill="#ff4d6d" stroke="#fff" strokeWidth="3" />
+        <text y="4" textAnchor="middle" fontSize="15" fontWeight="900" fill="#fff">
+          {`BONUS +${formatMoney(BONUS.amount)}`}
+        </text>
+      </g>
+    </g>
+  );
 }
 
 /** 人の駒（キャラクター）。家族は、うしろに小さく並んで一緒に歩く（design.md 10.1） */
@@ -220,7 +273,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed }: Props) {
+export function Board({ position, overview, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -230,7 +283,11 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   useEffect(() => {
     if (overview) setCamera(fitCamera());
-  }, [overview]);
+    // 視点を移動: 駒の周りの大きさのまま、今の駒の場所から始める
+    else if (pan) setCamera({ scale: FOLLOW_SCALE, tx: VIEW.width / 2 - here.x * FOLLOW_SCALE, ty: VIEW.height / 2 - here.y * FOLLOW_SCALE });
+  }, [overview, pan]);
+  /** ドラッグで動かせる（全体図か、視点を移動の間） */
+  const free = overview || pan;
 
   /** 画面上の位置を、盤面の枠（viewBox）の中の位置にする */
   const toView = (clientX: number, clientY: number) => {
@@ -255,7 +312,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   }, [overview]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!overview) return;
+    if (!free) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, toView(e.clientX, e.clientY));
     setDragging(true);
@@ -263,7 +320,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const map = pointers.current;
     const before = map.get(e.pointerId);
-    if (!overview || !before) return;
+    if (!free || !before) return;
     const now = toView(e.clientX, e.clientY);
     if (map.size >= 2) {
       // 2本の指でつまむ: 指の間の長さの変わり方で拡大・縮小し、指の真ん中の動きでずらす
@@ -272,7 +329,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
       const d1 = Math.hypot(now.x - other.x, now.y - other.y);
       const mid = { x: (now.x + other.x) / 2, y: (now.y + other.y) / 2 };
       const shift = { x: (now.x - before.x) / 2, y: (now.y - before.y) / 2 };
-      if (d0 > 0) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
+      if (d0 > 0 && overview) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
     } else {
       setCamera((c) => clampCamera({ ...c, tx: c.tx + now.x - before.x, ty: c.ty + now.y - before.y }));
     }
@@ -283,10 +340,11 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
     if (pointers.current.size === 0) setDragging(false);
   };
 
-  const scale = overview ? camera.scale : FOLLOW_SCALE;
-  const tx = overview ? camera.tx : VIEW.width / 2 - here.x * scale;
-  const ty = overview ? camera.ty : VIEW.height / 2 - here.y * scale;
+  const scale = free ? camera.scale : FOLLOW_SCALE;
+  const tx = free ? camera.tx : VIEW.width / 2 - here.x * scale;
+  const ty = free ? camera.ty : VIEW.height / 2 - here.y * scale;
   const road = ROUTE_POINTS.map((p) => `${p.x},${p.y}`).join(' ');
+  const branchRoads = BRANCH_POINTS.map((line) => line.map((p) => `${p.x},${p.y}`).join(' '));
 
   return (
     <>
@@ -296,12 +354,18 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
         preserveAspectRatio="xMidYMid slice"
         role="img"
         aria-label={t('app.title')}
-        className={overview ? 'board-overview' : undefined}
+        className={free ? 'board-overview' : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
+        <defs>
+          <linearGradient id="bonus-gold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#ffe27a" />
+            <stop offset="1" stopColor="#f5a800" />
+          </linearGradient>
+        </defs>
         <rect width={VIEW.width} height={VIEW.height} fill="#bfe8c8" />
         <g style={{ transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: dragging ? 'none' : 'transform 0.3s ease', transformOrigin: '0 0' }}>
           <rect width={BOARD_WORLD.width} height={BOARD_WORLD.height} rx="40" fill="#c9eccf" />
@@ -311,7 +375,24 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
           <polyline points={road} fill="none" stroke="#d9bf8c" strokeWidth="110" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#efdcae" strokeWidth="102" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#f8ecd0" strokeWidth="88" strokeLinejoin="round" strokeLinecap="round" />
-          {BOARD.map((sq) => (
+          {/* 分かれた道（design.md 3.11）。元の道より少し細く */}
+          {branchRoads.map((pts, i) => (
+            <g key={i}>
+              <polyline points={pts} fill="none" stroke="#d9bf8c" strokeWidth="98" strokeLinejoin="round" strokeLinecap="round" />
+              <polyline points={pts} fill="none" stroke="#f3e2b8" strokeWidth="80" strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          ))}
+          {/* 別の道の入り口の看板 */}
+          {BOARD.filter((sq) => (sq.route === 'risk' || sq.route === 'invest') && BOARD.some((f) => f.next[1] === sq.id)).map((sq) => (
+            // 道の入り口の横に立てる（マスと重ならないように）
+            <g key={`sign-${sq.id}`} transform={`translate(${sq.x + (sq.route === 'risk' ? -125 : 125)} ${sq.y})`}>
+              <rect x="-70" y="-17" width="140" height="30" rx="8" fill={sq.route === 'risk' ? '#d6336c' : '#2ec4b6'} stroke="#fff" strokeWidth="3" />
+              <text y="5" textAnchor="middle" fontSize="16" fontWeight="900" fill="#fff">
+                {t(`route.${sq.route}`)}
+              </text>
+            </g>
+          ))}
+          {BOARD.filter((sq) => sq.id !== bonus).map((sq) => (
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
               <rect x={-SIZE / 2} y={-SIZE / 2 + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.14)" />
               <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx="16" fill={SQUARE_COLORS[sq.type]} stroke="#fff" strokeWidth="5" />
@@ -321,14 +402,6 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
               {sq.id === landed && (
                 <rect className="square-landed" x={-SIZE / 2 - 4} y={-SIZE / 2 - 4} width={SIZE + 8} height={SIZE + 8} rx="19" fill="none" stroke="#fff6a8" strokeWidth="6" />
               )}
-              {sq.id === bonus && (
-                <g>
-                  <rect x={-SIZE / 2 - 6} y={-SIZE / 2 - 6} width={SIZE + 12} height={SIZE + 12} rx="20" fill="none" stroke="#ff4d6d" strokeWidth="6" strokeDasharray="10 6" />
-                  <text y={-SIZE / 2 - 12} textAnchor="middle" fontSize="20" fontWeight="900" fill="#ff4d6d">
-                    BONUS
-                  </text>
-                </g>
-              )}
               {sq.type === 'start' && (
                 <text y={-SIZE / 2 - 10} textAnchor="middle" fontSize="20" fontWeight="900" fill="#b36b00">
                   START
@@ -336,6 +409,8 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
               )}
             </g>
           ))}
+          {/* ボーナスマスは、元のマスの見た目を残さず、専用の見た目で、ほかのマスより手前に少し大きく描く（design.md 3.10） */}
+          {bonus !== undefined && BOARD[bonus] && <BonusTile x={BOARD[bonus].x} y={BOARD[bonus].y} landed={landed === bonus} overview={overview} />}
           {/* 同じマスにいる駒は、横に少しずらして重ならないようにする。あなたの駒は一番手前 */}
           {[...others.map((o) => ({ ...o, me: false })), { position, look, family, me: true }].map((piece, k, all) => {
             const sq = BOARD[piece.position];
@@ -343,6 +418,39 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
             return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
           })}
+          {/* 分かれ道の矢印（文字は出さない）。押すと、その道へ進む */}
+          {forks.map((to) => {
+            const here = BOARD[position];
+            const next = BOARD[to];
+            const angle = (Math.atan2(next.y - here.y, next.x - here.x) * 180) / Math.PI;
+            const mx = here.x + (next.x - here.x) * 0.55;
+            const my = here.y + (next.y - here.y) * 0.55;
+            return (
+              <g key={`fork-${to}`} transform={`translate(${mx} ${my}) rotate(${angle})`} className="fork-arrow" onClick={() => onFork?.(to)} role="button" aria-label={t('fork.title')}>
+                <g className="fork-arrow-pulse">
+                  <path d="M-30,-16 L6,-16 L6,-32 L40,0 L6,32 L6,16 L-30,16 Z" fill="#ff7a45" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+                </g>
+              </g>
+            );
+          })}
+          {/* 駒の頭の上の文字。全体図では駒が小さいので出さない */}
+          {!overview &&
+            floats.map((f) => {
+              const sq = BOARD[f.position];
+              if (!sq) return null;
+              // 同じ駒の上にいくつも出ているときは、新しいものを下にして、古いものを上に押し上げる
+              const same = floats.filter((o) => o.position === f.position);
+              const above = same.length - 1 - same.indexOf(f);
+              return (
+                <g key={f.key} style={{ transform: `translate(${sq.x}px, ${sq.y - 112 - above * 40}px)`, transition: 'transform 0.3s ease-out' }}>
+                  <g className={`piece-float ${f.tone}${f.small ? ' small' : ''}`}>
+                    <text textAnchor="middle" fontSize={f.small ? 22 : f.tone === 'bonus' ? 36 : 30} fontWeight="900">
+                      {f.text}
+                    </text>
+                  </g>
+                </g>
+              );
+            })}
         </g>
       </svg>
       {overview && (

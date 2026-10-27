@@ -29,7 +29,9 @@ function started(seed = 1): GameState {
 
 const withHand = (s: GameState, hand: string[]): GameState => ({ ...s, player: { ...s.player, hand } });
 /** ボーナスマスを、届かない遠くに置く（ほかのテストのじゃまをしないように） */
-const farBonus = (s: GameState): GameState => ({ ...s, bonusSquare: (s.player.position + 50) % BOARD.length });
+const farBonus = (s: GameState): GameState => ({ ...s, bonusSquare: (s.player.position + 50) % 200 });
+/** 元の道の、その種類のマスのうち、1つ手前が分かれ道でないもの（1マス進んで止まれるように） */
+const plainIndex = (type: string) => BOARD.findIndex((sq, i) => sq.type === type && sq.route === 'main' && i > 0 && BOARD[i - 1].next.length === 1 && BOARD[i - 1].next[0] === i);
 
 describe('カード', () => {
   it('cards.json にまちがいがなく、画面の文字がある', () => {
@@ -41,11 +43,11 @@ describe('カード', () => {
     }
   });
   it('カードマスに止まると、カードが1枚もらえる', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'card');
+    const index = plainIndex('card');
     for (let seed = 1; seed < 300; seed++) {
       const base = farBonus(started());
       const s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
-      if (s.player.position !== index) continue;
+      if (s.player.position !== index || s.lastRoll !== 1) continue;
       expect(s.player.hand).toHaveLength(1);
       expect(s.log.some((l) => l.key === 'card.get')).toBe(true);
       return;
@@ -53,11 +55,11 @@ describe('カード', () => {
     throw new Error('not found');
   });
   it('手札が4枚になったら、1枚捨てる', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'card');
+    const index = plainIndex('card');
     for (let seed = 1; seed < 300; seed++) {
       const base = farBonus(withHand(started(), ['dash', 'dash', 'dash']));
       let s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
-      if (s.player.position !== index) continue;
+      if (s.player.position !== index || s.lastRoll !== 1) continue;
       expect(s.decision?.kind).toBe('discard');
       expect(getOptions(s)).toHaveLength(HAND_MAX + 1);
       s = choose(s, 'discard:0');

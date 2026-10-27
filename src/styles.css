@@ -2270,3 +2270,109 @@ h2 {
   width: 20px;
   height: 20px;
 }
+
+/* ボーナスマス（design.md 3.10）: 光の輪がゆっくり光り、キラキラが回る */
+.bonus-glow {
+  animation: bonus-glow 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes bonus-glow {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+.bonus-sparkles {
+  animation: bonus-spin 6s linear infinite;
+}
+@keyframes bonus-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bonus-glow,
+  .bonus-sparkles {
+    animation: none;
+  }
+}
+
+/* 駒の頭の上に浮かぶ文字（design.md 10.1） */
+.piece-float {
+  opacity: 0;
+  animation: piece-float 1.8s ease-out forwards;
+}
+.piece-float text {
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 7px;
+  stroke-linejoin: round;
+}
+.piece-float.plus text {
+  fill: #0f8a7e;
+}
+.piece-float.minus text {
+  fill: #d63a33;
+}
+.piece-float.card text {
+  fill: #4d6cff;
+}
+.piece-float.bonus text {
+  fill: #e09a00;
+}
+@keyframes piece-float {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  25% {
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .piece-float {
+    animation: none;
+  }
+}
+
+/* 分かれ道の矢印（design.md 3.11） */
+.fork-arrow {
+  cursor: pointer;
+}
+.fork-arrow-pulse {
+  animation: fork-pulse 0.9s ease-in-out infinite;
+}
+.fork-arrow:hover .fork-arrow-pulse path {
+  fill: #e8602b;
+}
+@keyframes fork-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fork-arrow-pulse {
+    animation: none;
+  }
+}

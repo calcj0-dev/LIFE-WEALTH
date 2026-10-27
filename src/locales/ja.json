@@ -457,7 +457,6 @@
   "prices.depositRate": "預金金利",
   "prices.incomeNote": "この表は値上がり率だけです。このほかに毎年、株は配当、国債は利息が入ります。銀行預金の金利は、はじめ{deposit}%で、ニュースによって変わります。",
   "board.overview": "全体図",
-  "board.follow": "駒を追う",
   "auto.close": "閉じる（自動で閉じます）",
   "auto.news.heading": "{year}年目の年末のニュース",
   "auto.yearEnd.heading": "{year}年目の決算",
@@ -613,5 +612,12 @@
   "bonus.announceDistance": "あなたの駒から あと{n}マス",
   "rivalAlert.bonusTaken": "{name}にボーナスを取られた！",
   "sound.on": "音を消す",
-  "sound.off": "音を出す"
+  "sound.off": "音を出す",
+  "board.pan": "視点を移動",
+  "board.back": "戻る",
+  "fork.title": "分かれ道",
+  "fork.text": "矢印を押して、進む道を選んでください。",
+  "option.fork": "この道へ進む",
+  "route.risk": "ハイリスクの道",
+  "route.invest": "投資の道"
 }
