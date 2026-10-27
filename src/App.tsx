@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Board } from './board/Board';
+import { Board, type PieceFloat } from './board/Board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
 import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
-import type { GameState } from './game/types';
-import { t } from './i18n';
+import type { GameState, LogEntry } from './game/types';
+import { formatMoney, t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { FeedPanel } from './ui/Feed';
 import { Hud, SidePanel } from './ui/GameScreen';
@@ -35,8 +35,30 @@ const PAY_STEP_MS = [300, 650, 650, 250];
 /** ライバルの駒が1マス進む時間と、ライバルの番の前後の間（ミリ秒。design.md 12.2） */
 const RIVAL_STEP_MS = 130;
 const RIVAL_PAUSE_MS = 400;
+/** 駒の頭の上の文字を出しておく時間（ミリ秒） */
+const FLOAT_MS = 1800;
 /** 次のボーナスマスの発表を見せる時間（ミリ秒） */
 const ANNOUNCE_MS = 1800;
+
+/** 記録から、駒の頭の上に出す文字を作る（お金の合計、もらったカード、ボーナス） */
+function floatsOf(entries: LogEntry[], position: number, small: boolean): Omit<PieceFloat, 'key'>[] {
+  const out: Omit<PieceFloat, 'key'>[] = [];
+  let cash = 0;
+  for (const e of entries) {
+    if (e.key.startsWith('bigEvent.') || e.key.startsWith('news.')) continue;
+    if (e.key === 'bonus.get') {
+      out.push({ position, text: `★ +${formatMoney(e.cash ?? 0)}`, tone: 'bonus', small });
+      continue;
+    }
+    if ((e.key === 'card.get' || e.key === 'card.getLucky') && typeof e.params?.card === 'string') {
+      out.push({ position, text: `${cardIcon(e.params.card)} ${t(`card.${e.params.card}`)}`, tone: 'card', small });
+      continue;
+    }
+    if (e.cash !== undefined) cash += e.cash;
+  }
+  if (Math.round(cash) !== 0) out.unshift({ position, text: `${cash > 0 ? '+' : ''}${formatMoney(cash)}`, tone: cash > 0 ? 'plus' : 'minus', small });
+  return out;
+}
 
 export function App() {
   const [game, setGameState] = useState<GameState | null>(null);
@@ -56,6 +78,18 @@ export function App() {
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
   const [tradeYear, setTradeYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
+  // 駒の頭の上に浮かべる文字（design.md 10.1）。出してから FLOAT_MS で消す
+  const [floats, setFloats] = useState<PieceFloat[]>([]);
+  const floatKey = useRef(0);
+  const addFloats = (list: Omit<PieceFloat, 'key'>[]) => {
+    if (!list.length) return;
+    const items = list.map((f) => ({ ...f, key: ++floatKey.current }));
+    setFloats((fs) => [...fs, ...items]);
+    const keys = new Set(items.map((f) => f.key));
+    timers.current.push(window.setTimeout(() => setFloats((fs) => fs.filter((f) => !keys.has(f.key))), FLOAT_MS));
+  };
+  /** 駒の頭の上に出したところまでの、あなたの記録の数 */
+  const floatSeen = useRef<number | null>(null);
   /** 前に見た記録の数（お金が光る強さを、新しく増えた記録から決めるため） */
   const seenLog = useRef(0);
 
@@ -64,7 +98,7 @@ export function App() {
   const busy = spinning || movingPos !== null;
   // 大きなイベントやニュースの画面を出している間も、ほかの画面は止める
   /** ターンの始めの様子（今月のまとめで、前と後を比べるため。design.md 2.3） */
-  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[] } | null>(null);
+  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[]; rivalLogLen: number[] } | null>(null);
   /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
   const [turnMoving, setTurnMoving] = useState(false);
   /** あなたの番が終わった（選ぶ出来事が残っていない） */
@@ -163,6 +197,35 @@ export function App() {
     return () => window.clearTimeout(id);
   }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
 
+  // 駒の頭の上の文字（design.md 10.1）
+  // あなた: 新しく増えた記録から、お金の動き、もらったカード、ボーナスを出す。大きなイベントとニュースは、あとの画面で見せるので出さない
+  useEffect(() => {
+    if (!game) {
+      floatSeen.current = null;
+      return;
+    }
+    const seen = floatSeen.current;
+    floatSeen.current = game.log.length;
+    // はじめて見るゲーム（続きからなど）は、今までの記録を出さない
+    if (seen === null || seen >= game.log.length) return;
+    addFloats(floatsOf(game.log.slice(seen), movingPos ?? game.player.position, false));
+  }, [game?.log.length]);
+  // 給料と生活費のアクションも、駒の頭の上に出す
+  useEffect(() => {
+    if (!paying || !cashShown?.label || !game || !m) return;
+    const v = payIndex === 1 ? shownTotal(m.income) : -shownTotal(m.expense);
+    if (v === 0) return;
+    addFloats([{ position: game.player.position, text: `${v > 0 ? '+' : ''}${formatMoney(v)} ${cashShown.label}`, tone: v > 0 ? 'plus' : 'minus' }]);
+  }, [paying, payIndex]);
+  // ライバル: 1人の番を見せ終わったら、その人の駒の上に、その月の動きを小さく出す
+  useEffect(() => {
+    if (!rivalsMoving || !game || !turnStart || rs.r === 0 || rs.i !== -1) return;
+    const k = rs.r - 1;
+    const r = game.rivals[k];
+    if (!r) return;
+    addFloats(floatsOf(r.log.slice(turnStart.rivalLogLen[k] ?? r.log.length), r.player.position, true));
+  }, [rivalsMoving, rs.r, rs.i]);
+
   // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
   const turnComplete = humanDone && monthEnded && !celebrating && !paying && !summary && !rivalsMoving;
   useEffect(() => {
@@ -252,7 +315,7 @@ export function App() {
   /** ターンの始めの様子を覚えておく */
   const markTurnStart = (s: GameState) => {
     setTurnMoving(true);
-    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position) });
+    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position), rivalLogLen: s.rivals.map((r) => r.log.length) });
   };
 
   const spin = () => {
@@ -358,6 +421,7 @@ export function App() {
               }))}
               focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
               landed={humanDone ? game.player.position : undefined}
+              floats={floats}
             />
             {announcing && (
               <div className="bonus-announce" role="status">

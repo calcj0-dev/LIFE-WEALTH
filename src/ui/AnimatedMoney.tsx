@@ -29,6 +29,7 @@ export function AnimatedMoney({
   className,
   label,
   sound,
+  float = true,
 }: {
   value: number;
   level?: MoneyLevel;
@@ -37,6 +38,8 @@ export function AnimatedMoney({
   label?: string;
   /** 動いたときに音を鳴らす（銀行預金の数字だけ） */
   sound?: boolean;
+  /** false なら、浮かぶ金額とコインを出さない（光るだけ。金額は駒の頭の上に出す。design.md 10.1） */
+  float?: boolean;
 }) {
   const prev = useRef(value);
   const [delta, setDelta] = useState<{ v: number; level: MoneyLevel; key: number; label?: string } | null>(null);
@@ -64,14 +67,14 @@ export function AnimatedMoney({
   return (
     <span className={`animated-money${tone}${className ? ` ${className}` : ''}`} key={delta?.key}>
       {formatMoney(value)}
-      {delta && delta.level !== 'weak' && delta.v > 0 && (
+      {float && delta && delta.level !== 'weak' && delta.v > 0 && (
         <span className="coin-burst" aria-hidden="true">
           <i />
           <i />
           <i />
         </span>
       )}
-      {delta && delta.level !== 'weak' && (
+      {float && delta && delta.level !== 'weak' && (
         <span className={`money-float ${delta.v > 0 ? 'plus' : 'minus'}${delta.level === 'strong' ? ' strong' : ''}`}>
           {delta.v > 0 ? '+' : ''}
           {formatMoney(delta.v)}

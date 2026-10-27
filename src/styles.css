@@ -2302,3 +2302,52 @@ h2 {
     animation: none;
   }
 }
+
+/* 駒の頭の上に浮かぶ文字（design.md 10.1） */
+.piece-float {
+  opacity: 0;
+  animation: piece-float 1.8s ease-out forwards;
+}
+.piece-float text {
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 7px;
+  stroke-linejoin: round;
+}
+.piece-float.plus text {
+  fill: #0f8a7e;
+}
+.piece-float.minus text {
+  fill: #d63a33;
+}
+.piece-float.card text {
+  fill: #4d6cff;
+}
+.piece-float.bonus text {
+  fill: #e09a00;
+}
+@keyframes piece-float {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  25% {
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .piece-float {
+    animation: none;
+  }
+}

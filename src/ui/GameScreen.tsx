@@ -20,7 +20,7 @@ export function Hud({ s, level, date }: { s: GameState; level?: MoneyLevel; /** 
       </div>
       <div className="hud-item hud-worth">
         <span className="label">{t('hud.netWorth')}</span>
-        <AnimatedMoney className="value" value={netWorth(s)} level={level} />
+        <AnimatedMoney className="value" value={netWorth(s)} level={level} float={false} />
       </div>
       <RankStrip s={s} />
       <div className="hud-item">
@@ -88,7 +88,7 @@ export function SidePanel({
       <RivalFeed s={s} hideMonth={hideRivalMonth} />
       <div className="card panel-assets">
         <h4>{t('panel.assets')}</h4>
-        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} sound />} />
+        <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} sound float={false} />} />
         {owned.map((id) => (
           <Row key={id} k={holdingName(s, id)} v={formatMoney(assetValue(s, id))} />
         ))}

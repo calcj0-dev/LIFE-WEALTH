@@ -170,6 +170,20 @@ interface Props {
   focus?: number;
   /** 止まったばかりのマス（光らせる） */
   landed?: number;
+  /** 駒の頭の上に浮かべる文字（お金の動き、もらったカード。design.md 10.1） */
+  floats?: PieceFloat[];
+}
+
+/** 駒の頭の上に浮かべる文字 */
+export interface PieceFloat {
+  /** 何回目か（同じ文字でも、出すたびに動きをやり直すため） */
+  key: number;
+  /** どのマスの駒の上か */
+  position: number;
+  text: string;
+  tone: 'plus' | 'minus' | 'card' | 'bonus';
+  /** ライバルの分は小さめ */
+  small?: boolean;
 }
 
 /** ボーナスマス。金色のマスに大きな星。光の輪とキラキラが回り、上に「BONUS ＋30万円」の札を立てる */
@@ -253,7 +267,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed }: Props) {
+export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [] }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -376,6 +390,24 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
             return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
           })}
+          {/* 駒の頭の上の文字。全体図では駒が小さいので出さない */}
+          {!overview &&
+            floats.map((f) => {
+              const sq = BOARD[f.position];
+              if (!sq) return null;
+              // 同じ駒の上にいくつも出ているときは、新しいものを下にして、古いものを上に押し上げる
+              const same = floats.filter((o) => o.position === f.position);
+              const above = same.length - 1 - same.indexOf(f);
+              return (
+                <g key={f.key} style={{ transform: `translate(${sq.x}px, ${sq.y - 112 - above * 40}px)`, transition: 'transform 0.3s ease-out' }}>
+                  <g className={`piece-float ${f.tone}${f.small ? ' small' : ''}`}>
+                    <text textAnchor="middle" fontSize={f.small ? 22 : f.tone === 'bonus' ? 36 : 30} fontWeight="900">
+                      {f.text}
+                    </text>
+                  </g>
+                </g>
+              );
+            })}
         </g>
       </svg>
       {overview && (
