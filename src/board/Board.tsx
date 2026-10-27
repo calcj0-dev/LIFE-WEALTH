@@ -158,6 +158,8 @@ interface Props {
   bonus?: number;
   /** true なら盤面全体を映す。false なら駒の周りを拡大して追いかける */
   overview: boolean;
+  /** true なら、駒の周りの大きさのまま、盤面をドラッグして先を見られる（視点を移動。design.md 3.1） */
+  pan?: boolean;
   /** 結婚しているか（結婚・出産マスの絵を、指輪から赤ちゃんに変える） */
   married?: boolean;
   /** あなたのキャラクター（design.md 10.1） */
@@ -267,7 +269,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [] }: Props) {
+export function Board({ position, overview, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [] }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
@@ -277,7 +279,11 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   useEffect(() => {
     if (overview) setCamera(fitCamera());
-  }, [overview]);
+    // 視点を移動: 駒の周りの大きさのまま、今の駒の場所から始める
+    else if (pan) setCamera({ scale: FOLLOW_SCALE, tx: VIEW.width / 2 - here.x * FOLLOW_SCALE, ty: VIEW.height / 2 - here.y * FOLLOW_SCALE });
+  }, [overview, pan]);
+  /** ドラッグで動かせる（全体図か、視点を移動の間） */
+  const free = overview || pan;
 
   /** 画面上の位置を、盤面の枠（viewBox）の中の位置にする */
   const toView = (clientX: number, clientY: number) => {
@@ -302,7 +308,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   }, [overview]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!overview) return;
+    if (!free) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, toView(e.clientX, e.clientY));
     setDragging(true);
@@ -310,7 +316,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const map = pointers.current;
     const before = map.get(e.pointerId);
-    if (!overview || !before) return;
+    if (!free || !before) return;
     const now = toView(e.clientX, e.clientY);
     if (map.size >= 2) {
       // 2本の指でつまむ: 指の間の長さの変わり方で拡大・縮小し、指の真ん中の動きでずらす
@@ -319,7 +325,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
       const d1 = Math.hypot(now.x - other.x, now.y - other.y);
       const mid = { x: (now.x + other.x) / 2, y: (now.y + other.y) / 2 };
       const shift = { x: (now.x - before.x) / 2, y: (now.y - before.y) / 2 };
-      if (d0 > 0) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
+      if (d0 > 0 && overview) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
     } else {
       setCamera((c) => clampCamera({ ...c, tx: c.tx + now.x - before.x, ty: c.ty + now.y - before.y }));
     }
@@ -330,9 +336,9 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
     if (pointers.current.size === 0) setDragging(false);
   };
 
-  const scale = overview ? camera.scale : FOLLOW_SCALE;
-  const tx = overview ? camera.tx : VIEW.width / 2 - here.x * scale;
-  const ty = overview ? camera.ty : VIEW.height / 2 - here.y * scale;
+  const scale = free ? camera.scale : FOLLOW_SCALE;
+  const tx = free ? camera.tx : VIEW.width / 2 - here.x * scale;
+  const ty = free ? camera.ty : VIEW.height / 2 - here.y * scale;
   const road = ROUTE_POINTS.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
@@ -343,7 +349,7 @@ export function Board({ position, overview, bonus, married, look = PLAYER_LOOKS[
         preserveAspectRatio="xMidYMid slice"
         role="img"
         aria-label={t('app.title')}
-        className={overview ? 'board-overview' : undefined}
+        className={free ? 'board-overview' : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

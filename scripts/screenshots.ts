@@ -79,7 +79,11 @@ for (const vp of VIEWPORTS) {
   await page.waitForTimeout(300);
   await shot('game');
   // 盤面の全体図
-  if (await clickText(page, '.board-area', '全体図')) {
+  // 視点を移動 → 全体図
+  await clickText(page, '.board-toolbar', '視点を移動');
+  await page.waitForTimeout(400);
+  await shot('pan');
+  if (await clickText(page, '.board-toolbar', '全体図')) {
     await page.waitForTimeout(600);
     await shot('overview');
     // ホイールで拡大し、ドラッグで動かす
@@ -100,7 +104,7 @@ for (const vp of VIEWPORTS) {
       await page.waitForTimeout(400);
       await shot('overview-zoomout');
     }
-    await clickText(page, '.board-toolbar', '駒を追う');
+    await clickText(page, '.board-toolbar', '戻る');
     await page.waitForTimeout(600);
   }
 

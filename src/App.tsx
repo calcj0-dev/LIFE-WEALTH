@@ -70,7 +70,9 @@ export function App() {
   const [spinValue, setSpinValue] = useState<number | null>(null);
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
   const [moveLabel, setMoveLabel] = useState<string | null>(null);
-  const [overview, setOverview] = useState(false);
+  /** 盤面の見え方（design.md 3.1）。follow: 駒の周り、pan: 視点を移動、overview: 全体図 */
+  const [viewMode, setViewMode] = useState<'follow' | 'pan' | 'overview'>('follow');
+  const overview = viewMode === 'overview';
   /** はじめから: キャラクターを選んでいる間 */
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -326,7 +328,7 @@ export function App() {
     setSpinValue(next.lastRoll);
     setSpinning(true);
     sfx.spin(SPIN_DURATION_MS);
-    setOverview(false);
+    setViewMode('follow');
     later(() => {
       setSpinning(false);
       move(next);
@@ -340,7 +342,7 @@ export function App() {
     const next = roll(game, { index, exact });
     const face = next.lastFace!;
     const times = next.lastRoll! / face;
-    setOverview(false);
+    setViewMode('follow');
     setSpinValue(face);
     setMoveLabel(
       times > 1
@@ -410,6 +412,7 @@ export function App() {
             <Board
               position={movingPos ?? game.player.position}
               overview={overview}
+              pan={viewMode === 'pan'}
               bonus={game.bonusSquare}
               married={game.player.married}
               look={lookOf(game, 'you')}
@@ -430,21 +433,33 @@ export function App() {
               </div>
             )}
             <div className="board-toolbar">
-              <button className="secondary" onClick={() => setOverview((v) => !v)} disabled={busy}>
-                {t(overview ? 'board.follow' : 'board.overview')}
-              </button>
+              {viewMode === 'follow' && (
+                <button className="secondary" onClick={() => setViewMode('pan')} disabled={busy}>
+                  {t('board.pan')}
+                </button>
+              )}
+              {viewMode === 'pan' && (
+                <button className="secondary" onClick={() => setViewMode('overview')}>
+                  {t('board.overview')}
+                </button>
+              )}
+              {viewMode !== 'follow' && (
+                <button className="secondary" onClick={() => setViewMode('follow')}>
+                  {t('board.back')}
+                </button>
+              )}
               <MuteButton />
             </div>
             <Roulette
               value={busy || game.phase === 'decision' ? spinValue : null}
               spinning={spinning}
-              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
+              canSpin={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && viewMode === 'follow'}
               onSpin={spin}
               resultLabel={moveLabel ?? undefined}
             />
             <CardHand
               s={game}
-              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen}
+              canUse={game.phase === 'roll' && !busy && !paused && !game.tradeOpen && viewMode === 'follow'}
               onMove={moveWithCard}
               onTrade={(i) => setGame(openTradeCard(game, i))}
             />
