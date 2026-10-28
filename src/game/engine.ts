@@ -272,6 +272,7 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   if (state.tradeOpen) throw new Error('trade time is open');
   if (state.bigEvent) throw new Error('big event is showing');
   if (state.newsEvent) throw new Error('news is showing');
+  if (shortfallPending(state)) throw new Error('shortfall must be paid first');
   const s = clone(state);
   rollIn(s, card);
   return s;
@@ -1029,7 +1030,8 @@ function endMonth(s: GameState) {
   // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
   maybeNews(s);
   maybeBigEvent(s);
-  forEachSeat(s, () => coverShortfall(s));
+  // あなたは、足りない分を、あとの画面で売る資産を選んで払う（design.md 8章）。ライバルは自動で売る
+  forEachSeat(s, (i) => coverShortfall(s, i < 0));
 
   if (s.month + s.monthsPerTurn > MONTHS_PER_YEAR) {
     endYear(s);
@@ -1064,7 +1066,7 @@ function endSeatMonth(s: GameState) {
   flows.saved += saved;
   flows.repaid += repaid;
   s.lastMonth = { year: s.year, month: s.month, income, expense, saved, repaid };
-  coverShortfall(s);
+  coverShortfall(s, s.cpuSeat < 0);
   s.cardUsed = false;
 }
 
@@ -1116,9 +1118,11 @@ function recordPrices(s: GameState, month: number) {
 }
 
 /** お金が足りないときは、先に資産を売り、それでも足りない分だけカードローンで借りる（利息なし） */
-function coverShortfall(s: GameState) {
+function coverShortfall(s: GameState, manual = false) {
   const p = s.player;
   if (p.cash >= 0) return;
+  // あなたは、売れる資産があれば、自分で選んで売る（「お金が足りません」の画面）。売れる資産がなければ借金にする
+  if (manual && hasSellable(s)) return;
   let sold = 0;
   for (const id of sellOrder(s)) {
     if (p.cash >= 0) break;
@@ -1133,6 +1137,38 @@ function coverShortfall(s: GameState) {
     if (Math.round(borrowed) > 0) log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
   }
   s.yearFlows.sold += sold;
+}
+
+/** 売れる資産を持っているか（家は入れない。design.md 8章） */
+const hasSellable = (s: GameState) => ASSET_IDS.some((id) => assetValue(s, id) >= 0.01);
+
+/** 銀行預金がマイナスで、売る資産を選ぶ画面を出す必要があるか（design.md 8章） */
+export function shortfallPending(s: GameState): boolean {
+  return s.player.cash < 0 && hasSellable(s);
+}
+
+/**
+ * お金が足りないときに、選んだ資産を売る（design.md 8章）。mode が 'one' なら株は1株、ほかは1万円分。
+ * 'needed' なら、足りない分をちょうど埋めるだけ売る。売っても資産がなくなり、まだ足りなければ、残りは借金にする
+ */
+export function sellForShortfall(state: GameState, id: AssetId, mode: 'one' | 'needed'): GameState {
+  if (!shortfallPending(state)) throw new Error('no shortfall');
+  if (assetValue(state, id) < 0.01) throw new Error(`nothing to sell: ${id}`);
+  const s = clone(state);
+  const p = s.player;
+  const need = -p.cash;
+  let gained: number;
+  if (ASSETS[id].unit === 'share') {
+    const shares = mode === 'one' ? 1 : Math.ceil(need / s.market.prices[id] - 1e-9);
+    gained = sellShares(s, id, shares);
+  } else {
+    gained = sellAsset(s, id, mode === 'one' ? Math.min(1, assetValue(s, id)) : need);
+  }
+  s.yearFlows.sold += gained;
+  log(s, 'shortfall.sellOne', { params: { asset: id, amount: Math.round(gained) }, notice: true });
+  // 売れる資産がなくなったのに、まだ足りなければ、残りは借金にする
+  if (p.cash < 0 && !hasSellable(s)) coverShortfall(s);
+  return s;
 }
 
 // ---------------------------------------------------------------- 大きなイベント（design.md 5.3）
@@ -1308,6 +1344,7 @@ export function nextYear(state: GameState): GameState {
   assertPhase(state, 'yearEnd');
   if (state.bigEvent) throw new Error('big event is showing');
   if (state.newsEvent) throw new Error('news is showing');
+  if (shortfallPending(state)) throw new Error('shortfall must be paid first');
   const s = clone(state);
   if (s.year >= s.years) {
     forEachSeat(s, () => {

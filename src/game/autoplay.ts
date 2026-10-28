@@ -16,9 +16,12 @@ import {
   openTradeCard,
   recommendedSaving,
   roll,
+  sellForShortfall,
   setSaving,
+  shortfallPending,
   trade,
 } from './engine';
+import { assetValue, sellOrder } from './finance';
 import { HAND_MAX } from '../data/cards';
 import type { DecisionOption, GameState, JobId } from './types';
 
@@ -127,6 +130,16 @@ function investAtYearEnd(s: GameState, strategy: Strategy): GameState {
   return amount >= 1 ? trade(s, 'fund', amount) : s;
 }
 
+/** お金が足りなければ、決まった順番（国債 → ゴールド → 投資信託 → 株）で、足りる分だけ売る */
+export function payShortfall(state: GameState): GameState {
+  let s = state;
+  for (let guard = 0; guard < 50 && shortfallPending(s); guard++) {
+    const id = sellOrder(s).find((a) => assetValue(s, a) >= 0.01)!;
+    s = sellForShortfall(s, id, 'needed');
+  }
+  return s;
+}
+
 /** 遊んだ回数の記録（テンポの確認に使う）。popups は、ポップアップで止まった回数 */
 export interface PlayCounts {
   turns: number;
@@ -147,6 +160,7 @@ export function playGame(
   for (let guard = 0; guard < 100000; guard++) {
     if (s.bigEvent) s = dismissBigEvent(s);
     if (s.newsEvent) s = dismissNews(s);
+    s = payShortfall(s);
     switch (s.phase) {
       case 'roll':
         s = rollWithCards(s);

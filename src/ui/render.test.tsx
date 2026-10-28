@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Board } from '../board/Board';
 import { Roulette } from '../board/Roulette';
 import { playGame } from '../game/autoplay';
-import { choose, chooseJob, dismissBigEvent, dismissNews, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, shortfallPending, dismissNews, chooseYears, createGame, estimateMonth, getOptions, nextYear, roll, setSaving } from '../game/engine';
 import type { GameState } from '../game/types';
 import { App } from '../App';
 import { FeedPanel } from './Feed';
@@ -18,6 +18,8 @@ import { SavingSetup, TradeModal } from './Trade';
 import { CardHand } from './Cards';
 import { moneyLevelOf } from './AnimatedMoney';
 import { BigEventModal } from './BigEvent';
+import { ShortfallModal } from './Shortfall';
+import { payShortfall } from '../game/autoplay';
 
 const noop = () => {};
 
@@ -114,6 +116,13 @@ describe('画面', () => {
       if (s.bigEvent) {
         expect(renderToString(<BigEventModal s={s} onClose={noop} />)).not.toMatch(RAW_KEY);
         s = dismissBigEvent(s);
+        continue;
+      }
+      if (shortfallPending(s)) {
+        const html = renderToString(<ShortfallModal s={s} onChange={noop} />);
+        expect(html).toContain('お金が足りません');
+        expect(html).not.toMatch(RAW_KEY);
+        s = payShortfall(s);
         continue;
       }
       if (s.phase === 'roll') {

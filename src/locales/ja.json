@@ -621,5 +621,13 @@
   "route.risk": "ハイリスクの道",
   "route.invest": "投資の道",
   "squareType.job": "転職マス",
-  "option.jobStay": "今のままでいる"
+  "option.jobStay": "今のままでいる",
+  "label.shortfall.sellOne": "お金が足りず、{assetName}を {amount} 売った",
+  "shortfall.title": "お金が足りません",
+  "shortfall.text": "銀行預金が {amount} 足りません。持っている資産から、売るものを選んでください。",
+  "shortfall.profit": "買った額より",
+  "shortfall.sellShare": "1株売る",
+  "shortfall.sellMan": "1万円分売る",
+  "shortfall.sellNeeded": "足りない分だけ売る",
+  "shortfall.note": "足りない分を払うまで、この画面は閉じません。売れる資産がなくなったら、残りは借金（カードローン）になります。家は、取引タイムで売れます。"
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { payShortfall } from './autoplay';
 import talksJson from '../data/investTalks.json';
 import { BOARD } from '../data/board';
 import { INVEST_TALKS, checkInvestTalks, expectedMultiplier } from '../data/investTalks';
@@ -22,6 +23,7 @@ function toYearEnd(s: GameState): GameState {
   while (s.phase !== 'yearEnd') {
     if (s.bigEvent) s = dismissBigEvent(s);
     if (s.newsEvent) s = dismissNews(s);
+    s = payShortfall(s);
     if (s.phase === 'roll') s = roll(s);
     else if (s.phase === 'decision') {
       const opts = getOptions(s);

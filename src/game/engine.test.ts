@@ -14,7 +14,7 @@ import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
 import { NEWS, checkNews } from '../data/news';
 import { BIRTH, MARRIAGE, STOCK_SQUARE, YEAR_OPTIONS } from '../data/rules';
 import { has } from '../i18n';
-import { playGame } from './autoplay';
+import { payShortfall, playGame } from './autoplay';
 import {
   canSellHome,
   dismissBigEvent,
@@ -39,7 +39,7 @@ import {
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { applyNews, maybeNews, newYearMarket, updateMarketMonth, updateMarketYear } from './market';
 import { NEWS_PER_YEAR } from '../data/news';
-import { maybeBigEvent } from './engine';
+import { maybeBigEvent, sellForShortfall, shortfallPending } from './engine';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20, job = 'employee', saving: Record<string, number> = {}): GameState {
@@ -53,7 +53,7 @@ function settle(s: GameState): GameState {
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
   if (s.bigEvent) s = dismissBigEvent(s);
   if (s.newsEvent) s = dismissNews(s);
-  return s;
+  return payShortfall(s);
 }
 
 /** 年末まで進める */
@@ -221,14 +221,27 @@ describe('お金の計算', () => {
 });
 
 describe('お金が足りないとき', () => {
-  it('先に資産を売り、足りない分だけ利息なしで借りる', () => {
+  it('あなたは売る資産を選んで必ず売り、売れる資産がなくなったら、残りを利息なしで借りる', () => {
     let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
     s = { ...s, phase: 'roll', player: { ...s.player, cash: -2000 } };
-    s = landOn(s, 1);
-    s = settle(s);
+    // 足りないままでは、ルーレットを回せない
+    expect(shortfallPending(s)).toBe(true);
+    expect(() => roll(s)).toThrow();
+    s = sellForShortfall(s, 'bond', 'one');
+    expect(s.player.holdings.bond).toBeCloseTo(39, 6);
+    s = sellForShortfall(s, 'bond', 'needed');
     expect(s.player.holdings.bond).toBe(0);
     expect(s.player.cash).toBe(0);
     expect(s.player.cardLoan).toBeGreaterThan(1900);
+    expect(shortfallPending(s)).toBe(false);
+  });
+  it('月末に足りなくなっても、あなたの資産は自動では売らない（ライバルは自動で売る）', () => {
+    let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
+    s = { ...s, phase: 'roll', player: { ...s.player, cash: -500 } };
+    s.rivals[0].player.cash = -500;
+    s.rivals[0].player.holdings.bond = 40;
+    s = { ...s, player: { ...s.player, cash: 0 } };
+    expect(shortfallPending(s)).toBe(false);
   });
   it('借金は、お金が余った月に返す', () => {
     let s = started();
@@ -501,7 +514,11 @@ describe('株は1株単位、買った額を覚える', () => {
   it('お金が足りないときは、株も1株単位で売る', () => {
     let s = tradeShares(toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } }), 'it', 10);
     s = { ...s, phase: 'roll', player: { ...s.player, cash: -30 } };
-    s = settle(roll(s));
+    const held = s.player.holdings.it;
+    s = sellForShortfall(s, 'it', 'one');
+    expect(s.player.holdings.it).toBe(held - 1);
+    // 1株で足りなければ、足りない分だけ売る
+    if (shortfallPending(s)) s = sellForShortfall(s, 'it', 'needed');
     expect(Number.isInteger(s.player.holdings.it)).toBe(true);
     expect(s.player.cash).toBeGreaterThanOrEqual(0);
   });
