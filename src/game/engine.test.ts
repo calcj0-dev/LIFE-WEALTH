@@ -14,7 +14,7 @@ import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
 import { NEWS, checkNews } from '../data/news';
 import { BIRTH, MARRIAGE, STOCK_SQUARE, YEAR_OPTIONS } from '../data/rules';
 import { has } from '../i18n';
-import { playGame } from './autoplay';
+import { payShortfall, playGame } from './autoplay';
 import {
   canSellHome,
   dismissBigEvent,
@@ -39,7 +39,7 @@ import {
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { applyNews, maybeNews, newYearMarket, updateMarketMonth, updateMarketYear } from './market';
 import { NEWS_PER_YEAR } from '../data/news';
-import { maybeBigEvent } from './engine';
+import { maybeBigEvent, sellForShortfall, shortfallPending } from './engine';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20, job = 'employee', saving: Record<string, number> = {}): GameState {
@@ -53,7 +53,7 @@ function settle(s: GameState): GameState {
   while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
   if (s.bigEvent) s = dismissBigEvent(s);
   if (s.newsEvent) s = dismissNews(s);
-  return s;
+  return payShortfall(s);
 }
 
 /** 年末まで進める */
@@ -101,18 +101,33 @@ describe('データ（JSON）', () => {
 });
 
 describe('盤面', () => {
-  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約235マス', () => {
+  it('転職マスでは、転職先の候補が2つ出て、選ぶか今のままでいるかを決める', () => {
+    const index = BOARD.findIndex((sq, i) => sq.type === 'job' && i > 0 && BOARD[i - 1].next.length === 1);
+    for (let seed = 1; seed < 300; seed++) {
+      const base = started();
+      const s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
+      if (s.player.position !== index || s.lastRoll !== 1) continue;
+      const opts = getOptions(s);
+      expect(opts.filter((o) => o.id.startsWith('job:'))).toHaveLength(2);
+      expect(opts.some((o) => o.id === 'skip')).toBe(true);
+      const moved = choose(s, opts[0].id);
+      expect(moved.player.jobId).toBe(opts[0].id.slice(4));
+      return;
+    }
+    throw new Error('not found');
+  });
+  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約250マス', () => {
     const main = BOARD.filter((sq) => sq.route === 'main');
     expect(main).toHaveLength(200);
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
       expect(main.filter((sq) => sq.type === type)).toHaveLength(n);
     }
-    expect(BOARD.length).toBeGreaterThan(225);
-    expect(BOARD.length).toBeLessThan(245);
+    expect(BOARD.length).toBeGreaterThan(240);
+    expect(BOARD.length).toBeLessThan(260);
   });
-  it('分かれ道は8か所。分かれた道は、どれも元の道に合流する', () => {
+  it('分かれ道は14か所（戻る道6、近道6、別の道2）。分かれた道は、どれも元の道に合流する', () => {
     const forks = BOARD.filter((sq) => sq.next.length > 1);
-    expect(forks).toHaveLength(8);
+    expect(forks).toHaveLength(14);
     for (const f of forks) {
       let pos = f.next[1];
       for (let i = 0; i < 30 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
@@ -206,14 +221,27 @@ describe('お金の計算', () => {
 });
 
 describe('お金が足りないとき', () => {
-  it('先に資産を売り、足りない分だけ利息なしで借りる', () => {
+  it('あなたは売る資産を選んで必ず売り、売れる資産がなくなったら、残りを利息なしで借りる', () => {
     let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
     s = { ...s, phase: 'roll', player: { ...s.player, cash: -2000 } };
-    s = landOn(s, 1);
-    s = settle(s);
+    // 足りないままでは、ルーレットを回せない
+    expect(shortfallPending(s)).toBe(true);
+    expect(() => roll(s)).toThrow();
+    s = sellForShortfall(s, 'bond', 'one');
+    expect(s.player.holdings.bond).toBeCloseTo(39, 6);
+    s = sellForShortfall(s, 'bond', 'needed');
     expect(s.player.holdings.bond).toBe(0);
     expect(s.player.cash).toBe(0);
     expect(s.player.cardLoan).toBeGreaterThan(1900);
+    expect(shortfallPending(s)).toBe(false);
+  });
+  it('月末に足りなくなっても、あなたの資産は自動では売らない（ライバルは自動で売る）', () => {
+    let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
+    s = { ...s, phase: 'roll', player: { ...s.player, cash: -500 } };
+    s.rivals[0].player.cash = -500;
+    s.rivals[0].player.holdings.bond = 40;
+    s = { ...s, player: { ...s.player, cash: 0 } };
+    expect(shortfallPending(s)).toBe(false);
   });
   it('借金は、お金が余った月に返す', () => {
     let s = started();
@@ -342,7 +370,8 @@ describe('結婚と出産', () => {
       ['minusLarge', 'minus'],
       ['chance', 'chance'],
     ] as const) {
-      const index = BOARD.findIndex((sq) => sq.type === type);
+      // 1つ手前が分かれ道だと止まってしまうので、そうでないマスを使う
+      const index = BOARD.findIndex((sq, i) => sq.type === type && i > 0 && BOARD[i - 1].next.length === 1 && BOARD[i - 1].next[0] === i);
       for (let seed = 1; seed <= 15; seed++) {
         const s = landOn(started(seed), index);
         if (s.decision?.kind !== 'event') continue;
@@ -485,7 +514,11 @@ describe('株は1株単位、買った額を覚える', () => {
   it('お金が足りないときは、株も1株単位で売る', () => {
     let s = tradeShares(toYearEnd({ ...started(), player: { ...started().player, cash: 1000 } }), 'it', 10);
     s = { ...s, phase: 'roll', player: { ...s.player, cash: -30 } };
-    s = settle(roll(s));
+    const held = s.player.holdings.it;
+    s = sellForShortfall(s, 'it', 'one');
+    expect(s.player.holdings.it).toBe(held - 1);
+    // 1株で足りなければ、足りない分だけ売る
+    if (shortfallPending(s)) s = sellForShortfall(s, 'it', 'needed');
     expect(Number.isInteger(s.player.holdings.it)).toBe(true);
     expect(s.player.cash).toBeGreaterThanOrEqual(0);
   });

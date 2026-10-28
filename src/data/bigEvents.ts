@@ -11,7 +11,8 @@ export type BigEffect =
   | { t: 'living'; rate: number }
   /** 預金のうち threshold を超える分の rate を失う */
   | { t: 'depositLoss'; threshold: number; rate: number }
-  | { t: 'cash'; amount: number }
+  /** お金が動く。renterAmount を書くと、家を持っていない人はその金額になる（大地震の家財の被害など） */
+  | { t: 'cash'; amount: number; renterAmount?: number }
   /** 持ち家の損害。火災・地震保険に入っていれば保険で払われる */
   | { t: 'homeDamage'; amount: number };
 
@@ -22,11 +23,11 @@ export interface BigEventDef {
   effects: BigEffect[];
 }
 
-const EFFECT_FIELDS: Record<BigEffect['t'], Record<string, 'number' | 'array?'>> = {
+const EFFECT_FIELDS: Record<BigEffect['t'], Record<string, 'number' | 'number?' | 'array?'>> = {
   market: { min: 'number', max: 'number' },
   living: { rate: 'number' },
   depositLoss: { threshold: 'number', rate: 'number' },
-  cash: { amount: 'number' },
+  cash: { amount: 'number', renterAmount: 'number?' },
   homeDamage: { amount: 'number' },
 };
 

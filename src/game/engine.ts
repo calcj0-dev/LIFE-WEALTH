@@ -272,6 +272,7 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   if (state.tradeOpen) throw new Error('trade time is open');
   if (state.bigEvent) throw new Error('big event is showing');
   if (state.newsEvent) throw new Error('news is showing');
+  if (shortfallPending(state)) throw new Error('shortfall must be paid first');
   const s = clone(state);
   rollIn(s, card);
   return s;
@@ -453,6 +454,14 @@ function handleSquare(s: GameState) {
       if (!p.married) return startDecision(s, { kind: 'marriage' }, 'square');
       if (p.children.length >= MAX_CHILDREN) return notice('square.birth.full');
       return startDecision(s, { kind: 'birth' }, 'square');
+    case 'job': {
+      // 転職マス: 今の職業以外から、転職先の候補を2つ出す（design.md 5.1。段階7）
+      const targets = [...jobChangeTargets(s)];
+      if (!targets.length) return notice('square.nothing');
+      const a = targets.splice(randomInt(s, 0, targets.length - 1), 1)[0];
+      const b = targets.length ? targets[randomInt(s, 0, targets.length - 1)] : undefined;
+      return startDecision(s, { kind: 'event', eventId: 'jobChange', params: b ? { a, b } : { a } }, 'square');
+    }
     case 'plusSmall':
     case 'minusSmall':
     case 'plusMedium':
@@ -505,7 +514,8 @@ export function eventMatches(s: GameState, ev: EventDef): boolean {
   if (w.spouseWork !== undefined && p.spouse?.work !== w.spouseWork) return false;
   if (w.minYear !== undefined && s.year < w.minYear) return false;
   if (w.maxYear !== undefined && s.year > w.maxYear) return false;
-  if (ev.choice === 'jobChange' && jobChangeTargets(s).length === 0) return false;
+  // 転職は、段階7から転職マスだけで起きる（チャンスのマスでは起きない）
+  if (ev.choice === 'jobChange') return false;
   return true;
 }
 
@@ -576,14 +586,16 @@ export function getOptions(s: GameState): DecisionOption[] {
     case 'event': {
       const ev = EVENTS_BY_ID[d.eventId!];
       if (ev.choice === 'jobChange') {
+        // 転職マスの候補（2つ）。候補がなければ、転職できる職業すべて
+        const offered = [d.params?.a, d.params?.b].filter((j): j is string => typeof j === 'string');
         return [
-          ...jobChangeTargets(s).map((j) => ({
+          ...(offered.length ? offered : jobChangeTargets(s)).map((j) => ({
             id: `job:${j}`,
             key: 'option.job',
             params: { job: j, salary: Math.round(salaryAtYear(j, s.year) * s.market.wageIndex) },
             enabled: true,
           })),
-          { id: 'skip', key: 'option.skip', enabled: true },
+          { id: 'skip', key: 'option.jobStay', enabled: true },
         ];
       }
       if (ev.choice === 'sideBusiness') {
@@ -1018,7 +1030,8 @@ function endMonth(s: GameState) {
   // ニュースは、1年のどの月でもランダムに起きる（design.md 7章）
   maybeNews(s);
   maybeBigEvent(s);
-  forEachSeat(s, () => coverShortfall(s));
+  // あなたは、足りない分を、あとの画面で売る資産を選んで払う（design.md 8章）。ライバルは自動で売る
+  forEachSeat(s, (i) => coverShortfall(s, i < 0));
 
   if (s.month + s.monthsPerTurn > MONTHS_PER_YEAR) {
     endYear(s);
@@ -1053,7 +1066,7 @@ function endSeatMonth(s: GameState) {
   flows.saved += saved;
   flows.repaid += repaid;
   s.lastMonth = { year: s.year, month: s.month, income, expense, saved, repaid };
-  coverShortfall(s);
+  coverShortfall(s, s.cpuSeat < 0);
   s.cardUsed = false;
 }
 
@@ -1105,9 +1118,11 @@ function recordPrices(s: GameState, month: number) {
 }
 
 /** お金が足りないときは、先に資産を売り、それでも足りない分だけカードローンで借りる（利息なし） */
-function coverShortfall(s: GameState) {
+function coverShortfall(s: GameState, manual = false) {
   const p = s.player;
   if (p.cash >= 0) return;
+  // あなたは、売れる資産があれば、自分で選んで売る（「お金が足りません」の画面）。売れる資産がなければ借金にする
+  if (manual && hasSellable(s)) return;
   let sold = 0;
   for (const id of sellOrder(s)) {
     if (p.cash >= 0) break;
@@ -1122,6 +1137,38 @@ function coverShortfall(s: GameState) {
     if (Math.round(borrowed) > 0) log(s, 'shortfall.loan', { params: { amount: Math.round(borrowed) }, notice: true });
   }
   s.yearFlows.sold += sold;
+}
+
+/** 売れる資産を持っているか（家は入れない。design.md 8章） */
+const hasSellable = (s: GameState) => ASSET_IDS.some((id) => assetValue(s, id) >= 0.01);
+
+/** 銀行預金がマイナスで、売る資産を選ぶ画面を出す必要があるか（design.md 8章） */
+export function shortfallPending(s: GameState): boolean {
+  return s.player.cash < 0 && hasSellable(s);
+}
+
+/**
+ * お金が足りないときに、選んだ資産を売る（design.md 8章）。mode が 'one' なら株は1株、ほかは1万円分。
+ * 'needed' なら、足りない分をちょうど埋めるだけ売る。売っても資産がなくなり、まだ足りなければ、残りは借金にする
+ */
+export function sellForShortfall(state: GameState, id: AssetId, mode: 'one' | 'needed'): GameState {
+  if (!shortfallPending(state)) throw new Error('no shortfall');
+  if (assetValue(state, id) < 0.01) throw new Error(`nothing to sell: ${id}`);
+  const s = clone(state);
+  const p = s.player;
+  const need = -p.cash;
+  let gained: number;
+  if (ASSETS[id].unit === 'share') {
+    const shares = mode === 'one' ? 1 : Math.ceil(need / s.market.prices[id] - 1e-9);
+    gained = sellShares(s, id, shares);
+  } else {
+    gained = sellAsset(s, id, mode === 'one' ? Math.min(1, assetValue(s, id)) : need);
+  }
+  s.yearFlows.sold += gained;
+  log(s, 'shortfall.sellOne', { params: { asset: id, amount: Math.round(gained) }, notice: true });
+  // 売れる資産がなくなったのに、まだ足りなければ、残りは借金にする
+  if (p.cash < 0 && !hasSellable(s)) coverShortfall(s);
+  return s;
 }
 
 // ---------------------------------------------------------------- 大きなイベント（design.md 5.3）
@@ -1166,7 +1213,8 @@ function applyBigEvent(s: GameState, id: string) {
           pay(-Math.max(0, p.cash - ef.threshold) * ef.rate, `bigEvent.${id}.loss`);
           break;
         case 'cash':
-          pay(ef.amount, `bigEvent.${id}.cash`);
+          // 大地震の家財の被害など、家を持っていない人は小さくなることがある（design.md 5.3）
+          pay(!p.home && ef.renterAmount !== undefined ? ef.renterAmount : ef.amount, `bigEvent.${id}.cash`);
           break;
         case 'homeDamage':
           if (!p.home) break;
@@ -1296,6 +1344,7 @@ export function nextYear(state: GameState): GameState {
   assertPhase(state, 'yearEnd');
   if (state.bigEvent) throw new Error('big event is showing');
   if (state.newsEvent) throw new Error('news is showing');
+  if (shortfallPending(state)) throw new Error('shortfall must be paid first');
   const s = clone(state);
   if (s.year >= s.years) {
     forEachSeat(s, () => {

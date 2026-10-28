@@ -2376,3 +2376,15 @@ h2 {
     animation: none;
   }
 }
+
+/* お金が足りないときの画面（design.md 8章） */
+.modal.shortfall {
+  border: 4px solid #f25c54;
+}
+.shortfall-buttons {
+  white-space: nowrap;
+  text-align: right;
+}
+.shortfall-buttons button + button {
+  margin-left: 6px;
+}

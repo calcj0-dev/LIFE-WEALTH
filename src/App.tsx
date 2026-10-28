@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board, type PieceFloat } from './board/Board';
 import { BOARD } from './data/board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll, shortfallPending } from './game/engine';
+import { ShortfallModal } from './ui/Shortfall';
 import type { GameState, LogEntry } from './game/types';
 import { formatMoney, t } from './i18n';
 import { loadGame, saveGame } from './save';
@@ -259,7 +260,9 @@ export function App() {
   /** 発表を見せている間 */
   const [announcing, setAnnouncing] = useState(false);
   const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
-  const wantAnnounce = inPlay && afterTurn && !game!.bigEvent && !game!.newsEvent && !showHistory && !showFeed && announced !== game!.bonusSquare;
+  /** お金が足りず、売る資産を選ぶ画面を出している（design.md 8章） */
+  const shortfall = !!game && afterTurn && !game.bigEvent && !game.newsEvent && shortfallPending(game);
+  const wantAnnounce = inPlay && afterTurn && !shortfall && !game!.bigEvent && !game!.newsEvent && !showHistory && !showFeed && announced !== game!.bonusSquare;
   useEffect(() => {
     if (!game) {
       setAnnounced(null);
@@ -279,7 +282,7 @@ export function App() {
     };
   }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
-  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce;
+  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce || shortfall;
   const yearEnd = game?.phase === 'yearEnd';
   const tradeStep = yearEnd && tradeYear === game!.year;
   const settleStep = yearEnd && !tradeStep;
@@ -490,6 +493,8 @@ export function App() {
           />
         )}
         {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
+        {/* お金が足りないときは、大きなイベントとニュースのあとに、売る資産を選ぶ（design.md 8章） */}
+        {!busy && shortfall && !showHistory && !showFeed && <ShortfallModal s={game} onChange={setGame} />}
         {!busy && afterTurn && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
         {celebrating && bonusEntry && !showHistory && !showFeed && (
           <BonusModal amount={bonusEntry.cash ?? 0} onClose={() => setBonusShown(flowKey)} />

@@ -21,6 +21,7 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
   minusMedium: '#f25c54',
   minusLarge: '#f25c54',
   chance: '#ffc94d',
+  job: '#3f6fb5',
   card: '#8ecae6',
   luckyCard: '#4d96ff',
   stock: '#2ec4b6',

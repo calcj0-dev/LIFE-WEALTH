@@ -15,6 +15,8 @@ export type SquareType =
   | 'plusLarge'
   | 'minusLarge'
   | 'chance'
+  /** 転職マス（design.md 5.1。段階7） */
+  | 'job'
   | 'card'
   | 'luckyCard'
   | 'stock'

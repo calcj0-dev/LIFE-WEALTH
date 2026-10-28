@@ -2,17 +2,18 @@ import type { RouteKind, Square, SquareType } from '../game/types';
 
 /**
  * 元の道のマスの種類ごとの数（合計200）。design.md 3.3。分かれた道のマスは、下の BRANCHES に書く。数を変えれば、盤面のマスの数も変わる。
- * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。数の割合は、出来事の重みのプラスとマイナスの割合に合わせた
+ * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。マイナスはプラスの約7割（段階7）
  */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
   family: 6,
-  plusSmall: 26,
-  minusSmall: 40,
-  plusMedium: 13,
-  minusMedium: 20,
-  plusLarge: 6,
-  minusLarge: 7,
+  plusSmall: 36,
+  minusSmall: 25,
+  plusMedium: 18,
+  minusMedium: 13,
+  plusLarge: 8,
+  minusLarge: 6,
+  job: 6,
   chance: 4,
   card: 28,
   luckyCard: 5,
@@ -48,6 +49,7 @@ function buildOrder(): SquareType[] {
     'investTalk',
     'family',
     'chance',
+    'job',
     'luckyCard',
   ];
   order.forEach((type, k) => {
@@ -110,14 +112,19 @@ export const BRANCHES: BranchDef[] = [
     to: [15, 0],
     types: ['plusLarge', 'minusLarge', 'gamble', 'minusLarge', 'plusLarge', 'minusMedium', 'plusLarge', 'minusLarge', 'gamble', 'plusMedium', 'minusLarge', 'plusLarge'],
   },
-  // 近道: 下の段へ（少し先へ進む）
-  { route: 'shortcut', from: [17, 0], via: [], to: [17, 2], types: ['minusSmall', 'card'] },
-  // 戻る道: 上の段へ（少し手前に戻る）
-  { route: 'back', from: [6, 4], via: [], to: [6, 2], types: ['plusSmall', 'card'] },
-  { route: 'shortcut', from: [17, 4], via: [], to: [17, 6], types: ['plusSmall', 'minusMedium'] },
-  { route: 'back', from: [6, 8], via: [], to: [6, 6], types: ['minusSmall', 'plusMedium'] },
-  { route: 'shortcut', from: [17, 8], via: [], to: [17, 10], types: ['card', 'plusSmall'] },
-  { route: 'back', from: [6, 12], via: [], to: [6, 10], types: ['card', 'minusSmall'] },
+  // 戻る道と近道（段階7で6本ずつに増やした）。段と段の間に1本ずつ。近道は下の段へ（少し先へ）、戻る道は上の段へ（少し手前へ）
+  { route: 'shortcut', from: [16, 0], via: [], to: [16, 2], types: ['minusSmall', 'card'] },
+  { route: 'back', from: [19, 2], via: [], to: [19, 0], types: ['plusSmall', 'card'] },
+  { route: 'shortcut', from: [4, 2], via: [], to: [4, 4], types: ['plusSmall', 'minusMedium'] },
+  { route: 'back', from: [7, 4], via: [], to: [7, 2], types: ['card', 'plusMedium'] },
+  { route: 'shortcut', from: [16, 4], via: [], to: [16, 6], types: ['card', 'plusSmall'] },
+  { route: 'back', from: [19, 6], via: [], to: [19, 4], types: ['minusSmall', 'plusSmall'] },
+  { route: 'shortcut', from: [4, 6], via: [], to: [4, 8], types: ['plusMedium', 'card'] },
+  { route: 'back', from: [7, 8], via: [], to: [7, 6], types: ['plusSmall', 'minusSmall'] },
+  { route: 'shortcut', from: [16, 8], via: [], to: [16, 10], types: ['card', 'minusSmall'] },
+  { route: 'back', from: [19, 10], via: [], to: [19, 8], types: ['plusSmall', 'card'] },
+  { route: 'shortcut', from: [4, 10], via: [], to: [4, 12], types: ['minusSmall', 'plusSmall'] },
+  { route: 'back', from: [7, 12], via: [], to: [7, 10], types: ['card', 'plusMedium'] },
   // 投資の道: 盤面の下の外側をまわる。株のマスと投資の話のマスが多い
   {
     route: 'invest',

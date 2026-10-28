@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { payShortfall } from '../game/autoplay';
 import { BOARD } from '../data/board';
 import { JOB_IDS } from '../data/jobs';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, dismissBigEvent, dismissNews, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade, tradeShares } from '../game/engine';
+import { choose, chooseJob, dismissBigEvent, dismissNews, chooseYears, createGame, getOptions, joinMedical, nextYear, roll, setSaving, trade, tradeShares, shortfallPending } from '../game/engine';
 import type { GameState } from '../game/types';
 import { has } from '../i18n';
 import { describeDecision } from './decisionText';
@@ -24,6 +25,11 @@ function collectKeys(seed: number, jobIndex: number): { keys: Set<string>; label
     if (s.bigEvent) {
       keys.add(`bigEvent.${s.bigEvent.id}.title`).add(`bigEvent.${s.bigEvent.id}.text`);
       s = dismissBigEvent(s);
+      continue;
+    }
+    if (shortfallPending(s)) {
+      keys.add('shortfall.title').add('shortfall.text');
+      s = payShortfall(s);
       continue;
     }
     if (s.phase === 'roll') s = roll(s);

@@ -32,7 +32,7 @@
       "id": "earthquake",
       "everyYears": 20,
       "effects": [
-        { "t": "cash", "amount": -100 },
+        { "t": "cash", "amount": -100, "renterAmount": -30 },
         { "t": "homeDamage", "amount": 1000 }
       ]
     },
