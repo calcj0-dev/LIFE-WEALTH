@@ -25,8 +25,8 @@ export interface Personality {
   talkChance: number;
   /** ギャンブルをする確率（するときは、一番小さい金額） */
   gambleChance: number;
-  /** 転職のチャンスで、給料が上がるなら転職する確率 */
-  jobChangeChance: number;
+  /** 転職マスで、年収がこの倍率より上がるなら転職する（1.2 なら2割以上。design.md 12.1） */
+  jobChangeMin: number;
   /** 副業のチャンスで、挑戦する確率 */
   sideBusinessChance: number;
 }
@@ -48,7 +48,7 @@ export const PERSONALITIES: Record<RivalId, Personality> = {
     homeChance: 0.6,
     talkChance: 0,
     gambleChance: 0,
-    jobChangeChance: 0,
+    jobChangeMin: 1.2,
     sideBusinessChance: 0,
   },
   // イケイケさん（攻めタイプ）: 流行りの株に飛びつき、下がると慌てて売る。うまい話やギャンブルにも乗る
@@ -62,7 +62,7 @@ export const PERSONALITIES: Record<RivalId, Personality> = {
     homeChance: 0.3,
     talkChance: 0.4,
     gambleChance: 0.4,
-    jobChangeChance: 0.5,
+    jobChangeMin: 1,
     sideBusinessChance: 0.5,
   },
 };

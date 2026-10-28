@@ -101,6 +101,21 @@ describe('データ（JSON）', () => {
 });
 
 describe('盤面', () => {
+  it('転職マスでは、転職先の候補が2つ出て、選ぶか今のままでいるかを決める', () => {
+    const index = BOARD.findIndex((sq, i) => sq.type === 'job' && i > 0 && BOARD[i - 1].next.length === 1);
+    for (let seed = 1; seed < 300; seed++) {
+      const base = started();
+      const s = roll({ ...base, rngState: seed, player: { ...base.player, position: index - 1 } });
+      if (s.player.position !== index || s.lastRoll !== 1) continue;
+      const opts = getOptions(s);
+      expect(opts.filter((o) => o.id.startsWith('job:'))).toHaveLength(2);
+      expect(opts.some((o) => o.id === 'skip')).toBe(true);
+      const moved = choose(s, opts[0].id);
+      expect(moved.player.jobId).toBe(opts[0].id.slice(4));
+      return;
+    }
+    throw new Error('not found');
+  });
   it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約235マス', () => {
     const main = BOARD.filter((sq) => sq.route === 'main');
     expect(main).toHaveLength(200);

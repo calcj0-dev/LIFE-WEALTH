@@ -51,7 +51,7 @@ export function cpuChoice(s: GameState, options: DecisionOption[], p: Personalit
       const jobs = enabled.filter((o) => o.id.startsWith('job:'));
       if (jobs.length) {
         const best = jobs.sort((a, b) => Number(b.params?.salary ?? 0) - Number(a.params?.salary ?? 0))[0];
-        return Number(best.params?.salary ?? 0) > s.player.salary && nextRandom(s) < p.jobChangeChance ? best.id : skip;
+        return Number(best.params?.salary ?? 0) > s.player.salary * p.jobChangeMin ? best.id : skip;
       }
       if (has('try')) return spare > 0 && nextRandom(s) < p.sideBusinessChance ? 'try' : 'skip';
       return enabled[0].id;

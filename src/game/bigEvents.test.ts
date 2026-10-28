@@ -57,9 +57,9 @@ describe('大きなイベント', () => {
     expect(triggerBigEvent(started(3000), 'bankFailure').player.cash).toBeCloseTo(2000, 6);
     expect(triggerBigEvent(started(800), 'bankFailure').player.cash).toBeCloseTo(800, 6);
   });
-  it('大地震: 全員に100万円。持ち家で保険がなければ、さらに1,000万円', () => {
+  it('大地震: 家財の被害は、持ち家の人 100万円、家を持っていない人 30万円。持ち家で保険がなければ、さらに1,000万円', () => {
     const base = started(2000);
-    expect(triggerBigEvent(base, 'earthquake').player.cash).toBeCloseTo(1900, 6);
+    expect(triggerBigEvent(base, 'earthquake').player.cash).toBeCloseTo(1970, 6);
     const insured = triggerBigEvent({ ...base, player: { ...base.player, home: home(true) } }, 'earthquake');
     expect(insured.player.cash).toBeCloseTo(1900, 6);
     expect(insured.bigEvent!.covered).toBe(1000);
@@ -72,7 +72,7 @@ describe('大きなイベント', () => {
   it('お金が足りなくなったら、借金になる', () => {
     const s = triggerBigEvent(started(0), 'earthquake');
     expect(s.player.cash).toBe(0);
-    expect(s.player.cardLoan).toBeCloseTo(100, 6);
+    expect(s.player.cardLoan).toBeCloseTo(30, 6);
   });
   it('画面を閉じるまで、ルーレットは回せない', () => {
     const s = triggerBigEvent(started(), 'inheritance');

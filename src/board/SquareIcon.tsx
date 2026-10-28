@@ -86,6 +86,16 @@ export function SquareIcon({ type, married }: { type: SquareType; married?: bool
           <path d="M-8,-13 L0,-23 L8,-13 L0,-8 Z" fill="#bde7ff" stroke={W} strokeWidth="2" />
         </g>
       );
+    case 'job':
+      // カバン（転職）
+      return (
+        <g>
+          <rect x="-8" y="-20" width="16" height="9" rx="3" fill="none" stroke={W} strokeWidth="4" />
+          <rect x="-22" y="-13" width="44" height="32" rx="6" fill={W} stroke={INK} strokeWidth="2" />
+          <rect x="-22" y="-2" width="44" height="4" fill="#3f6fb5" opacity="0.5" />
+          <rect x="-4" y="-5" width="8" height="9" rx="2" fill="#ffd166" stroke={INK} strokeWidth="1" />
+        </g>
+      );
     case 'card':
       return (
         <g>

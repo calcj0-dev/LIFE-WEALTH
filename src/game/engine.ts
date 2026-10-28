@@ -453,6 +453,14 @@ function handleSquare(s: GameState) {
       if (!p.married) return startDecision(s, { kind: 'marriage' }, 'square');
       if (p.children.length >= MAX_CHILDREN) return notice('square.birth.full');
       return startDecision(s, { kind: 'birth' }, 'square');
+    case 'job': {
+      // 転職マス: 今の職業以外から、転職先の候補を2つ出す（design.md 5.1。段階7）
+      const targets = [...jobChangeTargets(s)];
+      if (!targets.length) return notice('square.nothing');
+      const a = targets.splice(randomInt(s, 0, targets.length - 1), 1)[0];
+      const b = targets.length ? targets[randomInt(s, 0, targets.length - 1)] : undefined;
+      return startDecision(s, { kind: 'event', eventId: 'jobChange', params: b ? { a, b } : { a } }, 'square');
+    }
     case 'plusSmall':
     case 'minusSmall':
     case 'plusMedium':
@@ -505,7 +513,8 @@ export function eventMatches(s: GameState, ev: EventDef): boolean {
   if (w.spouseWork !== undefined && p.spouse?.work !== w.spouseWork) return false;
   if (w.minYear !== undefined && s.year < w.minYear) return false;
   if (w.maxYear !== undefined && s.year > w.maxYear) return false;
-  if (ev.choice === 'jobChange' && jobChangeTargets(s).length === 0) return false;
+  // 転職は、段階7から転職マスだけで起きる（チャンスのマスでは起きない）
+  if (ev.choice === 'jobChange') return false;
   return true;
 }
 
@@ -576,14 +585,16 @@ export function getOptions(s: GameState): DecisionOption[] {
     case 'event': {
       const ev = EVENTS_BY_ID[d.eventId!];
       if (ev.choice === 'jobChange') {
+        // 転職マスの候補（2つ）。候補がなければ、転職できる職業すべて
+        const offered = [d.params?.a, d.params?.b].filter((j): j is string => typeof j === 'string');
         return [
-          ...jobChangeTargets(s).map((j) => ({
+          ...(offered.length ? offered : jobChangeTargets(s)).map((j) => ({
             id: `job:${j}`,
             key: 'option.job',
             params: { job: j, salary: Math.round(salaryAtYear(j, s.year) * s.market.wageIndex) },
             enabled: true,
           })),
-          { id: 'skip', key: 'option.skip', enabled: true },
+          { id: 'skip', key: 'option.jobStay', enabled: true },
         ];
       }
       if (ev.choice === 'sideBusiness') {
@@ -1166,7 +1177,8 @@ function applyBigEvent(s: GameState, id: string) {
           pay(-Math.max(0, p.cash - ef.threshold) * ef.rate, `bigEvent.${id}.loss`);
           break;
         case 'cash':
-          pay(ef.amount, `bigEvent.${id}.cash`);
+          // 大地震の家財の被害など、家を持っていない人は小さくなることがある（design.md 5.3）
+          pay(!p.home && ef.renterAmount !== undefined ? ef.renterAmount : ef.amount, `bigEvent.${id}.cash`);
           break;
         case 'homeDamage':
           if (!p.home) break;

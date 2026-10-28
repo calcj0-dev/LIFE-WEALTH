@@ -2,17 +2,18 @@ import type { RouteKind, Square, SquareType } from '../game/types';
 
 /**
  * 元の道のマスの種類ごとの数（合計200）。design.md 3.3。分かれた道のマスは、下の BRANCHES に書く。数を変えれば、盤面のマスの数も変わる。
- * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。数の割合は、出来事の重みのプラスとマイナスの割合に合わせた
+ * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。マイナスはプラスの約7割（段階7）
  */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
   family: 6,
-  plusSmall: 26,
-  minusSmall: 40,
-  plusMedium: 13,
-  minusMedium: 20,
-  plusLarge: 6,
-  minusLarge: 7,
+  plusSmall: 36,
+  minusSmall: 25,
+  plusMedium: 18,
+  minusMedium: 13,
+  plusLarge: 8,
+  minusLarge: 6,
+  job: 6,
   chance: 4,
   card: 28,
   luckyCard: 5,
@@ -48,6 +49,7 @@ function buildOrder(): SquareType[] {
     'investTalk',
     'family',
     'chance',
+    'job',
     'luckyCard',
   ];
   order.forEach((type, k) => {

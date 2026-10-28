@@ -261,7 +261,7 @@
   "event.raise.title": "昇給",
   "event.raise.text": "給料が3%上がりました。",
   "event.jobChange.title": "転職のチャンス",
-  "event.jobChange.text": "別の仕事に誘われました。転職しますか？",
+  "event.jobChange.text": "転職先の候補があります。年収を見て、転職するか決めましょう。",
   "event.unemployment.title": "失業",
   "event.unemployment.text": "会社の業績が悪化し、仕事を失いました。6ヶ月間は給料が入らず、次の仕事の給料は元の9割になります。",
   "event.sickness.title": "病気・けが",
@@ -359,7 +359,7 @@
   "bigEvent.bankFailure.text": "預けている銀行がつぶれました。預金は1,000万円までは守られますが、それを超える分は半分しか戻りません。",
   "bigEvent.bankFailure.none": "預金が1,000万円以下だったので、損はありませんでした。",
   "bigEvent.earthquake.title": "大地震！",
-  "bigEvent.earthquake.text": "大きな地震が起きました。家財が被害を受け、100万円かかります。持ち家で火災・地震保険に入っていないと、家の修理にさらに1,000万円かかります。",
+  "bigEvent.earthquake.text": "大きな地震が起きました。家財が被害を受け、持ち家の人は100万円、家を持っていない人は30万円かかります。持ち家で火災・地震保険に入っていないと、家の修理にさらに1,000万円かかります。",
   "bigEvent.inheritance.title": "遺産の相続",
   "bigEvent.inheritance.text": "遠い親せきから、遺産を受け取ることになりました。",
   "bigEvent.moved": "あなたの資産の値動き",
@@ -619,5 +619,7 @@
   "fork.text": "矢印を押して、進む道を選んでください。",
   "option.fork": "この道へ進む",
   "route.risk": "ハイリスクの道",
-  "route.invest": "投資の道"
+  "route.invest": "投資の道",
+  "squareType.job": "転職マス",
+  "option.jobStay": "今のままでいる"
 }
