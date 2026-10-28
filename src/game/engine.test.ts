@@ -116,18 +116,18 @@ describe('盤面', () => {
     }
     throw new Error('not found');
   });
-  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約235マス', () => {
+  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約250マス', () => {
     const main = BOARD.filter((sq) => sq.route === 'main');
     expect(main).toHaveLength(200);
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
       expect(main.filter((sq) => sq.type === type)).toHaveLength(n);
     }
-    expect(BOARD.length).toBeGreaterThan(225);
-    expect(BOARD.length).toBeLessThan(245);
+    expect(BOARD.length).toBeGreaterThan(240);
+    expect(BOARD.length).toBeLessThan(260);
   });
-  it('分かれ道は8か所。分かれた道は、どれも元の道に合流する', () => {
+  it('分かれ道は14か所（戻る道6、近道6、別の道2）。分かれた道は、どれも元の道に合流する', () => {
     const forks = BOARD.filter((sq) => sq.next.length > 1);
-    expect(forks).toHaveLength(8);
+    expect(forks).toHaveLength(14);
     for (const f of forks) {
       let pos = f.next[1];
       for (let i = 0; i < 30 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
@@ -357,7 +357,8 @@ describe('結婚と出産', () => {
       ['minusLarge', 'minus'],
       ['chance', 'chance'],
     ] as const) {
-      const index = BOARD.findIndex((sq) => sq.type === type);
+      // 1つ手前が分かれ道だと止まってしまうので、そうでないマスを使う
+      const index = BOARD.findIndex((sq, i) => sq.type === type && i > 0 && BOARD[i - 1].next.length === 1 && BOARD[i - 1].next[0] === i);
       for (let seed = 1; seed <= 15; seed++) {
         const s = landOn(started(seed), index);
         if (s.decision?.kind !== 'event') continue;
