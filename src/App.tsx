@@ -482,7 +482,7 @@ export function App() {
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
         {!busy && afterTurn && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
-        {summary && !game.bigEvent && !showHistory && !showFeed && (
+        {summary && !showHistory && !showFeed && (
           <TurnSummary
             key={`${summary.year}-${summary.month}`}
             data={summary}
