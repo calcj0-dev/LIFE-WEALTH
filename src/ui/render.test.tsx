@@ -20,11 +20,14 @@ import { moneyLevelOf } from './AnimatedMoney';
 import { BigEventModal } from './BigEvent';
 import { ShortfallModal } from './Shortfall';
 import { payShortfall } from '../game/autoplay';
+import { GambleResultModal, gradeOf } from './GambleResult';
+import { RivalDetailModal } from './RivalDetail';
+import { logLabel } from './logLabel';
 
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
-const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent)(\.[a-zA-Z]+)+</;
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent|gambleResult|rivalDetail|route|rival)(\.[a-zA-Z]+)+</;
 
 describe('段階3.7の画面', () => {
   it('家計の合計は、画面に出す行を足した数と必ず合う', () => {
@@ -176,6 +179,25 @@ describe('画面', () => {
     const html = renderToString(<Result s={s} onAgain={noop} />);
     for (const text of ['あなたは', 'コツコツさん', 'イケイケさん', '投資の成績', 'みんなの純資産の移り変わり']) expect(html).toContain(text);
     expect(html).not.toMatch(RAW_KEY);
+  });
+  it('ギャンブルの結果の画面が描け、結果の言葉が戻った金額で決まる（段階8）', () => {
+    for (const id of ['lottery', 'horse', 'pachinko']) {
+      const html = renderToString(<GambleResultModal result={{ id, bet: 10, back: 25, multiplier: 2.5 }} onClose={noop} />);
+      expect(html).not.toMatch(RAW_KEY);
+    }
+    expect(gradeOf({ id: 'lottery', bet: 1, back: 100, multiplier: 100 })).toBe('jackpot');
+    expect(gradeOf({ id: 'horse', bet: 10, back: 25, multiplier: 2.5 })).toBe('win');
+    expect(gradeOf({ id: 'pachinko', bet: 10, back: 5, multiplier: 0.5 })).toBe('some');
+    expect(gradeOf({ id: 'horse', bet: 10, back: 0, multiplier: 0 })).toBe('lose');
+    expect(logLabel({ year: 1, month: 1, key: 'gamble.horse', cash: 15, params: { bet: 10, back: 25 } })).toBe('競馬に10万円賭けて、25万円戻ってきた');
+  });
+  it('ライバルの資産を見る画面が描ける（段階8）', () => {
+    const s = playGame(4, 'employee', 10);
+    for (const id of ['steady', 'bold'] as const) {
+      const html = renderToString(<RivalDetailModal s={s} id={id} onClose={noop} />);
+      for (const text of ['銀行預金', '仕事と家族', '最近の動き', '閉じる']) expect(html).toContain(text);
+      expect(html).not.toMatch(RAW_KEY);
+    }
   });
   it('結果画面に、最後の純資産が出る', () => {
     const s = playGame(11, 'engineer', 10);

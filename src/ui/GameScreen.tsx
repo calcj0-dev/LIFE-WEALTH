@@ -1,6 +1,6 @@
 import { ASSETS, ASSET_IDS } from '../data/assets';
 import { assetValue, netWorth, realEstateValue } from '../game/finance';
-import type { GameState } from '../game/types';
+import type { GameState, RivalId } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { AnimatedMoney, type MoneyLevel } from './AnimatedMoney';
 import { RankStrip, RivalFeed, lookOf } from './Rivals';
@@ -10,7 +10,19 @@ import { dateLabel } from './dateLabel';
 import { BudgetCard } from './Setup';
 
 /** 画面の上。何年目・純資産・景気・借金だけを出す。銀行預金と資産の内訳は右側に出す（design.md 0.1） */
-export function Hud({ s, level, date }: { s: GameState; level?: MoneyLevel; /** 見せる月（なければ今の月） */ date?: { year: number; month: number } }) {
+export function Hud({
+  s,
+  level,
+  date,
+  onOpenRival,
+}: {
+  s: GameState;
+  level?: MoneyLevel;
+  /** 見せる月（なければ今の月） */
+  date?: { year: number; month: number };
+  /** ライバルを押すと、その人の資産を見る画面を開く（design.md 12.4） */
+  onOpenRival?: (id: RivalId) => void;
+}) {
   const p = s.player;
   return (
     <div className="hud">
@@ -22,7 +34,7 @@ export function Hud({ s, level, date }: { s: GameState; level?: MoneyLevel; /** 
         <span className="label">{t('hud.netWorth')}</span>
         <AnimatedMoney className="value" value={netWorth(s)} level={level} float={false} />
       </div>
-      <RankStrip s={s} />
+      <RankStrip s={s} onOpen={onOpenRival} />
       <div className="hud-item">
         <span className="label">{t('hud.economy')}</span>
         <span className="value">{t(`economy.${s.market.economy}`)}</span>
@@ -60,6 +72,7 @@ export function SidePanel({
   level,
   cashShown,
   hideRivalMonth,
+  onOpenRival,
 }: {
   s: GameState;
   onOpenHistory: () => void;
@@ -69,6 +82,8 @@ export function SidePanel({
   hideRivalMonth?: { year: number; month: number };
   /** 給料と生活費のアクションの間だけ、銀行預金をこの金額で見せる（design.md 2.2） */
   cashShown?: { value: number; label?: string; level: MoneyLevel };
+  /** ライバルの名前を押すと、その人の資産を見る画面を開く（design.md 12.4） */
+  onOpenRival?: (id: RivalId) => void;
 }) {
   const p = s.player;
   const family = p.married ? t(`panel.married.${p.spouse!.work}`) : t('panel.single');
@@ -85,7 +100,7 @@ export function SidePanel({
           {t('feed.open')}
         </button>
       </div>
-      <RivalFeed s={s} hideMonth={hideRivalMonth} />
+      <RivalFeed s={s} hideMonth={hideRivalMonth} onOpen={onOpenRival} />
       <div className="card panel-assets">
         <h4>{t('panel.assets')}</h4>
         <Row k={t('asset.deposit')} v={<AnimatedMoney value={cashShown?.value ?? p.cash} level={cashShown?.level ?? level} label={cashShown?.label} sound float={false} />} />

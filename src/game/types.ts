@@ -30,14 +30,25 @@ export interface Square {
   /** 盤面上の位置 */
   x: number;
   y: number;
-  /** 次のマス。2つあるマスは分かれ道で、1つ目が元の道（まっすぐ）、2つ目が分かれた道（design.md 3.11） */
+  /** 次のマス。2つあるマスは分かれ道で、1つ目がまっすぐ進む道、2つ目が分かれた道（design.md 3.11） */
   next: number[];
-  /** どの道のマスか。main は元の道 */
+  /** どの道のマスか。main は外周 */
   route: RouteKind;
 }
 
-/** 道の種類（design.md 3.11）。main は元の道、back は戻る道、shortcut は近道、risk はハイリスクの道、invest は投資の道 */
-export type RouteKind = 'main' | 'back' | 'shortcut' | 'risk' | 'invest';
+/** 道の種類（design.md 3.11）。main は外周、shortcut は四隅の近道、risk はハイリスクの道（十字の縦）、invest は投資の道（十字の横） */
+/** ギャンブルの結果（design.md 3.7） */
+export interface GambleResult {
+  /** 宝くじ・競馬・パチンコ */
+  id: string;
+  bet: number;
+  /** 戻ってきた金額 */
+  back: number;
+  /** 賭けた金額の何倍が戻ったか */
+  multiplier: number;
+}
+
+export type RouteKind = 'main' | 'shortcut' | 'risk' | 'invest';
 
 export type HighSchoolType = 'public' | 'private';
 export type UniversityType = 'national' | 'private' | 'none';
@@ -312,7 +323,7 @@ export interface Rival extends SeatData {
 }
 
 export interface GameState {
-  saveVersion: 4;
+  saveVersion: 5;
   seed: number;
   rngState: number;
   /** 遊ぶ年数（10〜50） */
@@ -360,6 +371,8 @@ export interface GameState {
   marketChange: MarketChange | null;
   /** 起きたばかりの大きなイベント。画面いっぱいに見せ、「OK」を押すまで止める（design.md 5.3） */
   bigEvent: BigEventResult | null;
+  /** あなたがしたばかりのギャンブルの結果。結果の画面で見せ、「OK」を押すまで止める（design.md 3.7。ライバルには付けない） */
+  gambleResult?: GambleResult | null;
   /** 最後のターンの月末の、お金の動き（今月のまとめに出す。design.md 2.3） */
   lastMonth: MonthFlow | null;
   /** 起きたばかりのニュース。今月のまとめで見せ、「OK」を押すまで止める（design.md 7章） */

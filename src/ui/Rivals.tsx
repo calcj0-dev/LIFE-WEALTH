@@ -48,12 +48,19 @@ export function isImportant(e: LogEntry): boolean {
   return e.key === 'marriage.marry' || e.key === 'bonus.get' || e.key.endsWith('.debt') || (e.cash !== undefined && e.cash <= -50);
 }
 
-function Line({ line }: { line: RivalLine }) {
+function Line({ line, onOpen }: { line: RivalLine; onOpen?: (id: RivalId) => void }) {
   return (
     <div className="rival-line">
       <AvatarIcon look={RIVAL_LOOKS[line.id]} />
       <span className="rival-line-text">
-        {rivalName(line.id)}: {logLabel(line.entry)}
+        {onOpen ? (
+          <button className="link-button" onClick={() => onOpen(line.id)} aria-label={t('rivalDetail.open', { name: rivalName(line.id) })}>
+            {rivalName(line.id)}
+          </button>
+        ) : (
+          rivalName(line.id)
+        )}
+        : {logLabel(line.entry)}
       </span>
       {line.entry.cash !== undefined && <MoneyDelta v={line.entry.cash} />}
     </div>
@@ -64,7 +71,7 @@ function Line({ line }: { line: RivalLine }) {
  * 右側の「ライバルの動き」の欄。新しい順に4行。自動では消えない。
  * hideMonth を渡すと、その月の動きは出さない（ライバルの番を見せる前に、結果が見えないように）
  */
-export function RivalFeed({ s, hideMonth }: { s: GameState; hideMonth?: { year: number; month: number } }) {
+export function RivalFeed({ s, hideMonth, onOpen }: { s: GameState; hideMonth?: { year: number; month: number }; /** 名前を押すと、その人の資産を見る画面を開く */ onOpen?: (id: RivalId) => void }) {
   const [all, setAll] = useState(false);
   if (!s.rivals.length) return null;
   const lines = rivalLines(s).filter((l) => !hideMonth || l.entry.year * 100 + l.entry.month < hideMonth.year * 100 + hideMonth.month);
@@ -73,7 +80,7 @@ export function RivalFeed({ s, hideMonth }: { s: GameState; hideMonth?: { year: 
       <h4>{t('rivalFeed.title')}</h4>
       {lines.length === 0 && <div className="muted">{t('rivalFeed.empty')}</div>}
       {lines.slice(0, 4).map((l, i) => (
-        <Line key={i} line={l} />
+        <Line key={i} line={l} onOpen={onOpen} />
       ))}
       {lines.length > 4 && (
         <button className="secondary small" onClick={() => setAll(true)}>
@@ -153,7 +160,7 @@ export const whoName = (w: Who) => (w === 'you' ? t('rival.you') : rivalName(w))
 export const whoColor = (s: GameState, w: Who) => lookOf(s, w).color;
 
 /** 上の欄の順位。3人の順位と純資産を横に並べ、あなたの順位が上がったら短く光る。スマホでは、あなたの順位だけ */
-export function RankStrip({ s }: { s: GameState }) {
+export function RankStrip({ s, onOpen }: { s: GameState; /** ライバルを押すと、その人の資産を見る画面を開く */ onOpen?: (id: RivalId) => void }) {
   const list = standings(s);
   const myRank = list.find((x) => x.who === 'you')!.rank;
   const prev = useRef(myRank);
@@ -168,14 +175,26 @@ export function RankStrip({ s }: { s: GameState }) {
   if (!s.rivals.length) return null;
   return (
     <div className={`rank-strip${flash ? ' rank-up' : ''}`} key={flash}>
-      {list.map((x) => (
-        <span key={x.who} className={`rank-item${x.who === 'you' ? ' me' : ''}`}>
-          <AvatarIcon look={lookOf(s, x.who)} />
-          <b>{t('rank.nth', { n: x.rank })}</b>
-          <span className="rank-name">{whoName(x.who)}</span>
-          <span className="rank-worth">{formatMoney(x.worth)}</span>
-        </span>
-      ))}
+      {list.map((x) => {
+        const inner = (
+          <>
+            <AvatarIcon look={lookOf(s, x.who)} />
+            <b>{t('rank.nth', { n: x.rank })}</b>
+            <span className="rank-name">{whoName(x.who)}</span>
+            <span className="rank-worth">{formatMoney(x.worth)}</span>
+          </>
+        );
+        const who = x.who;
+        return who !== 'you' && onOpen ? (
+          <button key={who} className="rank-item rank-button" onClick={() => onOpen(who)} aria-label={t('rivalDetail.open', { name: whoName(who) })}>
+            {inner}
+          </button>
+        ) : (
+          <span key={who} className={`rank-item${who === 'you' ? ' me' : ''}`}>
+            {inner}
+          </span>
+        );
+      })}
     </div>
   );
 }

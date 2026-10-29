@@ -166,7 +166,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number; riva
   const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
   if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
   const s: GameState = {
-    saveVersion: 4,
+    saveVersion: 5,
     seed,
     rngState: seed >>> 0,
     years: DEFAULT_YEARS,
@@ -274,6 +274,7 @@ export function roll(state: GameState, card?: { index: number; exact?: number })
   if (state.newsEvent) throw new Error('news is showing');
   if (shortfallPending(state)) throw new Error('shortfall must be paid first');
   const s = clone(state);
+  s.gambleResult = null;
   rollIn(s, card);
   return s;
 }
@@ -329,9 +330,8 @@ function advance(s: GameState, steps: number, next?: number) {
   handleSquare(s);
 }
 
-/** 道の上の、from から to までのマス数（一番近い道で数える。たどり着けなければ Infinity） */
-export function distanceOnBoard(from: number, to: number): number {
-  if (from === to) return 0;
+/** from から、たどり着けるそれぞれのマスまでのマス数（一番近い道で数える） */
+function distancesFrom(from: number): Map<number, number> {
   const dist = new Map<number, number>([[from, 0]]);
   const queue = [from];
   while (queue.length) {
@@ -339,19 +339,23 @@ export function distanceOnBoard(from: number, to: number): number {
     for (const n of BOARD[cur].next) {
       if (dist.has(n)) continue;
       dist.set(n, dist.get(cur)! + 1);
-      if (n === to) return dist.get(n)!;
       queue.push(n);
     }
   }
-  return Infinity;
+  return dist;
 }
 
-/** 分かれ道で、ボーナスマスまで近くなるほうの道（同じなら元の道） */
+/** 道の上の、from から to までのマス数（一番近い道で数える。たどり着けなければ Infinity） */
+export function distanceOnBoard(from: number, to: number): number {
+  return distancesFrom(from).get(to) ?? Infinity;
+}
+
+/** 分かれ道で、ボーナスマスまで近くなるほうの道（同じならまっすぐの道） */
 function closerToBonus(s: GameState, choices: number[]): number {
   return choices.reduce((best, c) => (distanceOnBoard(c, s.bonusSquare) < distanceOnBoard(best, s.bonusSquare) ? c : best), choices[0]);
 }
 
-/** 元の道を、まっすぐ n マス進んだ先のマス（ぴったりカードの数のボタンの色などに使う） */
+/** まっすぐ（分かれ道では1つ目の道を）n マス進んだ先のマス（ぴったりカードの数のボタンの色などに使う） */
 export function aheadOnMain(from: number, n: number): number {
   let pos = from;
   for (let i = 0; i < n; i++) pos = BOARD[pos].next[0];
@@ -397,22 +401,18 @@ export function closeTrade(state: GameState): GameState {
 }
 
 /**
- * 次のボーナスマスを決める。あなたの駒から10〜40マス先。スタートには付けない。
+ * 次のボーナスマスを決める。あなたの駒から、一番近い道で10〜40マス先のどこか。スタートと分かれ道のマスには付けない（design.md 3.10）。
  * ライバルが取ったときも、あなたがねらえるように、あなたの駒から数える（design.md 12.3）
  */
 function placeBonus(s: GameState) {
   // ライバルの番の間は、あなたの記録はそのライバルの場所に入れ替わっている
   const me = s.cpuSeat >= 0 ? s.rivals[s.cpuSeat].player : s.player;
-  for (let guard = 0; guard < 100; guard++) {
-    const ahead = randomInt(s, BONUS.minAhead, BONUS.maxAhead);
-    // 元の道をまっすぐ数える。分かれた道の上には置かない（design.md 3.10）
-    const index = aheadOnMain(me.position, ahead);
-    const type = BOARD[index].type;
-    if (type !== 'start' && BOARD[index].route === 'main') {
-      s.bonusSquare = index;
-      return;
-    }
-  }
+  const dist = distancesFrom(me.position);
+  const candidates = BOARD.filter((sq) => {
+    const d = dist.get(sq.id) ?? Infinity;
+    return d >= BONUS.minAhead && d <= BONUS.maxAhead && sq.type !== 'start' && sq.next.length === 1;
+  });
+  if (candidates.length) s.bonusSquare = candidates[randomInt(s, 0, candidates.length - 1)].id;
 }
 
 /** ボーナスマスまで、あと何マスか */
@@ -890,7 +890,14 @@ function gamble(s: GameState, optionId: string) {
   const back = bet * multiplier;
   s.stats.gambleSpent += bet;
   s.stats.gambleReturned += back;
-  addCash(s, back - bet, `gamble.${id}`);
+  addCash(s, back - bet, `gamble.${id}`, { bet, back });
+  // あなたには結果の画面を出す（design.md 3.7）
+  if (s.cpuSeat < 0) s.gambleResult = { id, bet, back, multiplier };
+}
+
+/** ギャンブルの結果の画面を閉じる */
+export function dismissGambleResult(state: GameState): GameState {
+  return { ...state, gambleResult: null };
 }
 
 function buyHome(s: GameState, price: number, withLoan: boolean) {
@@ -1120,7 +1127,10 @@ function recordPrices(s: GameState, month: number) {
 /** お金が足りないときは、先に資産を売り、それでも足りない分だけカードローンで借りる（利息なし） */
 function coverShortfall(s: GameState, manual = false) {
   const p = s.player;
-  if (p.cash >= 0) return;
+  if (p.cash > -CASH_EPSILON) {
+    p.cash = Math.max(0, p.cash);
+    return;
+  }
   // あなたは、売れる資産があれば、自分で選んで売る（「お金が足りません」の画面）。売れる資産がなければ借金にする
   if (manual && hasSellable(s)) return;
   let sold = 0;
@@ -1141,10 +1151,12 @@ function coverShortfall(s: GameState, manual = false) {
 
 /** 売れる資産を持っているか（家は入れない。design.md 8章） */
 const hasSellable = (s: GameState) => ASSET_IDS.some((id) => assetValue(s, id) >= 0.01);
+/** 計算の誤差で残る、ごくわずかなマイナス（1円より小さい）は、足りないとみなさない */
+const CASH_EPSILON = 1e-4;
 
 /** 銀行預金がマイナスで、売る資産を選ぶ画面を出す必要があるか（design.md 8章） */
 export function shortfallPending(s: GameState): boolean {
-  return s.player.cash < 0 && hasSellable(s);
+  return s.player.cash < -CASH_EPSILON && hasSellable(s);
 }
 
 /**
@@ -1166,6 +1178,7 @@ export function sellForShortfall(state: GameState, id: AssetId, mode: 'one' | 'n
   }
   s.yearFlows.sold += gained;
   log(s, 'shortfall.sellOne', { params: { asset: id, amount: Math.round(gained) }, notice: true });
+  if (p.cash < 0 && p.cash > -CASH_EPSILON) p.cash = 0;
   // 売れる資産がなくなったのに、まだ足りなければ、残りは借金にする
   if (p.cash < 0 && !hasSellable(s)) coverShortfall(s);
   return s;

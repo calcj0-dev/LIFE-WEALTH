@@ -39,7 +39,7 @@ import {
 import { createLoan, netWorth, payLoanMonth } from './finance';
 import { applyNews, maybeNews, newYearMarket, updateMarketMonth, updateMarketYear } from './market';
 import { NEWS_PER_YEAR } from '../data/news';
-import { maybeBigEvent, sellForShortfall, shortfallPending } from './engine';
+import { dismissGambleResult, distanceOnBoard, maybeBigEvent, sellForShortfall, shortfallPending } from './engine';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20, job = 'employee', saving: Record<string, number> = {}): GameState {
@@ -116,34 +116,55 @@ describe('盤面', () => {
     }
     throw new Error('not found');
   });
-  it('元の道は200マスで、種類ごとの数が設計どおり。分かれた道を足すと約250マス', () => {
+  it('外周は160マスで、種類ごとの数が設計どおり。十字の道と四隅の近道を足すと約250マス', () => {
     const main = BOARD.filter((sq) => sq.route === 'main');
-    expect(main).toHaveLength(200);
+    expect(main).toHaveLength(160);
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
       expect(main.filter((sq) => sq.type === type)).toHaveLength(n);
     }
     expect(BOARD.length).toBeGreaterThan(240);
     expect(BOARD.length).toBeLessThan(260);
   });
-  it('分かれ道は14か所（戻る道6、近道6、別の道2）。分かれた道は、どれも元の道に合流する', () => {
+  it('分かれ道は7か所（四隅の近道4、ハイリスクの道の入り口2、真ん中の交差点1）。どの道も外周に戻ってくる', () => {
     const forks = BOARD.filter((sq) => sq.next.length > 1);
-    expect(forks).toHaveLength(14);
+    expect(forks).toHaveLength(7);
+    expect(forks.filter((f) => BOARD[f.next[1]].route === 'shortcut')).toHaveLength(4);
+    expect(forks.filter((f) => BOARD[f.next[1]].route === 'risk')).toHaveLength(2);
+    const center = forks.find((f) => f.route !== 'main')!;
+    expect(center.next.map((n) => BOARD[n].route)).toEqual(['invest', 'invest']);
     for (const f of forks) {
-      let pos = f.next[1];
-      for (let i = 0; i < 30 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
-      expect(BOARD[pos].route).toBe('main');
-    }
-    // 戻る道は手前に、近道は先に合流する
-    for (const f of forks) {
-      const route = BOARD[f.next[1]].route;
-      let pos = f.next[1];
-      while (BOARD[pos].route !== 'main') pos = BOARD[pos].next[0];
-      if (route === 'back') expect(pos).toBeLessThan(f.id);
-      if (route === 'shortcut' || route === 'risk' || route === 'invest') expect(pos).toBeGreaterThan(f.id);
+      for (const first of f.next) {
+        let pos = first;
+        for (let i = 0; i < 60 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
+        expect(BOARD[pos].route).toBe('main');
+      }
     }
   });
+  it('どのマスからも、どのマスへも行ける。左上と右下に、外周を1周しない小さな輪がある', () => {
+    for (const sq of BOARD) expect(distanceOnBoard(0, sq.id)).toBeLessThan(Infinity);
+    const loop = (id: number) => Math.min(...BOARD[id].next.map((n) => distanceOnBoard(n, id) + 1));
+    const main = BOARD.filter((sq) => sq.route === 'main');
+    expect(main.filter((sq) => loop(sq.id) < 100).length).toBeGreaterThan(40);
+  });
+  it('ボーナスマスは、スタートと分かれ道のマスには置かない。十字の道や近道にも置ける', () => {
+    const routes = new Set<string>();
+    for (let seed = 1; seed <= 30; seed++) {
+      let s = started(seed);
+      for (let turn = 0; turn < 60 && s.phase !== 'finished'; turn++) {
+        if (s.phase === 'roll') s = roll(s);
+        while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
+        s = payShortfall(dismissNews(dismissBigEvent(s)));
+        if (s.phase === 'yearEnd') s = nextYear(s);
+        const sq = BOARD[s.bonusSquare];
+        expect(sq.type).not.toBe('start');
+        expect(sq.next).toHaveLength(1);
+        routes.add(sq.route);
+      }
+    }
+    expect(routes.size).toBeGreaterThan(1);
+  });
   it('分かれ道では止まって道を選び、残りのマス数だけ選んだ道を進む', () => {
-    const fork = BOARD.find((sq) => sq.next.length > 1 && BOARD[sq.next[1]].route === 'back')!;
+    const fork = BOARD.find((sq) => sq.next.length > 1 && sq.route === 'main' && BOARD[sq.next[1]].route === 'risk')!;
     for (let seed = 1; seed < 300; seed++) {
       const base = started();
       const s = roll({ ...base, rngState: seed, player: { ...base.player, position: fork.id - 1 } });
@@ -167,16 +188,12 @@ describe('盤面', () => {
   it('スタートは0番', () => {
     expect(BOARD[0].type).toBe('start');
   });
-  it('マスどうしが重ならない（となりのマスとの間が、マスの大きさより広い）', () => {
-    for (let i = 0; i < BOARD.length; i++) {
-      const a = BOARD[i];
-      const b = BOARD[(i + 1) % BOARD.length];
-      expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(80);
-    }
+  it('マスどうしが重ならない（どの2マスの間も、マスの大きさより広い）', () => {
+    for (const a of BOARD) for (const b of BOARD) if (a.id < b.id) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(80);
   });
-  it('1周つながっている', () => {
+  it('外周は1周つながっている', () => {
     let pos = 0;
-    for (let i = 0; i < 200; i++) pos = BOARD[pos].next[0];
+    for (let i = 0; i < 160; i++) pos = BOARD[pos].route === 'main' ? (BOARD[pos].next.find((n) => BOARD[n].route === 'main') ?? -1) : -1;
     expect(pos).toBe(0);
   });
 });
@@ -234,6 +251,12 @@ describe('お金が足りないとき', () => {
     expect(s.player.cash).toBe(0);
     expect(s.player.cardLoan).toBeGreaterThan(1900);
     expect(shortfallPending(s)).toBe(false);
+  });
+  it('計算の誤差で残る、ごくわずかなマイナスでは止めない（足りない画面から進めなくなっていた）', () => {
+    let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
+    s = { ...s, phase: 'roll', player: { ...s.player, cash: -5e-324 } };
+    expect(shortfallPending(s)).toBe(false);
+    expect(() => roll(s)).not.toThrow();
   });
   it('月末に足りなくなっても、あなたの資産は自動では売らない（ライバルは自動で売る）', () => {
     let s = trade({ ...started(), phase: 'yearEnd' }, 'bond', 40);
@@ -563,6 +586,19 @@ describe('段階3.7の細かいところ', () => {
     expect(s.decision).toEqual({ kind: 'gamble', gambleId: 'horse' });
     expect(getOptions(s).map((o) => o.id)).toEqual(['horse:1', 'horse:10', 'horse:100', 'back']);
     expect(choose(s, 'back').decision).toEqual({ kind: 'gamble' });
+  });
+  it('賭けると、結果の画面に出す結果（賭けた額、戻った額、倍率）が残り、記録にも賭けた額と戻った額が入る（段階8）', () => {
+    for (let seed = 1; seed < 50; seed++) {
+      const base = onGamble(started(seed), 100);
+      const s = choose(choose(base, 'game:horse'), 'horse:10');
+      const r = s.gambleResult!;
+      expect(r.id).toBe('horse');
+      expect(r.bet).toBe(10);
+      expect(r.back).toBeCloseTo(10 * r.multiplier, 6);
+      const entry = s.log.find((e) => e.key === 'gamble.horse');
+      if (r.back !== r.bet) expect(entry?.params).toEqual({ bet: 10, back: r.back });
+      expect(dismissGambleResult(s).gambleResult).toBeNull();
+    }
   });
   it('1万円もないときは、ギャンブルの種類も選べない', () => {
     const opts = getOptions(onGamble(started(), 0));

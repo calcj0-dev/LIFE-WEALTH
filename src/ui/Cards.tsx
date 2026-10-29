@@ -63,7 +63,7 @@ export function CardHand({ s, canUse, onMove, onTrade }: Props) {
               <div className="exact-buttons">
                 {/* ボタンは、その数だけ進んだ先のマスの色にする。赤いマスを避けたり、ボーナスマスをねらったりできる（design.md 3.3） */}
                 {Array.from({ length: ROULETTE_MAX }, (_, k) => k + 1).map((n) => {
-                  // 元の道（まっすぐ）を進んだ先（design.md 3.11）
+                  // まっすぐ（分かれ道では1つ目の道を）進んだ先（design.md 3.11）
                   const target = aheadOnMain(s.player.position, n);
                   const type = BOARD[target].type;
                   const bonus = target === s.bonusSquare;

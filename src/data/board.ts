@@ -1,26 +1,26 @@
 import type { RouteKind, Square, SquareType } from '../game/types';
 
 /**
- * 元の道のマスの種類ごとの数（合計200）。design.md 3.3。分かれた道のマスは、下の BRANCHES に書く。数を変えれば、盤面のマスの数も変わる。
- * 出来事のマスは、お金が増える（プラス）か減る（マイナス）かで分ける。マイナスはプラスの約7割（段階7）
+ * 外周のマスの種類ごとの数（合計160）。design.md 3.3。十字の道と四隅の近道のマスは、下の BRANCHES に書く。数を変えれば、盤面のマスの数も変わる。
+ * 段階7の元の道（200マス）の割合のまま、外周の数に合わせて減らした（段階8）。マイナスはプラスの約7割
  */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
   start: 1,
-  family: 6,
-  plusSmall: 36,
-  minusSmall: 25,
-  plusMedium: 18,
-  minusMedium: 13,
-  plusLarge: 8,
-  minusLarge: 6,
-  job: 6,
-  chance: 4,
-  card: 28,
-  luckyCard: 5,
-  stock: 17,
-  investTalk: 8,
-  gamble: 8,
-  realEstate: 11,
+  family: 5,
+  plusSmall: 29,
+  minusSmall: 20,
+  plusMedium: 14,
+  minusMedium: 10,
+  plusLarge: 6,
+  minusLarge: 5,
+  job: 5,
+  chance: 3,
+  card: 22,
+  luckyCard: 4,
+  stock: 14,
+  investTalk: 6,
+  gamble: 7,
+  realEstate: 9,
 };
 
 /**
@@ -77,68 +77,89 @@ function buildOrder(): SquareType[] {
   return result;
 }
 
-/**
- * 盤面の道。1マス分の長さを1とした座標で、曲がりくねった1本の道を折れ線で表す。
- * マスはこの道の上に等間隔に並べる。道の長さ（200）をマスの数に合わせておくと、マスどうしが重ならない。
- * マスを増やすときは、横の長さか、折り返しの数を増やす。
- */
-const ROUTE: [number, number][] = [
-  [1, 0], [22, 0], [22, 2], [1, 2], [1, 4], [22, 4], [22, 6], [1, 6], [1, 8], [22, 8],
-  [22, 10], [1, 10], [1, 12], [22, 12], [22, 14], [-1, 14], [-1, 0], [1, 0],
-];
+// ---------------------------------------------------------------- 十字型の盤面（design.md 3.11。段階8）
+
+/** 外周の横と縦の長さ（1マス分の長さが1） */
+const W = 44;
+const H = 36;
+/** 外周の角の丸み */
+const R = 2;
+/** 真ん中の交差点 */
+const CENTER: [number, number] = [W / 2, H / 2];
+
+/** 角を丸くする点（cx, cy を中心に、from 度から to 度まで） */
+function arc(cx: number, cy: number, from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  for (let k = 1; k < 4; k++) {
+    const a = ((from + ((to - from) * k) / 4) * Math.PI) / 180;
+    out.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+  }
+  return out;
+}
 
 /**
- * 分かれ道（design.md 3.11）。from の近くの元の道のマスが分かれ道になり、via を通って、to の近くの元の道のマスに合流する。
- * 座標は ROUTE と同じ（1マス分の長さが1）。偶数の段（y = 0, 4, 8, 12）は左から右へ、奇数の段は右から左へ進む
+ * 外周。時計回り（上の辺は右へ、右の辺は下へ、下の辺は左へ、左の辺は上へ）。
+ * スタート（0番）は左の辺の下のほう。マスはこの道の上に等間隔に並べる。道の長さ（約157）をマスの数に合わせておくと、マスどうしが重ならない
+ */
+const ROUTE: [number, number][] = [
+  [0, H - 7],
+  [0, R],
+  ...arc(R, R, 180, 270),
+  [R, 0],
+  [W - R, 0],
+  ...arc(W - R, R, 270, 360),
+  [W, R],
+  [W, H - R],
+  ...arc(W - R, H - R, 0, 90),
+  [W - R, H],
+  [R, H],
+  ...arc(R, H - R, 90, 180),
+  [0, H - R],
+  [0, H - 7],
+];
+
+/** 種類の並びを、n マス分くり返す */
+const repeat = (pattern: SquareType[], n: number): SquareType[] => Array.from({ length: n }, (_, i) => pattern[i % pattern.length]);
+
+/** ハイリスクの道の中身。お金が大きく動く */
+const RISK: SquareType[] = ['plusLarge', 'minusLarge', 'gamble', 'plusMedium', 'minusLarge', 'plusLarge', 'minusMedium', 'card'];
+/** 投資の道の中身。株のマスと投資の話のマスが多い */
+const INVEST: SquareType[] = ['stock', 'investTalk', 'card', 'stock', 'plusSmall', 'stock', 'investTalk', 'minusSmall'];
+
+/**
+ * 外周から分かれる道。from の近くの外周のマスが分かれ道になり、via を通って、to に合流する。
+ * to が 'center' なら真ん中の交差点へ、from が 'center' なら交差点から分かれる
  */
 interface BranchDef {
   route: Exclude<RouteKind, 'main'>;
-  from: [number, number];
+  from: [number, number] | 'center';
   via: [number, number][];
-  to: [number, number];
+  to: [number, number] | 'center';
   /** 分かれた道のマス（並ぶ順） */
   types: SquareType[];
 }
 
 export const BRANCHES: BranchDef[] = [
-  // ハイリスクの道: 盤面の上の外側をまわる。お金が大きく動く
-  {
-    route: 'risk',
-    from: [4, 0],
-    via: [
-      [4, -1.6],
-      [15, -1.6],
-    ],
-    to: [15, 0],
-    types: ['plusLarge', 'minusLarge', 'gamble', 'minusLarge', 'plusLarge', 'minusMedium', 'plusLarge', 'minusLarge', 'gamble', 'plusMedium', 'minusLarge', 'plusLarge'],
-  },
-  // 戻る道と近道（段階7で6本ずつに増やした）。段と段の間に1本ずつ。近道は下の段へ（少し先へ）、戻る道は上の段へ（少し手前へ）
-  { route: 'shortcut', from: [16, 0], via: [], to: [16, 2], types: ['minusSmall', 'card'] },
-  { route: 'back', from: [19, 2], via: [], to: [19, 0], types: ['plusSmall', 'card'] },
-  { route: 'shortcut', from: [4, 2], via: [], to: [4, 4], types: ['plusSmall', 'minusMedium'] },
-  { route: 'back', from: [7, 4], via: [], to: [7, 2], types: ['card', 'plusMedium'] },
-  { route: 'shortcut', from: [16, 4], via: [], to: [16, 6], types: ['card', 'plusSmall'] },
-  { route: 'back', from: [19, 6], via: [], to: [19, 4], types: ['minusSmall', 'plusSmall'] },
-  { route: 'shortcut', from: [4, 6], via: [], to: [4, 8], types: ['plusMedium', 'card'] },
-  { route: 'back', from: [7, 8], via: [], to: [7, 6], types: ['plusSmall', 'minusSmall'] },
-  { route: 'shortcut', from: [16, 8], via: [], to: [16, 10], types: ['card', 'minusSmall'] },
-  { route: 'back', from: [19, 10], via: [], to: [19, 8], types: ['plusSmall', 'card'] },
-  { route: 'shortcut', from: [4, 10], via: [], to: [4, 12], types: ['minusSmall', 'plusSmall'] },
-  { route: 'back', from: [7, 12], via: [], to: [7, 10], types: ['card', 'plusMedium'] },
-  // 投資の道: 盤面の下の外側をまわる。株のマスと投資の話のマスが多い
-  {
-    route: 'invest',
-    from: [18, 14],
-    via: [
-      [18, 15.6],
-      [5, 15.6],
-    ],
-    to: [5, 14],
-    types: ['stock', 'investTalk', 'stock', 'card', 'stock', 'investTalk', 'plusSmall', 'stock', 'investTalk', 'stock', 'minusSmall', 'stock', 'investTalk', 'stock'],
-  },
+  // 四隅の近道。角を斜めに抜ける
+  { route: 'shortcut', from: [0, 5], via: [], to: [5, 0], types: ['plusSmall', 'card', 'minusSmall', 'plusMedium'] },
+  { route: 'shortcut', from: [W - 5, 0], via: [], to: [W, 5], types: ['card', 'plusSmall', 'minusMedium', 'plusSmall'] },
+  { route: 'shortcut', from: [W, H - 5], via: [], to: [W - 5, H], types: ['minusSmall', 'plusSmall', 'card', 'plusMedium'] },
+  { route: 'shortcut', from: [5, H], via: [], to: [0, H - 5], types: ['plusMedium', 'minusSmall', 'card', 'plusSmall'] },
+  // ハイリスクの道（十字の縦）。上の辺と下の辺のまん中から入り、真ん中の交差点へ向かう
+  { route: 'risk', from: [W / 2, 0], via: [[W / 2 + 1.5, H / 4]], to: 'center', types: repeat(RISK, 17) },
+  { route: 'risk', from: [W / 2, H], via: [[W / 2 - 1.5, (H * 3) / 4]], to: 'center', types: repeat([...RISK].reverse(), 17) },
+  // 投資の道（十字の横）。交差点から、右か左へ進み、右の辺か左の辺のまん中で外周に合流する。1つ目（まっすぐ）は右
+  { route: 'invest', from: 'center', via: [[(W * 3) / 4, H / 2 + 1.5]], to: [W, H / 2], types: repeat(INVEST, 21) },
+  { route: 'invest', from: 'center', via: [[W / 4, H / 2 - 1.5]], to: [0, H / 2], types: repeat([...INVEST].reverse(), 21) },
 ];
 
-const ALL_POINTS = [...ROUTE, ...BRANCHES.flatMap((b) => [b.from, ...b.via, b.to])];
+/** 真ん中の交差点のマスの種類（分かれ道なので、ボーナスマスは置かない） */
+const CENTER_TYPE: SquareType = 'luckyCard';
+
+const pointOf = (p: [number, number] | 'center'): [number, number] => (p === 'center' ? CENTER : p);
+const branchLine = (b: BranchDef) => [pointOf(b.from), ...b.via, pointOf(b.to)];
+
+const ALL_POINTS = [...ROUTE, ...BRANCHES.flatMap(branchLine)];
 const ROUTE_MIN_X = Math.min(...ALL_POINTS.map((p) => p[0]));
 const ROUTE_MAX_X = Math.max(...ALL_POINTS.map((p) => p[0]));
 const ROUTE_MIN_Y = Math.min(...ALL_POINTS.map((p) => p[1]));
@@ -182,10 +203,11 @@ function positionsAlongRoute(count: number): { x: number; y: number }[] {
   return result;
 }
 
-/** 道の折れ線（画面上の位置） */
+/** 外周の折れ線（画面上の位置） */
 export const ROUTE_POINTS = ROUTE.map(([x, y]) => toWorld(x, y));
-/** 分かれた道の折れ線（画面上の位置。道を描くのと、飾りを道からはなすのに使う） */
-export const BRANCH_POINTS = BRANCHES.map((b) => [b.from, ...b.via, b.to].map(([x, y]) => toWorld(x, y)));
+/** 分かれた道の折れ線と道の種類（画面上の位置。道を描くのと、飾りを道からはなすのに使う） */
+export const BRANCH_LINES = BRANCHES.map((b) => ({ route: b.route, points: branchLine(b).map(([x, y]) => toWorld(x, y)) }));
+export const BRANCH_POINTS = BRANCH_LINES.map((l) => l.points);
 
 /** 折れ線の上に、端を除いて n 個のマスを等間隔に置く */
 function positionsAlong(points: [number, number][], n: number): { x: number; y: number }[] {
@@ -217,7 +239,7 @@ export function buildBoard(): Square[] {
     next: [(i + 1) % types.length],
     route: 'main',
   }));
-  /** 座標にいちばん近い、元の道のマス */
+  /** 座標にいちばん近い、外周のマス */
   const nearestMain = ([x, y]: [number, number]) => {
     const w = toWorld(x, y);
     let best = 0;
@@ -226,17 +248,23 @@ export function buildBoard(): Square[] {
     }
     return best;
   };
+  // 真ん中の交差点。行き先は、投資の道を作るときに足す
+  const center = squares.length;
+  squares.push({ id: center, type: CENTER_TYPE, ...toWorld(...CENTER), next: [], route: 'risk' });
   for (const b of BRANCHES) {
-    const fork = nearestMain(b.from);
-    const join = nearestMain(b.to);
-    const pts = positionsAlong([b.from, ...b.via, b.to], b.types.length);
+    const join = b.to === 'center' ? center : nearestMain(b.to);
+    const pts = positionsAlong(branchLine(b), b.types.length);
     const first = squares.length;
     b.types.forEach((type, j) => {
       const id = first + j;
       squares.push({ id, type, ...pts[j], next: [j === b.types.length - 1 ? join : id + 1], route: b.route });
     });
-    // 分かれ道: 1つ目が元の道（まっすぐ）、2つ目が分かれた道
-    squares[fork].next = [squares[fork].next[0], first];
+    if (b.from === 'center') squares[center].next.push(first);
+    // 外周の分かれ道: 1つ目が外周（まっすぐ）、2つ目が分かれた道
+    else {
+      const fork = nearestMain(b.from);
+      squares[fork].next = [squares[fork].next[0], first];
+    }
   }
   return squares;
 }
