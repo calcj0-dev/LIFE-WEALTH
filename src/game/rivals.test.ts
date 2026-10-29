@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { BONUS_SPOTS } from '../data/board';
 import { BONUS } from '../data/rules';
-import { playGame } from './autoplay';
+import { payShortfall, playGame } from './autoplay';
 import { applyNews } from './market';
 import { NEWS } from '../data/news';
-import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, distanceOnBoard, getOptions, roll, setSaving } from './engine';
+import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, getOptions, roll, setSaving } from './engine';
 import { standings } from './standings';
 import type { GameState } from './types';
 
@@ -79,20 +80,25 @@ describe('ライバル（CPU）', () => {
     expect(list[0].rank).toBe(1);
     expect(typeof s.result!.investReturn).toBe('number');
   });
-  it('ライバルがボーナスマスを取っても、次のボーナスマスはあなたの駒から10〜40マス先', () => {
+  it('ライバルがボーナスマスを取ったら、次のボーナスマスは決まった20か所の、別の場所に移る', () => {
+    let moved = 0;
     for (let seed = 1; seed <= 10; seed++) {
       let s = started(seed, 10);
       for (let turn = 0; turn < 120 && s.phase !== 'finished'; turn++) {
+        const before = s.bonusSquare;
         if (s.phase === 'roll') s = roll(s);
         while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
-        s = dismissNews(dismissBigEvent(s));
+        s = payShortfall(dismissNews(dismissBigEvent(s)));
         if (s.phase === 'yearEnd') break;
         const taken = s.rivals.some((r) => r.log.at(-1)?.key === 'bonus.get' && r.log.at(-1)?.month === s.month - 1);
         if (taken) {
-          const d = distanceOnBoard(s.player.position, s.bonusSquare);
-          expect(d).toBeLessThanOrEqual(BONUS.maxAhead);
+          expect(BONUS_SPOTS).toContain(s.bonusSquare);
+          expect(s.bonusSquare).not.toBe(before);
+          moved++;
         }
       }
     }
+    expect(moved).toBeGreaterThan(0);
   });
+
 });

@@ -4,10 +4,12 @@ import eventsJson from '../data/events.json';
 import jobsJson from '../data/jobs.json';
 import newsJson from '../data/news.json';
 import { ASSETS, ASSET_IDS, checkAssets } from '../data/assets';
-import { BOARD, SQUARE_COUNTS } from '../data/board';
+import { BOARD, BONUS_SPOTS, PETAL_STOCK, SQUARE_COUNTS } from '../data/board';
 
 /** 最初の結婚・出産マス */
-const FAMILY_INDEX = BOARD.findIndex((sq) => sq.type === 'family');
+/** 結婚・出産マスのうち、1つ手前からも、その先6マスも、分かれ道のない一本道のもの（テストで止まりやすくするため） */
+const plainRoad = (i: number) => [i - 1, i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6].every((k) => BOARD[k] && BOARD[k].next.length === 1 && BOARD[k].next[0] === k + 1);
+const FAMILY_INDEX = BOARD.findIndex((sq, i) => sq.type === 'family' && plainRoad(i));
 import { EVENTS, EVENTS_BY_ID, checkEvents } from '../data/events';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
@@ -116,55 +118,60 @@ describe('盤面', () => {
     }
     throw new Error('not found');
   });
-  it('外周は160マスで、種類ごとの数が設計どおり。十字の道と四隅の近道を足すと約250マス', () => {
-    const main = BOARD.filter((sq) => sq.route === 'main');
-    expect(main).toHaveLength(160);
+  it('ふつうの道（真ん中の輪と花びら）の種類ごとの数が設計どおり。全部で約250マス', () => {
+    const normal = BOARD.filter((sq) => sq.route === 'main' || sq.route === 'petal');
     for (const [type, n] of Object.entries(SQUARE_COUNTS)) {
-      expect(main.filter((sq) => sq.type === type)).toHaveLength(n);
+      expect(normal.filter((sq) => sq.type === type)).toHaveLength(n);
     }
     expect(BOARD.length).toBeGreaterThan(240);
-    expect(BOARD.length).toBeLessThan(260);
+    expect(BOARD.length).toBeLessThan(270);
   });
-  it('分かれ道は7か所（四隅の近道4、ハイリスクの道の入り口2、真ん中の交差点1）。どの道も外周に戻ってくる', () => {
+  it('分かれ道は10か所（花びらの入り口4、戻り道の入り口4、ハイリスクの道と投資の道の入り口2）。どの道も真ん中の輪に戻ってくる', () => {
     const forks = BOARD.filter((sq) => sq.next.length > 1);
-    expect(forks).toHaveLength(7);
-    expect(forks.filter((f) => BOARD[f.next[1]].route === 'shortcut')).toHaveLength(4);
-    expect(forks.filter((f) => BOARD[f.next[1]].route === 'risk')).toHaveLength(2);
-    const center = forks.find((f) => f.route !== 'main')!;
-    expect(center.next.map((n) => BOARD[n].route)).toEqual(['invest', 'invest']);
+    expect(forks).toHaveLength(10);
+    const second = (route: string) => forks.filter((f) => BOARD[f.next[1]].route === route).length;
+    expect([second('petal'), second('back'), second('risk'), second('invest')]).toEqual([4, 4, 1, 1]);
     for (const f of forks) {
       for (const first of f.next) {
         let pos = first;
-        for (let i = 0; i < 60 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
+        for (let i = 0; i < 80 && BOARD[pos].route !== 'main'; i++) pos = BOARD[pos].next[0];
         expect(BOARD[pos].route).toBe('main');
       }
     }
   });
-  it('どのマスからも、どのマスへも行ける。左上と右下に、外周を1周しない小さな輪がある', () => {
+  it('スタートは真ん中の輪にある。どのマスからも、どのマスへも行ける', () => {
+    expect(BOARD[0].route).toBe('main');
     for (const sq of BOARD) expect(distanceOnBoard(0, sq.id)).toBeLessThan(Infinity);
-    const loop = (id: number) => Math.min(...BOARD[id].next.map((n) => distanceOnBoard(n, id) + 1));
-    const main = BOARD.filter((sq) => sq.route === 'main');
-    expect(main.filter((sq) => loop(sq.id) < 100).length).toBeGreaterThan(40);
   });
-  it('ボーナスマスは、スタートと分かれ道のマスには置かない。十字の道や近道にも置ける', () => {
-    const routes = new Set<string>();
-    for (let seed = 1; seed <= 30; seed++) {
-      let s = started(seed);
-      for (let turn = 0; turn < 60 && s.phase !== 'finished'; turn++) {
-        if (s.phase === 'roll') s = roll(s);
-        while (s.phase === 'decision') s = choose(s, getOptions(s).find((o) => o.enabled)!.id);
-        s = payShortfall(dismissNews(dismissBigEvent(s)));
-        if (s.phase === 'yearEnd') s = nextYear(s);
-        const sq = BOARD[s.bonusSquare];
-        expect(sq.type).not.toBe('start');
-        expect(sq.next).toHaveLength(1);
-        routes.add(sq.route);
-      }
+  it('ボーナスマスが出る場所は20か所。どれもスタートや分かれ道ではなく、花びらの小さな輪の上は約30マスで戻ってこられる', () => {
+    expect(new Set(BONUS_SPOTS).size).toBe(20);
+    const loop = (id: number) => Math.min(...BOARD[id].next.map((n) => distanceOnBoard(n, id) + 1));
+    for (const id of BONUS_SPOTS) {
+      expect(BOARD[id].type).not.toBe('start');
+      expect(BOARD[id].next).toHaveLength(1);
     }
-    expect(routes.size).toBeGreaterThan(1);
+    expect(BONUS_SPOTS.filter((id) => loop(id) <= 30)).toHaveLength(12);
+  });
+  it('花びらの株のマスでは、その花びらの株が出る', () => {
+    for (const petal of ['tl', 'tr', 'br', 'bl'] as const) {
+      const sq = BOARD.find((x) => x.type === 'stock' && x.petal === petal)!;
+      const before = BOARD.find((x) => x.next.length === 1 && x.next[0] === sq.id)!;
+      const base = started();
+      const s = roll({ ...base, bonusSquare: BONUS_SPOTS.find((id) => id !== sq.id)!, player: { ...base.player, position: before.id, hand: ['exact'] } }, { index: 0, exact: 1 });
+      expect(s.player.position).toBe(sq.id);
+      expect(s.decision?.assetId).toBe(PETAL_STOCK[petal]);
+    }
+  });
+  it('スタートに止まると、カードが1枚もらえる', () => {
+    const before = BOARD.find((x) => x.next.length === 1 && x.next[0] === 0)!;
+    const base = started();
+    const s = roll({ ...base, player: { ...base.player, position: before.id, hand: ['exact'] } }, { index: 0, exact: 1 });
+    expect(s.player.position).toBe(0);
+    expect(s.player.hand).toHaveLength(1);
+    expect(s.log.some((e) => e.key === 'card.get')).toBe(true);
   });
   it('分かれ道では止まって道を選び、残りのマス数だけ選んだ道を進む', () => {
-    const fork = BOARD.find((sq) => sq.next.length > 1 && sq.route === 'main' && BOARD[sq.next[1]].route === 'risk')!;
+    const fork = BOARD.find((sq) => sq.next.length > 1 && BOARD[sq.next[1]].route === 'risk')!;
     for (let seed = 1; seed < 300; seed++) {
       const base = started();
       const s = roll({ ...base, rngState: seed, player: { ...base.player, position: fork.id - 1 } });
@@ -191,11 +198,13 @@ describe('盤面', () => {
   it('マスどうしが重ならない（どの2マスの間も、マスの大きさより広い）', () => {
     for (const a of BOARD) for (const b of BOARD) if (a.id < b.id) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(80);
   });
-  it('外周は1周つながっている', () => {
+  it('真ん中の輪は1周つながっている', () => {
+    const hub = BOARD.filter((sq) => sq.route === 'main');
     let pos = 0;
-    for (let i = 0; i < 160; i++) pos = BOARD[pos].route === 'main' ? (BOARD[pos].next.find((n) => BOARD[n].route === 'main') ?? -1) : -1;
+    for (let i = 0; i < hub.length; i++) pos = BOARD[pos].next[0];
     expect(pos).toBe(0);
   });
+
 });
 
 describe('ギャンブル', () => {

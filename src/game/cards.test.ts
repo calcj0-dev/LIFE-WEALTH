@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import cardsJson from '../data/cards.json';
-import { BOARD } from '../data/board';
+import { BOARD, BONUS_SPOTS } from '../data/board';
 import { HAND_MAX, checkCards } from '../data/cards';
 import { BONUS } from '../data/rules';
 import { has } from '../i18n';
@@ -115,14 +115,16 @@ describe('カード', () => {
 });
 
 describe('ボーナスマス', () => {
-  it('スタートには付かない。10〜40マス先に付く', () => {
+  it('決まった20か所のどれかに付く（距離に関係なくランダム）', () => {
+    const seen = new Set<number>();
     for (let seed = 1; seed <= 200; seed++) {
       const s = started(seed);
-      const type = BOARD[s.bonusSquare].type;
-      expect(type).not.toBe('start');
-      expect(bonusDistance(s)).toBeGreaterThanOrEqual(BONUS.minAhead);
-      expect(bonusDistance(s)).toBeLessThanOrEqual(BONUS.maxAhead);
+      expect(BONUS_SPOTS).toContain(s.bonusSquare);
+      expect(BOARD[s.bonusSquare].type).not.toBe('start');
+      expect(bonusDistance(s)).toBeLessThan(Infinity);
+      seen.add(s.bonusSquare);
     }
+    expect(seen.size).toBeGreaterThan(10);
   });
   it('ぴったり止まるとボーナスがもらえ、次のボーナスマスが決まる', () => {
     const base = started();

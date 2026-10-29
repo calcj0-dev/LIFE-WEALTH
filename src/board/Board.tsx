@@ -1,11 +1,11 @@
 // 盤面。ほかの画面から切り離した部品にして、あとで Phaser に差し替えられるようにする（design.md 11章）。
-// 十字型の道に色とりどりのマスが並び、まわりに家や木がある、にぎやかな盤面（design.md 3.1、3.11）。
+// 真ん中の輪と4つの花びらの道に色とりどりのマスが並び、まわりに家や木がある、にぎやかな盤面（design.md 3.1、3.11）。
 
 import { useEffect, useRef, useState } from 'react';
 import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
 import { SquareIcon } from './SquareIcon';
-import { BOARD, BOARD_WORLD, BRANCH_LINES, BRANCH_POINTS, ROUTE_POINTS } from '../data/board';
+import { BOARD, BOARD_WORLD, BRANCH_LINES, BRANCH_POINTS, CROSSING, PETAL_STOCK, ROUTE_POINTS } from '../data/board';
 import type { RouteKind, Square, SquareType } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { BONUS } from '../data/rules';
@@ -33,7 +33,8 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
 /** 道ごとの色（design.md 3.11）。arrow は看板と矢印、road は道の色 */
 export const ROUTE_COLORS: Record<RouteKind, { arrow: string; road: string; edge: string }> = {
   main: { arrow: '#a8773f', road: '#f8ecd0', edge: '#d9bf8c' },
-  shortcut: { arrow: '#4d96ff', road: '#dcebff', edge: '#9cc2f2' },
+  petal: { arrow: '#a8773f', road: '#f8ecd0', edge: '#d9bf8c' },
+  back: { arrow: '#4d96ff', road: '#dcebff', edge: '#9cc2f2' },
   risk: { arrow: '#d6336c', road: '#fbdce7', edge: '#eba3bd' },
   invest: { arrow: '#1fa89c', road: '#d3f2ee', edge: '#8fd6cd' },
 };
@@ -42,7 +43,14 @@ export const ROUTE_COLORS: Record<RouteKind, { arrow: string; road: string; edge
 const edgeRoute = (from: Square, to: Square): RouteKind => (to.route === 'main' ? from.route : to.route);
 
 /** 看板の幅（道の名前を書くときは広い） */
-const signWidth = (sq: Square) => (sq.next.some((to) => ['risk', 'invest'].includes(edgeRoute(sq, BOARD[to]))) ? 132 : 64);
+/** 看板の矢印の板に書く言葉。ハイリスクの道と投資の道は道の名前、花びらの入り口は花びらの株の名前（design.md 3.4、3.11） */
+function plateLabel(from: Square, to: Square): string {
+  const route = edgeRoute(from, to);
+  if (route === 'risk' || route === 'invest') return t(`route.short.${route}`);
+  if (to.route === 'petal' && from.route === 'main' && to.petal) return t(`assetShort.${PETAL_STOCK[to.petal]}`);
+  return '';
+}
+const signWidth = (sq: Square) => (sq.next.some((to) => plateLabel(sq, BOARD[to])) ? 132 : 64);
 
 /** 分かれ道のマスの横の、看板を立てる場所（近い順に試して、看板がまわりのマスと重ならない場所） */
 function signSpot(sq: Square): { x: number; y: number } {
@@ -75,7 +83,7 @@ function Signpost({ sq, x, y }: { sq: Square; x: number; y: number }) {
     const next = BOARD[to];
     const route = edgeRoute(sq, next);
     const angle = (Math.atan2(next.y - sq.y, next.x - sq.x) * 180) / Math.PI;
-    const label = route === 'risk' || route === 'invest' ? t(`route.short.${route}`) : '';
+    const label = plateLabel(sq, next);
     return { to, route, angle, label };
   });
   const width = signWidth(sq);
@@ -278,7 +286,7 @@ export interface PieceFloat {
   small?: boolean;
 }
 
-/** ボーナスマス。金色のマスに大きな星。光の輪とキラキラが回り、上に「BONUS ＋30万円」の札を立てる */
+/** ボーナスマス。金色のマスに大きな星。光の輪とキラキラが回り、上に「BONUS ＋100万円」の札を立てる */
 function BonusTile({ x, y, landed, overview }: { x: number; y: number; landed: boolean; overview: boolean }) {
   const r = SIZE / 2;
   return (
@@ -471,6 +479,11 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
               </g>
             );
           })}
+          {/* 立体交差の橋の手すり（投資の道がハイリスクの道の上を渡る。曲がれない） */}
+          <g transform={`translate(${CROSSING.x} ${CROSSING.y})`}>
+            <rect x="-62" y="-52" width="124" height="10" rx="5" fill="#8fd6cd" stroke="#fff" strokeWidth="3" />
+            <rect x="-62" y="42" width="124" height="10" rx="5" fill="#8fd6cd" stroke="#fff" strokeWidth="3" />
+          </g>
           {/* 進む向きの印（一方通行だと分かるように） */}
           {CHEVRONS.map((c) => (
             <path key={c.key} d="M-7,-11 L5,0 L-7,11" transform={`translate(${c.x} ${c.y}) rotate(${c.angle})`} fill="none" stroke={c.color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />

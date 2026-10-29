@@ -2,7 +2,7 @@
 // どの関数も、受け取った状態を書き換えずに、新しい状態を返す。
 
 import { ASSETS, ASSET_IDS, START_DEPOSIT_RATE, zeroHoldings } from '../data/assets';
-import { BOARD } from '../data/board';
+import { BOARD, BONUS_SPOTS, PETAL_STOCK } from '../data/board';
 import { CARDS, CARDS_BY_ID, HAND_MAX } from '../data/cards';
 import { INVEST_TALKS, INVEST_TALKS_BY_ID, TALK_AMOUNTS } from '../data/investTalks';
 import { EVENTS, EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS, SPOUSE_PART_INCOME, type Effect, type EventDef, type EventSign, type EventSize } from '../data/events';
@@ -166,7 +166,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number; riva
   const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
   if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
   const s: GameState = {
-    saveVersion: 5,
+    saveVersion: 6,
     seed,
     rngState: seed >>> 0,
     years: DEFAULT_YEARS,
@@ -401,18 +401,12 @@ export function closeTrade(state: GameState): GameState {
 }
 
 /**
- * 次のボーナスマスを決める。あなたの駒から、一番近い道で10〜40マス先のどこか。スタートと分かれ道のマスには付けない（design.md 3.10）。
- * ライバルが取ったときも、あなたがねらえるように、あなたの駒から数える（design.md 12.3）
+ * 次のボーナスマスを決める。決まった20か所（BONUS_SPOTS）から、距離に関係なくランダムに選ぶ。
+ * 今のボーナスマスと同じ場所は選ばない（design.md 3.10。段階9）
  */
 function placeBonus(s: GameState) {
-  // ライバルの番の間は、あなたの記録はそのライバルの場所に入れ替わっている
-  const me = s.cpuSeat >= 0 ? s.rivals[s.cpuSeat].player : s.player;
-  const dist = distancesFrom(me.position);
-  const candidates = BOARD.filter((sq) => {
-    const d = dist.get(sq.id) ?? Infinity;
-    return d >= BONUS.minAhead && d <= BONUS.maxAhead && sq.type !== 'start' && sq.next.length === 1;
-  });
-  if (candidates.length) s.bonusSquare = candidates[randomInt(s, 0, candidates.length - 1)].id;
+  const spots = BONUS_SPOTS.filter((id) => id !== s.bonusSquare);
+  s.bonusSquare = spots[randomInt(s, 0, spots.length - 1)];
 }
 
 /** ボーナスマスまで、あと何マスか */
@@ -448,7 +442,10 @@ function handleSquare(s: GameState) {
       if (p.hand.length > HAND_MAX) return startDecision(s, { kind: 'discard' }, 'square');
       return endMonth(s);
     case 'start':
-      return notice('square.start');
+      // スタートに止まると、カードが1枚もらえる（design.md 3.3。段階9）
+      gainCard(s, false);
+      if (p.hand.length > HAND_MAX) return startDecision(s, { kind: 'discard' }, 'square');
+      return endMonth(s);
     case 'family':
       // 結婚・出産マス。独身なら結婚、結婚していれば出産のルーレット（design.md 3.5）
       if (!p.married) return startDecision(s, { kind: 'marriage' }, 'square');
@@ -476,9 +473,10 @@ function handleSquare(s: GameState) {
       return startDecision(s, { kind: 'event', eventId: ev.id, ...(params ? { params } : {}) }, 'square');
     }
     case 'stock': {
-      // 4業種のうち1つの株が、割安に買える（design.md 3.4）
+      // 4業種のうち1つの株が、割安に買える（design.md 3.4）。花びらの中では、その花びらの株
       const stocks = ASSET_IDS.filter((id) => ASSETS[id].kind === 'stock');
-      return startDecision(s, { kind: 'stock', assetId: stocks[randomInt(s, 0, stocks.length - 1)] }, 'square');
+      const assetId = square.petal ? PETAL_STOCK[square.petal] : stocks[randomInt(s, 0, stocks.length - 1)];
+      return startDecision(s, { kind: 'stock', assetId }, 'square');
     }
     case 'investTalk':
       // 投資の落とし穴。3つのどれかの話を持ちかけられる（design.md 6.4）
