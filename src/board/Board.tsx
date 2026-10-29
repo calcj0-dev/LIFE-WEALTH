@@ -128,7 +128,7 @@ const SIZE = 74;
 /** 画面に映す範囲の大きさ（駒を追うとき） */
 const VIEW = { width: 1000, height: 560 };
 const FOLLOW_SCALE = 1;
-/** 全体図で、盤面を収める横の幅（PC やスマホの横向きの枠で、左右が切れても見える幅） */
+/** 縮小しきったとき（全体が入る大きさ）に、盤面を収める横の幅（PC やスマホの横向きの枠で、左右が切れても見える幅） */
 const OVERVIEW_WIDTH = 780;
 
 // ---------------------------------------------------------------- 背景の飾り（毎回同じ配置）
@@ -251,9 +251,7 @@ interface Props {
   position: number;
   /** ボーナスマスの目印が付いたマス */
   bonus?: number;
-  /** true なら盤面全体を映す。false なら駒の周りを拡大して追いかける */
-  overview: boolean;
-  /** true なら、駒の周りの大きさのまま、盤面をドラッグして先を見られる（視点を移動。design.md 3.1） */
+  /** true なら、盤面をドラッグして動かしたり、拡大・縮小したりして見られる（視点を移動。design.md 3.1）。false なら駒の周りを追いかける */
   pan?: boolean;
   /** 結婚しているか（結婚・出産マスの絵を、指輪から赤ちゃんに変える） */
   married?: boolean;
@@ -290,7 +288,7 @@ export interface PieceFloat {
 function BonusTile({ x, y, landed, overview }: { x: number; y: number; landed: boolean; overview: boolean }) {
   const r = SIZE / 2;
   return (
-    // 全体図ではマスが小さいので、ボーナスマスだけ大きく描いて目立たせる
+    // 縮小して見ているときはマスが小さいので、ボーナスマスだけ大きく描いて目立たせる
     <g transform={`translate(${x} ${y}) scale(${overview ? 1.9 : 1.18})`}>
       <circle className="bonus-glow" r={r + 16} fill="#ffe066" opacity="0.45" />
       <rect x={-r} y={-r + 6} width={SIZE} height={SIZE} rx="16" fill="rgba(0,0,0,0.16)" />
@@ -339,24 +337,28 @@ function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; 
 }
 
 // 盤面の枠は画面より縦長になることが多く、そのときは左右が切れて映る（slice）。
-// 全体図では、切れても全部が入るように、横は OVERVIEW_WIDTH の幅に収める
+// 縮小しきったときは、切れても全部が入るように、横は OVERVIEW_WIDTH の幅に収める
 const FIT = Math.min(OVERVIEW_WIDTH / BOARD_WORLD.width, VIEW.height / BOARD_WORLD.height);
 
-/** 全体図での映し方（拡大の倍率と、ずらす量） */
+/** 視点を移動の間の映し方（拡大の倍率と、ずらす量） */
 type Camera = { scale: number; tx: number; ty: number };
 
-/** 全体図を開いたときの映し方（盤面の全体が入る） */
+/** 縮小しきったときの映し方（盤面の全体が入る） */
 function fitCamera(): Camera {
   return { scale: FIT, tx: (VIEW.width - BOARD_WORLD.width * FIT) / 2, ty: (VIEW.height - BOARD_WORLD.height * FIT) / 2 };
 }
 
-/** 倍率を、全体が入る大きさから「駒を追う」大きさまでに収め、盤面の真ん中が画面から出ないようにする */
+/**
+ * 倍率を、全体が入る大きさから「駒を追う」大きさまでに収め、盤面の真ん中が画面から出ないようにする。
+ * 盤面が画面より小さくなったら（縮小しきったとき）、画面の真ん中に置く
+ */
 function clampCamera(c: Camera): Camera {
   const scale = Math.min(FOLLOW_SCALE, Math.max(FIT, c.scale));
   const w = BOARD_WORLD.width * scale;
   const h = BOARD_WORLD.height * scale;
-  const tx = Math.min(VIEW.width / 2, Math.max(VIEW.width / 2 - w, c.tx));
-  const ty = Math.min(VIEW.height / 2, Math.max(VIEW.height / 2 - h, c.ty));
+  const fits = w <= OVERVIEW_WIDTH && h <= VIEW.height;
+  const tx = fits ? (VIEW.width - w) / 2 : Math.min(VIEW.width / 2, Math.max(VIEW.width / 2 - w, c.tx));
+  const ty = fits ? (VIEW.height - h) / 2 : Math.min(VIEW.height / 2, Math.max(VIEW.height / 2 - h, c.ty));
   return { scale, tx, ty };
 }
 
@@ -367,21 +369,22 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, overview, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork }: Props) {
+export function Board({ position, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
-  // 全体図での映し方。開くたびに、全体が入る大きさから始める（design.md 3.1）
+  // 視点を移動の間の映し方（design.md 3.1）
   const [camera, setCamera] = useState<Camera>(fitCamera);
   /** ドラッグやつまむ操作の途中か（途中は、なめらかに動かす演出を止める） */
   const [dragging, setDragging] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   useEffect(() => {
-    if (overview) setCamera(fitCamera());
     // 視点を移動: 駒の周りの大きさのまま、今の駒の場所から始める
-    else if (pan) setCamera({ scale: FOLLOW_SCALE, tx: VIEW.width / 2 - here.x * FOLLOW_SCALE, ty: VIEW.height / 2 - here.y * FOLLOW_SCALE });
-  }, [overview, pan]);
-  /** ドラッグで動かせる（全体図か、視点を移動の間） */
-  const free = overview || pan;
+    if (pan) setCamera({ scale: FOLLOW_SCALE, tx: VIEW.width / 2 - here.x * FOLLOW_SCALE, ty: VIEW.height / 2 - here.y * FOLLOW_SCALE });
+  }, [pan]);
+  /** ドラッグや拡大・縮小で動かせる（視点を移動の間） */
+  const free = pan;
+  /** 縮小して、駒が小さく見えている（駒の頭の上の文字を出さず、ボーナスマスを大きく描く） */
+  const overview = free && camera.scale < 0.45;
 
   /** 画面上の位置を、盤面の枠（viewBox）の中の位置にする */
   const toView = (clientX: number, clientY: number) => {
@@ -395,7 +398,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
   // マウスのホイールで拡大・縮小する。ページが動かないよう、自分で受け取る
   useEffect(() => {
     const svg = svgRef.current;
-    if (!svg || !overview) return;
+    if (!svg || !free) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const p = toView(e.clientX, e.clientY);
@@ -403,7 +406,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
     };
     svg.addEventListener('wheel', onWheel, { passive: false });
     return () => svg.removeEventListener('wheel', onWheel);
-  }, [overview]);
+  }, [free]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!free) return;
@@ -423,7 +426,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
       const d1 = Math.hypot(now.x - other.x, now.y - other.y);
       const mid = { x: (now.x + other.x) / 2, y: (now.y + other.y) / 2 };
       const shift = { x: (now.x - before.x) / 2, y: (now.y - before.y) / 2 };
-      if (d0 > 0 && overview) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
+      if (d0 > 0) setCamera((c) => zoomAt({ ...c, tx: c.tx + shift.x, ty: c.ty + shift.y }, d1 / d0, mid.x, mid.y));
     } else {
       setCamera((c) => clampCamera({ ...c, tx: c.tx + now.x - before.x, ty: c.ty + now.y - before.y }));
     }
@@ -533,7 +536,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
               </g>
             );
           })}
-          {/* 駒の頭の上の文字。全体図では駒が小さいので出さない */}
+          {/* 駒の頭の上の文字。縮小して駒が小さく見えるときは出さない */}
           {!overview &&
             floats.map((f) => {
               const sq = BOARD[f.position];
@@ -553,7 +556,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
             })}
         </g>
       </svg>
-      {overview && (
+      {free && (
         <div className="board-zoom">
           <button className="secondary" aria-label={t('board.zoomIn')} title={t('board.zoomIn')} onClick={() => setCamera((c) => zoomAt(c, 1.5, VIEW.width / 2, VIEW.height / 2))}>
             ＋

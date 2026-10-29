@@ -86,35 +86,32 @@ for (const vp of VIEWPORTS) {
     await clickText(page, '.rival-detail', '閉じる');
     await page.waitForTimeout(200);
   }
-  // 盤面の全体図
-  // 視点を移動 → 全体図
+  // 視点を移動: ドラッグと、拡大・縮小（縮小しきると全体が見える）
   await clickText(page, '.board-toolbar', '視点を移動');
   await page.waitForTimeout(400);
   await shot('pan');
-  if (await clickText(page, '.board-toolbar', '全体図')) {
-    await page.waitForTimeout(600);
-    await shot('overview');
-    // ホイールで拡大し、ドラッグで動かす
-    const box = await page.locator('.board-area svg.board-overview').boundingBox();
-    if (box) {
-      const cx = box.x + box.width / 2;
-      const cy = box.y + box.height / 2;
-      await page.mouse.move(cx, cy);
-      for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -200);
-      await page.waitForTimeout(500);
-      await shot('overview-zoom');
-      await page.mouse.down();
-      await page.mouse.move(cx + 200, cy + 120, { steps: 8 });
-      await page.mouse.up();
-      await page.waitForTimeout(400);
-      await shot('overview-drag');
-      await clickText(page, '.board-zoom', '−');
-      await page.waitForTimeout(400);
-      await shot('overview-zoomout');
-    }
-    await clickText(page, '.board-toolbar', '戻る');
-    await page.waitForTimeout(600);
+  const box = await page.locator('.board-area svg.board-overview').boundingBox();
+  if (box) {
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 200);
+    await page.waitForTimeout(500);
+    await shot('pan-zoomout');
+    for (let i = 0; i < 12; i++) await clickText(page, '.board-zoom', '−');
+    await page.waitForTimeout(500);
+    await shot('pan-all');
+    await page.mouse.move(cx, cy);
+    for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(400);
+    await page.mouse.down();
+    await page.mouse.move(cx + 200, cy + 120, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    await shot('pan-zoomin-drag');
   }
+  await clickText(page, '.board-toolbar', '戻る');
+  await page.waitForTimeout(600);
 
   let tradeShown = false;
   let lastTitle = '';

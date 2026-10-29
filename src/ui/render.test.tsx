@@ -133,7 +133,7 @@ describe('画面', () => {
         expect(hand).toContain('ボーナスマスまで');
         expect(hand).not.toMatch(RAW_KEY);
         s = roll(s);
-        expect(renderToString(<Board position={s.player.position} overview={false} bonus={s.bonusSquare} />)).toContain('BONUS');
+        expect(renderToString(<Board position={s.player.position} bonus={s.bonusSquare} />)).toContain('BONUS');
         renderToString(<Roulette value={s.lastRoll} spinning={false} canSpin={false} onSpin={noop} />);
       } else if (s.phase === 'decision') {
         const html = renderToString(<DecisionModal s={s} onChoose={noop} />);
