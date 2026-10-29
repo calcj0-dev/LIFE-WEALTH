@@ -456,7 +456,6 @@
   "prices.average": "これまでの年平均（{years}年）",
   "prices.depositRate": "預金金利",
   "prices.incomeNote": "この表は値上がり率だけです。このほかに毎年、株は配当、国債は利息が入ります。銀行預金の金利は、はじめ{deposit}%で、ニュースによって変わります。",
-  "board.overview": "全体図",
   "auto.close": "閉じる（自動で閉じます）",
   "auto.news.heading": "{year}年目の年末のニュース",
   "auto.yearEnd.heading": "{year}年目の決算",

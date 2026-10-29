@@ -76,9 +76,8 @@ export function App() {
   const [spinValue, setSpinValue] = useState<number | null>(null);
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
   const [moveLabel, setMoveLabel] = useState<string | null>(null);
-  /** 盤面の見え方（design.md 3.1）。follow: 駒の周り、pan: 視点を移動、overview: 全体図 */
-  const [viewMode, setViewMode] = useState<'follow' | 'pan' | 'overview'>('follow');
-  const overview = viewMode === 'overview';
+  /** 盤面の見え方（design.md 3.1）。follow: 駒の周り、pan: 視点を移動（ドラッグと拡大・縮小ができる） */
+  const [viewMode, setViewMode] = useState<'follow' | 'pan'>('follow');
   /** はじめから: キャラクターを選んでいる間 */
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -424,10 +423,9 @@ export function App() {
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
         <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} />
         <div className="game-body">
-          <div className={`board-area${overview ? ' overview' : ''}`}>
+          <div className={`board-area${viewMode === 'pan' ? ' overview' : ''}`}>
             <Board
               position={movingPos ?? game.player.position}
-              overview={overview}
               pan={viewMode === 'pan'}
               bonus={game.bonusSquare}
               married={game.player.married}
@@ -460,11 +458,6 @@ export function App() {
               {viewMode === 'follow' && (
                 <button className="secondary" onClick={() => setViewMode('pan')} disabled={busy}>
                   {t('board.pan')}
-                </button>
-              )}
-              {viewMode === 'pan' && (
-                <button className="secondary" onClick={() => setViewMode('overview')}>
-                  {t('board.overview')}
                 </button>
               )}
               {viewMode !== 'follow' && (
