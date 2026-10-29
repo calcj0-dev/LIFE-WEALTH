@@ -55,9 +55,15 @@ export function SquareIcon({ type, married }: { type: SquareType; married?: bool
         </g>
       );
     case 'start':
-      // 旗
+      // 旗。右下に小さなカード（止まるとカードがもらえる。design.md 3.3）
       return (
         <g>
+          <g transform="translate(17 15) rotate(10)">
+            <rect x="-8" y="-11" width="16" height="22" rx="3" fill={W} stroke={INK} strokeWidth="1.5" />
+            <text y="5" textAnchor="middle" fontSize="13" fontWeight="900" fill="#4d96ff">
+              ?
+            </text>
+          </g>
           <rect x="-14" y="-22" width="4" height="44" rx="2" fill="#6b4a2b" />
           <g transform="translate(-10 -22)">
             {[0, 1, 2].map((row) =>

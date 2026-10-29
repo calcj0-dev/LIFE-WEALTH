@@ -128,9 +128,7 @@ export const TRADE = {
   prepayUnit: 100,
 };
 
-/** ボーナスマス（design.md 3.10）。ぴったり止まるともらえる金額と、目印を付ける場所（何マス先か） */
+/** ボーナスマス（design.md 3.10）。ぴったり止まるともらえる金額。段階9で30万円から100万円にした。出る場所は src/data/board.ts の BONUS_SPOTS */
 export const BONUS = {
-  amount: 30,
-  minAhead: 10,
-  maxAhead: 40,
+  amount: 100,
 };
