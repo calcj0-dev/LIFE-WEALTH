@@ -2360,7 +2360,7 @@ h2 {
   animation: fork-pulse 0.9s ease-in-out infinite;
 }
 .fork-arrow:hover .fork-arrow-pulse path {
-  fill: #e8602b;
+  filter: brightness(0.88);
 }
 @keyframes fork-pulse {
   0%,
@@ -2387,4 +2387,264 @@ h2 {
 }
 .shortfall-buttons button + button {
   margin-left: 6px;
+}
+
+/* ギャンブルの結果の画面（design.md 3.7） */
+.gamble-result {
+  text-align: center;
+  max-width: 460px;
+}
+.gamble-stage {
+  position: relative;
+  height: 170px;
+  margin: 8px auto 12px;
+  border-radius: 14px;
+  background: #f4efe4;
+  overflow: hidden;
+}
+.gamble-grade {
+  font-size: 30px;
+  font-weight: 900;
+  margin: 4px 0;
+  animation: gamble-pop 0.35s ease-out;
+}
+.gamble-jackpot .gamble-grade,
+.gamble-win .gamble-grade {
+  color: #e0a800;
+}
+.gamble-some .gamble-grade {
+  color: #6c7a89;
+}
+.gamble-lose .gamble-grade {
+  color: #d63a33;
+}
+.gamble-money {
+  font-weight: 700;
+}
+@keyframes gamble-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+/* 宝くじ */
+.gamble-lottery {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 35px;
+}
+.gamble-reel {
+  width: 70px;
+  height: 100px;
+  overflow: hidden;
+  background: #fff;
+  border: 4px solid #ffb703;
+  border-radius: 12px;
+}
+.gamble-reel-strip {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-1000px);
+  animation: gamble-reel var(--stop) cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.gamble-reel-strip span {
+  height: 100px;
+  line-height: 92px;
+  font-size: 56px;
+  font-weight: 900;
+  color: #2d2a32;
+}
+@keyframes gamble-reel {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-1000px);
+  }
+}
+/* 競馬 */
+.gamble-horse {
+  padding: 26px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gamble-lane {
+  position: relative;
+  height: 32px;
+  background: #b8e0a8;
+  border-radius: 18px;
+}
+.gamble-lane.mine {
+  background: #ffd9b8;
+}
+.gamble-lane-label {
+  position: absolute;
+  left: 12px;
+  top: -17px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b35a1f;
+}
+.gamble-runner {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 40px);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #6b4a2b;
+  color: #fff;
+  font-weight: 900;
+  line-height: 32px;
+  animation: gamble-run var(--run) ease-in forwards;
+  z-index: 1;
+}
+.gamble-lane.mine .gamble-runner {
+  background: #ff7a45;
+}
+@keyframes gamble-run {
+  from {
+    left: 4px;
+  }
+  to {
+    left: calc(100% - 40px);
+  }
+}
+.gamble-goal {
+  position: absolute;
+  right: 22px;
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  background: repeating-linear-gradient(#2d2a32 0 8px, #fff 8px 16px);
+}
+/* パチンコ */
+.gamble-pachinko {
+  position: relative;
+  height: 100%;
+  background: #e8f4ff;
+}
+.gamble-pin {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9aa5b1;
+}
+.gamble-hole {
+  position: absolute;
+  top: 128px;
+  height: 22px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 22px;
+}
+.gamble-hole.center {
+  left: calc(50% - 40px);
+  width: 80px;
+  background: #ffb703;
+  color: #fff;
+}
+.gamble-hole.side {
+  left: calc(50% + 50px);
+  width: 40px;
+  background: #8ecae6;
+}
+.gamble-ball {
+  position: absolute;
+  left: calc(50% - 9px);
+  top: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff, #9aa5b1);
+  animation: gamble-ball 2s ease-in forwards;
+  z-index: 1;
+}
+@keyframes gamble-ball {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-40px, 30px);
+  }
+  50% {
+    transform: translate(30px, 60px);
+  }
+  75% {
+    transform: translate(-20px, 90px);
+  }
+  100% {
+    transform: translate(var(--end-x), var(--end-y));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gamble-reel-strip,
+  .gamble-runner,
+  .gamble-ball,
+  .gamble-grade {
+    animation-duration: 0.01s;
+  }
+}
+
+/* ライバルの資産を見る画面（design.md 12.4） */
+.rank-button {
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.rank-button:hover {
+  filter: brightness(0.95);
+  text-decoration: underline;
+}
+.link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  box-shadow: none;
+  min-height: 0;
+}
+.rival-detail {
+  max-width: 720px;
+  width: 100%;
+}
+.rival-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rival-detail-head h2 {
+  margin: 0;
+}
+.rival-detail-rank {
+  margin-left: auto;
+  text-align: right;
+}
+.rival-detail-rank b {
+  font-size: 22px;
+}
+.rival-detail-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.rival-detail-profit {
+  font-size: 12px;
+  margin-left: 4px;
 }

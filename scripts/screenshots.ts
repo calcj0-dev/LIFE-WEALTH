@@ -78,6 +78,14 @@ for (const vp of VIEWPORTS) {
   await clickText(page, 'body', 'この金額で始める');
   await page.waitForTimeout(300);
   await shot('game');
+  // ライバルの資産を見る画面（上の順位の欄から開く）
+  if ((await page.locator('.rank-button').count()) && (await page.locator('.rank-button').first().isVisible())) {
+    await page.locator('.rank-button').first().click();
+    await page.waitForTimeout(200);
+    await shot('rival-detail');
+    await clickText(page, '.rival-detail', '閉じる');
+    await page.waitForTimeout(200);
+  }
   // 盤面の全体図
   // 視点を移動 → 全体図
   await clickText(page, '.board-toolbar', '視点を移動');
@@ -130,6 +138,11 @@ for (const vp of VIEWPORTS) {
       lastTitle = title;
       // 画面の種類ごとに1枚（月や年の数字は外して比べる）
       const kind = title.replace(/\d+年目\s*(\d+(〜\d+)?月)?/g, '').replace(/\s+/g, '');
+      // ギャンブルの結果は、動きが終わるのを待ってから撮る（OK は動きのあとに押せる）
+      if (await modal.locator('.gamble-stage').count()) {
+        await page.waitForTimeout(2400);
+        await shot(`gamble-${kind}`);
+      }
       await shot(kind.slice(0, 20) || 'modal');
       // 年末の決算: 1回だけ取引タイムを開いて、銘柄を選び、買う画面まで撮る
       if (!tradeShown && (await modal.locator('button', { hasText: '取引タイムへ' }).count())) {

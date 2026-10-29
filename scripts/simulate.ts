@@ -70,7 +70,14 @@ for (const years of YEARS) {
     for (const st of STRATEGIES) {
       for (let i = 0; i < SEEDS_PER_CASE; i++) {
         const counts: PlayCounts = { turns: 0, popups: 0 };
-        const s = playGame(seed++, job, years, st.strategy, counts);
+        let s: GameState;
+        try {
+          s = playGame(seed, job, years, st.strategy, counts);
+        } catch (e) {
+          console.log('FAILED', seed, job, years, st.id);
+          throw e;
+        }
+        seed++;
         rows.push(toRow(s, job, years, st.id, counts));
       }
     }

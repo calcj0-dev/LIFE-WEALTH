@@ -1,12 +1,12 @@
 // 盤面。ほかの画面から切り離した部品にして、あとで Phaser に差し替えられるようにする（design.md 11章）。
-// 曲がりくねった道に色とりどりのマスが並び、まわりに家や木がある、にぎやかな盤面（design.md 3.1）。
+// 十字型の道に色とりどりのマスが並び、まわりに家や木がある、にぎやかな盤面（design.md 3.1、3.11）。
 
 import { useEffect, useRef, useState } from 'react';
 import { PLAYER_LOOKS, type FamilyMember, type Look } from '../data/characters';
 import { AvatarBody } from './Avatar';
 import { SquareIcon } from './SquareIcon';
-import { BOARD, BOARD_WORLD, BRANCH_POINTS, ROUTE_POINTS } from '../data/board';
-import type { SquareType } from '../game/types';
+import { BOARD, BOARD_WORLD, BRANCH_LINES, BRANCH_POINTS, ROUTE_POINTS } from '../data/board';
+import type { RouteKind, Square, SquareType } from '../game/types';
 import { formatMoney, t } from '../i18n';
 import { BONUS } from '../data/rules';
 
@@ -30,6 +30,91 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
   realEstate: '#f9a03f',
 };
 
+/** 道ごとの色（design.md 3.11）。arrow は看板と矢印、road は道の色 */
+export const ROUTE_COLORS: Record<RouteKind, { arrow: string; road: string; edge: string }> = {
+  main: { arrow: '#a8773f', road: '#f8ecd0', edge: '#d9bf8c' },
+  shortcut: { arrow: '#4d96ff', road: '#dcebff', edge: '#9cc2f2' },
+  risk: { arrow: '#d6336c', road: '#fbdce7', edge: '#eba3bd' },
+  invest: { arrow: '#1fa89c', road: '#d3f2ee', edge: '#8fd6cd' },
+};
+
+/** 2つのマスの間の道の種類（分かれた道から外周に合流するところは、分かれた道の色にする） */
+const edgeRoute = (from: Square, to: Square): RouteKind => (to.route === 'main' ? from.route : to.route);
+
+/** 看板の幅（道の名前を書くときは広い） */
+const signWidth = (sq: Square) => (sq.next.some((to) => ['risk', 'invest'].includes(edgeRoute(sq, BOARD[to]))) ? 132 : 64);
+
+/** 分かれ道のマスの横の、看板を立てる場所（近い順に試して、看板がまわりのマスと重ならない場所） */
+function signSpot(sq: Square): { x: number; y: number } {
+  const half = signWidth(sq) / 2;
+  const height = sq.next.length * 36;
+  // 看板の板の範囲と、マスとの間（マスの中心から、板の一番近い点まで）
+  const gapAt = (x: number, y: number) =>
+    Math.min(
+      ...BOARD.filter((o) => o.id !== sq.id).map((o) => Math.hypot(Math.max(0, Math.abs(o.x - x) - half), Math.max(0, o.y - y, y - height - 20 - o.y))),
+      Math.hypot(Math.max(0, Math.abs(sq.x - x) - half), Math.max(0, sq.y - y, y - height - 20 - sq.y)),
+    );
+  let best = { x: sq.x, y: sq.y - 110, gap: -1 };
+  for (const r of [100, 130, 160, 200]) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const x = sq.x + Math.cos(a) * r;
+      const y = sq.y + Math.sin(a) * r;
+      const gap = gapAt(x, y);
+      if (gap > best.gap + 1) best = { x, y, gap };
+    }
+    if (best.gap >= 48) break;
+  }
+  return best;
+}
+const FORKS = BOARD.filter((sq) => sq.next.length > 1).map((sq) => ({ sq, spot: signSpot(sq) }));
+
+/** 道案内の看板（design.md 3.11）。行ける道の数だけ矢印の板を並べ、矢印はそれぞれの道の向きを指す */
+function Signpost({ sq, x, y }: { sq: Square; x: number; y: number }) {
+  const plates = sq.next.map((to) => {
+    const next = BOARD[to];
+    const route = edgeRoute(sq, next);
+    const angle = (Math.atan2(next.y - sq.y, next.x - sq.x) * 180) / Math.PI;
+    const label = route === 'risk' || route === 'invest' ? t(`route.short.${route}`) : '';
+    return { to, route, angle, label };
+  });
+  const width = signWidth(sq);
+  const top = -18 - plates.length * 36;
+  return (
+    <g transform={`translate(${x} ${y})`} className="signpost">
+      <rect x="-4" y={top + 10} width="8" height={-top + 8} rx="3" fill="#8a5a33" />
+      {plates.map((p, k) => (
+        <g key={p.to} transform={`translate(0 ${top + 8 + k * 36})`}>
+          <rect x={-width / 2} y="-15" width={width} height="30" rx="8" fill={ROUTE_COLORS[p.route].arrow} stroke="#fff" strokeWidth="3" />
+          <g transform={`translate(${p.label ? -width / 2 + 20 : 0} 0) rotate(${p.angle})`}>
+            <path d="M-11,-4 L2,-4 L2,-10 L12,0 L2,10 L2,4 L-11,4 Z" fill="#fff" />
+          </g>
+          {p.label && (
+            <text x={12} y="6" textAnchor="middle" fontSize="16" fontWeight="900" fill="#fff">
+              {p.label}
+            </text>
+          )}
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/** 進む向きの印「＞」を描く、マスとマスの間（数マスおき。分かれ道と合流するところには必ず描く） */
+const CHEVRONS = BOARD.flatMap((sq) =>
+  sq.next
+    .filter((to) => sq.next.length > 1 || BOARD[to].route !== sq.route || sq.id % 3 === 1)
+    .map((to) => {
+      const next = BOARD[to];
+      return {
+        key: `${sq.id}-${to}`,
+        x: (sq.x + next.x) / 2,
+        y: (sq.y + next.y) / 2,
+        angle: (Math.atan2(next.y - sq.y, next.x - sq.x) * 180) / Math.PI,
+        color: ROUTE_COLORS[edgeRoute(sq, next)].arrow,
+      };
+    }),
+);
 
 const SIZE = 74;
 /** 画面に映す範囲の大きさ（駒を追うとき） */
@@ -345,7 +430,6 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
   const tx = free ? camera.tx : VIEW.width / 2 - here.x * scale;
   const ty = free ? camera.ty : VIEW.height / 2 - here.y * scale;
   const road = ROUTE_POINTS.map((p) => `${p.x},${p.y}`).join(' ');
-  const branchRoads = BRANCH_POINTS.map((line) => line.map((p) => `${p.x},${p.y}`).join(' '));
 
   return (
     <>
@@ -376,22 +460,20 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
           <polyline points={road} fill="none" stroke="#d9bf8c" strokeWidth="110" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#efdcae" strokeWidth="102" strokeLinejoin="round" strokeLinecap="round" />
           <polyline points={road} fill="none" stroke="#f8ecd0" strokeWidth="88" strokeLinejoin="round" strokeLinecap="round" />
-          {/* 分かれた道（design.md 3.11）。元の道より少し細く */}
-          {branchRoads.map((pts, i) => (
-            <g key={i}>
-              <polyline points={pts} fill="none" stroke="#d9bf8c" strokeWidth="98" strokeLinejoin="round" strokeLinecap="round" />
-              <polyline points={pts} fill="none" stroke="#f3e2b8" strokeWidth="80" strokeLinejoin="round" strokeLinecap="round" />
-            </g>
-          ))}
-          {/* 別の道の入り口の看板 */}
-          {BOARD.filter((sq) => (sq.route === 'risk' || sq.route === 'invest') && BOARD.some((f) => f.next[1] === sq.id)).map((sq) => (
-            // 道の入り口の横に立てる（マスと重ならないように）
-            <g key={`sign-${sq.id}`} transform={`translate(${sq.x + (sq.route === 'risk' ? -125 : 125)} ${sq.y})`}>
-              <rect x="-70" y="-17" width="140" height="30" rx="8" fill={sq.route === 'risk' ? '#d6336c' : '#2ec4b6'} stroke="#fff" strokeWidth="3" />
-              <text y="5" textAnchor="middle" fontSize="16" fontWeight="900" fill="#fff">
-                {t(`route.${sq.route}`)}
-              </text>
-            </g>
+          {/* 分かれた道（design.md 3.11）。外周より少し細く、道ごとの色にする */}
+          {BRANCH_LINES.map((line, i) => {
+            const pts = line.points.map((p) => `${p.x},${p.y}`).join(' ');
+            const c = ROUTE_COLORS[line.route];
+            return (
+              <g key={i}>
+                <polyline points={pts} fill="none" stroke={c.edge} strokeWidth="98" strokeLinejoin="round" strokeLinecap="round" />
+                <polyline points={pts} fill="none" stroke={c.road} strokeWidth="80" strokeLinejoin="round" strokeLinecap="round" />
+              </g>
+            );
+          })}
+          {/* 進む向きの印（一方通行だと分かるように） */}
+          {CHEVRONS.map((c) => (
+            <path key={c.key} d="M-7,-11 L5,0 L-7,11" transform={`translate(${c.x} ${c.y}) rotate(${c.angle})`} fill="none" stroke={c.color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
           ))}
           {BOARD.filter((sq) => sq.id !== bonus).map((sq) => (
             <g key={sq.id} transform={`translate(${sq.x} ${sq.y})`}>
@@ -412,6 +494,10 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
           ))}
           {/* ボーナスマスは、元のマスの見た目を残さず、専用の見た目で、ほかのマスより手前に少し大きく描く（design.md 3.10） */}
           {bonus !== undefined && BOARD[bonus] && <BonusTile x={BOARD[bonus].x} y={BOARD[bonus].y} landed={landed === bonus} overview={overview} />}
+          {/* 道案内の看板（マスより手前、駒よりうしろ） */}
+          {FORKS.map(({ sq, spot }) => (
+            <Signpost key={`sign-${sq.id}`} sq={sq} x={spot.x} y={spot.y} />
+          ))}
           {/* 同じマスにいる駒は、横に少しずらして重ならないようにする。あなたの駒は一番手前 */}
           {[...others.map((o) => ({ ...o, me: false })), { position, look, family, me: true }].map((piece, k, all) => {
             const sq = BOARD[piece.position];
@@ -419,7 +505,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
             return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
           })}
-          {/* 分かれ道の矢印（文字は出さない）。押すと、その道へ進む */}
+          {/* 分かれ道の矢印（文字は出さない）。押すと、その道へ進む。色は看板の矢印と同じ */}
           {forks.map((to) => {
             const here = BOARD[position];
             const next = BOARD[to];
@@ -429,7 +515,7 @@ export function Board({ position, overview, pan = false, bonus, married, look = 
             return (
               <g key={`fork-${to}`} transform={`translate(${mx} ${my}) rotate(${angle})`} className="fork-arrow" onClick={() => onFork?.(to)} role="button" aria-label={t('fork.title')}>
                 <g className="fork-arrow-pulse">
-                  <path d="M-30,-16 L6,-16 L6,-32 L40,0 L6,32 L6,16 L-30,16 Z" fill="#ff7a45" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+                  <path d="M-30,-16 L6,-16 L6,-32 L40,0 L6,32 L6,16 L-30,16 Z" fill={ROUTE_COLORS[edgeRoute(here, next)].arrow} stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
                 </g>
               </g>
             );

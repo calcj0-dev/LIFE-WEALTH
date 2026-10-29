@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Board, type PieceFloat } from './board/Board';
 import { BOARD } from './data/board';
 import { Roulette, SPIN_DURATION_MS } from './board/Roulette';
-import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissNews, nextYear, openTradeCard, roll, shortfallPending } from './game/engine';
+import { choose, chooseYears, closeTrade, createGame, dismissBigEvent, dismissGambleResult, dismissNews, nextYear, openTradeCard, roll, shortfallPending } from './game/engine';
 import { ShortfallModal } from './ui/Shortfall';
-import type { GameState, LogEntry } from './game/types';
+import { GambleResultModal } from './ui/GambleResult';
+import { RivalDetailModal } from './ui/RivalDetail';
+import type { GameState, LogEntry, RivalId } from './game/types';
 import { formatMoney, t } from './i18n';
 import { loadGame, saveGame } from './save';
 import { FeedPanel } from './ui/Feed';
@@ -48,6 +50,8 @@ function floatsOf(entries: LogEntry[], position: number, small: boolean): Omit<P
   let cash = 0;
   for (const e of entries) {
     if (e.key.startsWith('bigEvent.') || e.key.startsWith('news.')) continue;
+    // あなたのギャンブルは、結果の画面で見せる（design.md 3.7）
+    if (!small && e.key.startsWith('gamble.')) continue;
     if (e.key === 'bonus.get') {
       out.push({ position, text: `★ +${formatMoney(e.cash ?? 0)}`, tone: 'bonus', small });
       continue;
@@ -79,6 +83,8 @@ export function App() {
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
+  /** 資産を見ているライバル（design.md 12.4） */
+  const [rivalDetail, setRivalDetail] = useState<RivalId | null>(null);
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
   const [tradeYear, setTradeYear] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
@@ -106,7 +112,7 @@ export function App() {
   /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
   const [turnMoving, setTurnMoving] = useState(false);
   /** あなたの番が終わった（選ぶ出来事が残っていない） */
-  const humanDone = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && movingPos === null && !spinning;
+  const humanDone = !!game && !!turnStart && !turnMoving && game.phase !== 'decision' && !game.gambleResult && movingPos === null && !spinning;
   const m = game?.lastMonth;
   const flowKey = m ? `${m.year}-${m.month}` : null;
   /** このターンで月末が来た */
@@ -121,12 +127,23 @@ export function App() {
   const bonusEntry = humanDone && monthEnded && game && turnStart ? game.log.slice(turnStart.logLen).find((e) => e.key === 'bonus.get') : undefined;
   const celebrating = !!bonusEntry && bonusShown !== flowKey;
 
+  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、盤面をボーナスマスまで動かして
+  // 「次のボーナスマスはここ！」と出す。あなたが取ったときは「ボーナスゲット！」を閉じたらすぐ、
+  // それ以外（ライバルが取った、ゲームの始め）は、ライバルのお知らせのあと、大きなイベント・ニュースの前に出す
+  /** 発表を見せたボーナスマス */
+  const [announced, setAnnounced] = useState<number | null>(null);
+  /** 発表を見せている間 */
+  const [announcing, setAnnouncing] = useState(false);
+  const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
+  /** あなたがボーナスマスを取り、「ボーナスゲット！」を閉じたあと（給料と生活費のアクションの前に発表する） */
+  const afterCelebrate = !!bonusEntry && bonusShown === flowKey && inPlay && announced !== game!.bonusSquare;
+
   // 給料と生活費のアクション。銀行預金の横に「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
   /** アクションを見せ終わった月 */
   const [payShown, setPayShown] = useState<string | null>(null);
   /** 今見せている段階（0: 月末の前、1: お給料、2: 生活費、3: 積み立てなどを引いたあと） */
   const [payStep, setPayStep] = useState<{ key: string; i: number } | null>(null);
-  const paying = humanDone && monthEnded && !celebrating && payShown !== flowKey;
+  const paying = humanDone && monthEnded && !celebrating && !afterCelebrate && payShown !== flowKey;
   const payIndex = payStep?.key === flowKey ? payStep.i : 0;
   /** 大きなイベントで動いた銀行預金（ライバルの番のあとに見せるので、それまでは引いておく） */
   const bigEventCash = game?.bigEvent?.cash ?? 0;
@@ -156,7 +173,7 @@ export function App() {
   // 大きなイベントとニュースは全員に起きるので、このあとの画面で見せる（まとめには入れない）
   const monthEntries = game && turnStart ? game.log.slice(turnStart.logLen).filter((e) => !e.key.startsWith('bigEvent.')) : [];
   const summary: TurnSummaryData | null =
-    game && turnStart && humanDone && monthEnded && !celebrating && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
+    game && turnStart && humanDone && monthEnded && !celebrating && !afterCelebrate && !paying && summaryClosed !== flowKey && hasSomething(monthEntries)
       ? {
           year: turnStart.year,
           month: turnStart.month,
@@ -175,7 +192,7 @@ export function App() {
   const [rivalShown, setRivalShown] = useState<string | null>(null);
   /** 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前） */
   const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number } | null>(null);
-  const rivalsMoving = humanDone && monthEnded && !celebrating && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
+  const rivalsMoving = humanDone && monthEnded && !celebrating && !afterCelebrate && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
   const rs = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
   const rivalPositions =
     game?.rivals.map((r, k) => {
@@ -231,7 +248,7 @@ export function App() {
   }, [rivalsMoving, rs.r, rs.i]);
 
   // ここまで見せ終わったら、ターンを終える（このあと、ライバルのお知らせ、大きなイベント、ニュース）
-  const turnComplete = humanDone && monthEnded && !celebrating && !paying && !summary && !rivalsMoving;
+  const turnComplete = humanDone && monthEnded && !celebrating && !afterCelebrate && !paying && !summary && !rivalsMoving;
   useEffect(() => {
     if (turnComplete) setTurnStart(null);
   }, [turnComplete]);
@@ -253,16 +270,9 @@ export function App() {
   /** ターンが終わり、ライバルのお知らせも見たあと（大きなイベントとニュースを出す） */
   const afterTurn = !turnStart && alerts.length === 0;
 
-  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、
-  // ほかの画面がないときに、盤面をボーナスマスまで動かして「次のボーナスマスはここ！」と出す
-  /** 発表を見せたボーナスマス */
-  const [announced, setAnnounced] = useState<number | null>(null);
-  /** 発表を見せている間 */
-  const [announcing, setAnnouncing] = useState(false);
-  const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
+  const wantAnnounce = inPlay && !showHistory && !showFeed && announced !== game!.bonusSquare && (afterCelebrate || afterTurn);
   /** お金が足りず、売る資産を選ぶ画面を出している（design.md 8章） */
-  const shortfall = !!game && afterTurn && !game.bigEvent && !game.newsEvent && shortfallPending(game);
-  const wantAnnounce = inPlay && afterTurn && !shortfall && !game!.bigEvent && !game!.newsEvent && !showHistory && !showFeed && announced !== game!.bonusSquare;
+  const shortfall = !!game && afterTurn && !wantAnnounce && !game.bigEvent && !game.newsEvent && shortfallPending(game);
   useEffect(() => {
     if (!game) {
       setAnnounced(null);
@@ -282,7 +292,9 @@ export function App() {
     };
   }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
-  const paused = showHistory || showFeed || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce || shortfall;
+  const paused = showHistory || showFeed || !!rivalDetail || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce || shortfall;
+  /** ライバルの資産を見る画面を開く。ターンの途中（ライバルの番を見せる前など）は開かない */
+  const openRival = turnStart ? undefined : (id: RivalId) => setRivalDetail(id);
   const yearEnd = game?.phase === 'yearEnd';
   const tradeStep = yearEnd && tradeYear === game!.year;
   const settleStep = yearEnd && !tradeStep;
@@ -410,7 +422,7 @@ export function App() {
     screen = (
       <div className="game">
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
-        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} />
+        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} />
         <div className="game-body">
           <div className={`board-area${overview ? ' overview' : ''}`}>
             <Board
@@ -480,11 +492,13 @@ export function App() {
             s={game}
             level={moneyLevel}
             cashShown={cashShown}
-            hideRivalMonth={turnStart && rivalShown !== flowKey ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} />
+            hideRivalMonth={turnStart && rivalShown !== flowKey ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} onOpenRival={openRival} />
         </div>
         {showFeed && <FeedPanel s={game} onClose={() => setShowFeed(false)} />}
+        {rivalDetail && <RivalDetailModal s={game} id={rivalDetail} onClose={() => setRivalDetail(null)} />}
         {showHistory && <HistoryModal s={game} onClose={() => setShowHistory(false)} />}
-        {!busy && afterTurn && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
+        {!busy && game.gambleResult && !showHistory && !showFeed && <GambleResultModal result={game.gambleResult} onClose={() => setGame(dismissGambleResult(game))} />}
+        {!busy && afterTurn && !wantAnnounce && game.bigEvent && !showHistory && !showFeed && <BigEventModal s={game} onClose={() => setGame(dismissBigEvent(game))} />}
         {summary && !showHistory && !showFeed && (
           <TurnSummary
             key={`${summary.year}-${summary.month}`}
@@ -495,7 +509,7 @@ export function App() {
         {/* ニュースは、今月のまとめのあとに、ニュースだけの画面で出す（design.md 2.4） */}
         {/* お金が足りないときは、大きなイベントとニュースのあとに、売る資産を選ぶ（design.md 8章） */}
         {!busy && shortfall && !showHistory && !showFeed && <ShortfallModal s={game} onChange={setGame} />}
-        {!busy && afterTurn && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
+        {!busy && afterTurn && !wantAnnounce && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
         {celebrating && bonusEntry && !showHistory && !showFeed && (
           <BonusModal amount={bonusEntry.cash ?? 0} onClose={() => setBonusShown(flowKey)} />
         )}

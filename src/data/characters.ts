@@ -1,9 +1,9 @@
-// キャラクターの見た目（design.md 10.1）。あなたは4人から選び、ライバル2人は決まった見た目。
-// 年齢や性別を決めつけない見た目にする。色は、ライバルの色（緑、紫）やマスの色とまぎれないものにする。
+// キャラクターの見た目（design.md 10.1）。あなたは4人（男性2人、女性2人。段階8）から選び、ライバル2人は決まった見た目。
+// 4人は、髪型、服の形、色の3つで見分けられるようにする。色は、ライバルの色（緑、紫）やマスの色とまぎれないものにする。
 
-export type HairStyle = 'short' | 'long' | 'bun' | 'curly' | 'neat' | 'spiky' | 'tuft';
-/** 持ち物（ライバルの性格を見せる） */
-export type Prop = 'piggyBank' | 'phone';
+export type HairStyle = 'short' | 'bangs' | 'long' | 'bun' | 'curly' | 'neat' | 'spiky' | 'tuft';
+/** 服の形（カーディガンはボタン、ジャケットはえり、シャツは白いえり、パーカーはフード、ワンピースはすそが広がる、ブラウスはリボン） */
+export type Outfit = 'cardigan' | 'jacket' | 'shirt' | 'hoodie' | 'dress' | 'blouse';
 export type Glasses = 'glasses' | 'sunglasses';
 
 export interface Look {
@@ -14,24 +14,28 @@ export interface Look {
   hair: string;
   hairStyle: HairStyle;
   glasses?: Glasses;
-  prop?: Prop;
-  /** 上着の形（カーディガンはボタン、ジャケットはえり） */
-  outfit?: 'cardigan' | 'jacket';
+  outfit?: Outfit;
+  /** まつ毛とほおの赤み（女性の見た目） */
+  lashes?: boolean;
 }
 
-/** あなたが選べる4人 */
+/** あなたが選べる4人（男性2人、女性2人。design.md 10.1） */
 export const PLAYER_LOOKS: Look[] = [
-  { id: 'sun', color: '#ff7a45', skin: '#ffd9b8', hair: '#5a3b2e', hairStyle: 'short' },
-  { id: 'sky', color: '#4d96ff', skin: '#f1c27d', hair: '#2d2a32', hairStyle: 'long' },
-  { id: 'lemon', color: '#f2b400', skin: '#e0ac69', hair: '#3b2a20', hairStyle: 'bun' },
-  { id: 'berry', color: '#ff5d8f', skin: '#c68642', hair: '#1f1a17', hairStyle: 'curly' },
+  // 男性1: 短い髪、オレンジのシャツ
+  { id: 'sun', color: '#ff7a45', skin: '#ffd9b8', hair: '#5a3b2e', hairStyle: 'short', outfit: 'shirt' },
+  // 男性2: 少し長めの前髪、青のパーカー
+  { id: 'sky', color: '#4d96ff', skin: '#f1c27d', hair: '#2d2a32', hairStyle: 'bangs', outfit: 'hoodie' },
+  // 女性1: 長い髪、ピンクのワンピース
+  { id: 'berry', color: '#ff5d8f', skin: '#ffe0c4', hair: '#6b3a24', hairStyle: 'long', outfit: 'dress', lashes: true },
+  // 女性2: お団子、黄色のブラウス
+  { id: 'lemon', color: '#f2b400', skin: '#e0ac69', hair: '#3b2a20', hairStyle: 'bun', outfit: 'blouse', lashes: true },
 ];
 export const DEFAULT_LOOK = PLAYER_LOOKS[0].id;
 
-/** ライバル2人。コツコツさんは緑のカーディガンにめがね、貯金箱。イケイケさんは紫のジャケットにサングラス、スマホ */
+/** ライバル2人。コツコツさんは緑のカーディガンにめがね。イケイケさんは紫のジャケットにサングラス（持ち物は段階8でなくした） */
 export const RIVAL_LOOKS: Record<'steady' | 'bold', Look> = {
-  steady: { id: 'steady', color: '#3cb371', skin: '#ffe0c4', hair: '#6b5a4e', hairStyle: 'neat', glasses: 'glasses', prop: 'piggyBank', outfit: 'cardigan' },
-  bold: { id: 'bold', color: '#9b5de5', skin: '#f5c9a0', hair: '#c47a2c', hairStyle: 'spiky', glasses: 'sunglasses', prop: 'phone', outfit: 'jacket' },
+  steady: { id: 'steady', color: '#3cb371', skin: '#ffe0c4', hair: '#6b5a4e', hairStyle: 'neat', glasses: 'glasses', outfit: 'cardigan' },
+  bold: { id: 'bold', color: '#9b5de5', skin: '#f5c9a0', hair: '#c47a2c', hairStyle: 'spiky', glasses: 'sunglasses', outfit: 'jacket' },
 };
 
 export const lookById = (id: string | undefined): Look => PLAYER_LOOKS.find((l) => l.id === id) ?? PLAYER_LOOKS[0];
