@@ -2,7 +2,7 @@ import type { AssetId, PetalId, RouteKind, Square, SquareType } from '../game/ty
 
 /**
  * ふつうの道（真ん中の輪と4つの花びら）のマスの種類ごとの数。design.md 3.3。
- * ハイリスクの道、投資の道、花びらの戻り道のマスは、下に書く。
+ * ハイリスクの道、投資の道、花びらの近道のマスは、下に書く。
  * 段階7の元の道（200マス）の割合のまま、ふつうの道のマスの数に合わせた（段階9）。マイナスはプラスの約7割。株は4つの花びらに散らす（3.4）
  */
 export const SQUARE_COUNTS: Record<SquareType, number> = {
@@ -106,20 +106,23 @@ interface RoadDef {
  */
 const HUB: RoadDef = { route: 'main', pts: [[X0, Y1], [X0, Y0], [X1, Y0], [X1, Y1]], closed: true, radius: 2 };
 
-/** 4つの花びら。真ん中の輪の辺から外へ出て、ぐるっと回り、次の辺から真ん中の輪に戻る */
+/**
+ * 4つの花びら。真ん中の輪の辺から外へ出て、ぐるっと回り、手前の辺から真ん中の輪に戻る（v0.14.0 で向きを逆にした）。
+ * 戻った先から真ん中の輪を数マス進むと、また同じ花びらの入り口に着くので、花びらごとに1周できる
+ */
 const PETALS: RoadDef[] = [
-  { route: 'petal', petal: 'tl', pts: [[X0, 12.5], [5, 12.5], [5, 3], [19, 3], [19, Y0]], radius: 1.6 },
-  { route: 'petal', petal: 'tr', pts: [[25, Y0], [25, 3], [39, 3], [39, 12.5], [X1, 12.5]], radius: 1.6 },
-  { route: 'petal', petal: 'br', pts: [[X1, 19.5], [39, 19.5], [39, 29], [25, 29], [25, Y1]], radius: 1.6 },
-  { route: 'petal', petal: 'bl', pts: [[19, Y1], [19, 29], [5, 29], [5, 19.5], [X0, 19.5]], radius: 1.6 },
+  { route: 'petal', petal: 'tl', pts: [[19, Y0], [19, 3], [5, 3], [5, 12.5], [X0, 12.5]], radius: 1.6 },
+  { route: 'petal', petal: 'tr', pts: [[X1, 12.5], [39, 12.5], [39, 3], [25, 3], [25, Y0]], radius: 1.6 },
+  { route: 'petal', petal: 'br', pts: [[25, Y1], [25, 29], [39, 29], [39, 19.5], [X1, 19.5]], radius: 1.6 },
+  { route: 'petal', petal: 'bl', pts: [[X0, 19.5], [5, 19.5], [5, 29], [19, 29], [19, Y1]], radius: 1.6 },
 ];
 
-/** 花びらの中の戻り道。花びらの後ろのほうから前のほうへ戻り、花びらの中だけで回れる小さな輪を作る */
-const BACKS: (RoadDef & { petal: PetalId })[] = [
-  { route: 'back', petal: 'tl', pts: [[10, 3], [10, 12.5]], radius: 1 },
-  { route: 'back', petal: 'tr', pts: [[34, 12.5], [34, 3]], radius: 1 },
-  { route: 'back', petal: 'br', pts: [[34, 29], [34, 19.5]], radius: 1 },
-  { route: 'back', petal: 'bl', pts: [[10, 19.5], [10, 29]], radius: 1 },
+/** 花びらの中の近道（青い道）。花びらの中を突っ切る */
+const SHORTCUTS: (RoadDef & { petal: PetalId })[] = [
+  { route: 'shortcut', petal: 'tl', pts: [[10, 3], [10, 12.5]], radius: 1 },
+  { route: 'shortcut', petal: 'tr', pts: [[34, 12.5], [34, 3]], radius: 1 },
+  { route: 'shortcut', petal: 'br', pts: [[34, 29], [34, 19.5]], radius: 1 },
+  { route: 'shortcut', petal: 'bl', pts: [[10, 19.5], [10, 29]], radius: 1 },
 ];
 
 /** ハイリスクの道（縦、上から下へ）と投資の道（横、左から右へ）。真ん中で立体交差する（曲がれない） */
@@ -135,10 +138,10 @@ const repeat = (pattern: SquareType[], n: number): SquareType[] => Array.from({ 
 const RISK: SquareType[] = ['plusLarge', 'minusLarge', 'gamble', 'plusMedium', 'minusLarge', 'plusLarge', 'minusMedium', 'card'];
 /** 投資の道の中身。株のマスと投資の話のマスが多い */
 const INVEST: SquareType[] = ['stock', 'investTalk', 'card', 'stock', 'plusSmall', 'stock', 'investTalk', 'minusSmall'];
-/** 戻り道の中身。小さめの出来事 */
-const BACK: SquareType[] = ['plusSmall', 'card', 'minusSmall', 'plusMedium', 'plusSmall', 'minusSmall', 'card', 'minusMedium'];
+/** 近道の中身。小さめの出来事 */
+const SHORTCUT: SquareType[] = ['plusSmall', 'card', 'minusSmall', 'plusMedium', 'plusSmall', 'minusSmall', 'card', 'minusMedium'];
 
-/** ボーナスマスが出る場所（design.md 3.10）。花びら1つに4か所（3か所は小さな輪の上、1か所は外側の道）と、真ん中の輪の4つの辺に1か所ずつ */
+/** ボーナスマスが出る場所（design.md 3.10）。花びら1つに4か所と、真ん中の輪の4つの辺に1か所ずつ */
 const BONUS_POINTS: [number, number][] = [
   [5, 5], [5, 10], [7.5, 12.5], [15, 3],
   [39, 5], [39, 10], [36.5, 3], [29, 3],
@@ -147,7 +150,7 @@ const BONUS_POINTS: [number, number][] = [
   [27.5, Y0], [X1, 15], [24, Y1], [X0, 21.5],
 ];
 
-const ALL_POINTS = [HUB, ...PETALS, ...BACKS, RISK_ROAD, INVEST_ROAD].flatMap((r) => r.pts);
+const ALL_POINTS = [HUB, ...PETALS, ...SHORTCUTS, RISK_ROAD, INVEST_ROAD].flatMap((r) => r.pts);
 const ROUTE_MIN_X = Math.min(...ALL_POINTS.map((p) => p[0]));
 const ROUTE_MAX_X = Math.max(...ALL_POINTS.map((p) => p[0]));
 const ROUTE_MIN_Y = Math.min(...ALL_POINTS.map((p) => p[1]));
@@ -219,7 +222,7 @@ function positionsAlong(points: [number, number][], closed: boolean): { x: numbe
 /** 真ん中の輪の折れ線（画面上の位置） */
 export const ROUTE_POINTS = lineOf(HUB).map(([x, y]) => toWorld(x, y));
 /** 分かれた道の折れ線と道の種類（画面上の位置。道を描くのと、飾りを道からはなすのに使う）。投資の道は最後に描く（立体交差の橋） */
-export const BRANCH_LINES = [...PETALS, ...BACKS, RISK_ROAD, INVEST_ROAD].map((r) => ({ route: r.route, points: lineOf(r).map(([x, y]) => toWorld(x, y)) }));
+export const BRANCH_LINES = [...PETALS, ...SHORTCUTS, RISK_ROAD, INVEST_ROAD].map((r) => ({ route: r.route, points: lineOf(r).map(([x, y]) => toWorld(x, y)) }));
 export const BRANCH_POINTS = BRANCH_LINES.map((l) => l.points);
 /** 立体交差の場所（画面上の位置） */
 export const CROSSING = toWorld(MID_X, MID_Y);
@@ -256,9 +259,9 @@ export function buildBoard(): Square[] {
     petalIds[r.petal!] = ids;
     link(ids, nearest(r.pts[0], hub), nearest(r.pts[r.pts.length - 1], hub));
   });
-  // 2. 花びらの戻り道
-  for (const r of BACKS) {
-    const ids = positionsAlong(lineOf(r), false).map((pos, k) => add(pos, BACK[k % BACK.length], 'back', r.petal));
+  // 2. 花びらの近道
+  for (const r of SHORTCUTS) {
+    const ids = positionsAlong(lineOf(r), false).map((pos, k) => add(pos, SHORTCUT[k % SHORTCUT.length], 'shortcut', r.petal));
     link(ids, nearest(r.pts[0], petalIds[r.petal]), nearest(r.pts[r.pts.length - 1], petalIds[r.petal]));
   }
   // 3. ハイリスクの道と投資の道。投資の道は、真ん中でハイリスクの道のマスと重ならないように、交差するところにはマスを置かない（橋）

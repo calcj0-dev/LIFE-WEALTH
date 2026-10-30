@@ -130,7 +130,7 @@ describe('盤面', () => {
     const forks = BOARD.filter((sq) => sq.next.length > 1);
     expect(forks).toHaveLength(10);
     const second = (route: string) => forks.filter((f) => BOARD[f.next[1]].route === route).length;
-    expect([second('petal'), second('back'), second('risk'), second('invest')]).toEqual([4, 4, 1, 1]);
+    expect([second('petal'), second('shortcut'), second('risk'), second('invest')]).toEqual([4, 4, 1, 1]);
     for (const f of forks) {
       for (const first of f.next) {
         let pos = first;
@@ -139,18 +139,25 @@ describe('盤面', () => {
       }
     }
   });
+  it('花びらは1周できる（花びらを出て、真ん中の輪を数マス進むと、また同じ花びらの入り口に着く）', () => {
+    for (const petal of ['tl', 'tr', 'br', 'bl'] as const) {
+      const sq = BOARD.find((x) => x.route === 'petal' && x.petal === petal)!;
+      const loop = distanceOnBoard(sq.next[0], sq.id) + 1;
+      expect(loop).toBeLessThan(55);
+    }
+  });
   it('スタートは真ん中の輪にある。どのマスからも、どのマスへも行ける', () => {
     expect(BOARD[0].route).toBe('main');
     for (const sq of BOARD) expect(distanceOnBoard(0, sq.id)).toBeLessThan(Infinity);
   });
-  it('ボーナスマスが出る場所は20か所。どれもスタートや分かれ道ではなく、花びらの小さな輪の上は約30マスで戻ってこられる', () => {
+  it('ボーナスマスが出る場所は20か所。どれもスタートや分かれ道ではなく、通りすぎても60マス以内で戻ってこられる', () => {
     expect(new Set(BONUS_SPOTS).size).toBe(20);
     const loop = (id: number) => Math.min(...BOARD[id].next.map((n) => distanceOnBoard(n, id) + 1));
     for (const id of BONUS_SPOTS) {
       expect(BOARD[id].type).not.toBe('start');
       expect(BOARD[id].next).toHaveLength(1);
     }
-    expect(BONUS_SPOTS.filter((id) => loop(id) <= 30)).toHaveLength(12);
+    for (const id of BONUS_SPOTS) expect(loop(id)).toBeLessThanOrEqual(60);
   });
   it('花びらの株のマスでは、その花びらの株が出る', () => {
     for (const petal of ['tl', 'tr', 'br', 'bl'] as const) {

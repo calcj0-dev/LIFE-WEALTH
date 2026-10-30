@@ -166,7 +166,7 @@ export function createGame(seed: number, options: { monthsPerTurn?: number; riva
   const monthsPerTurn = options.monthsPerTurn ?? MONTHS_PER_TURN;
   if (!VALID_MONTHS_PER_TURN.includes(monthsPerTurn)) throw new Error(`invalid monthsPerTurn: ${monthsPerTurn}`);
   const s: GameState = {
-    saveVersion: 6,
+    saveVersion: 7,
     seed,
     rngState: seed >>> 0,
     years: DEFAULT_YEARS,
