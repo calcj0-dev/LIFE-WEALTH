@@ -23,7 +23,9 @@ import { CardHand, cardIcon } from './ui/Cards';
 import { BigEventModal } from './ui/BigEvent';
 import { moneyLevelOf } from './ui/AnimatedMoney';
 import { APP_VERSION } from './version';
-import { BonusModal, RivalAlertModal, isImportant, lookOf, rivalLines } from './ui/Rivals';
+import { RivalAlertModal, isImportant, lookOf, rivalLines, rivalName } from './ui/Rivals';
+import { BonusCelebration } from './ui/BonusCelebration';
+import { BONUS } from './data/rules';
 import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
@@ -42,7 +44,12 @@ const RIVAL_PAUSE_MS = 400;
 /** 駒の頭の上の文字を出しておく時間（ミリ秒） */
 const FLOAT_MS = 1800;
 /** 次のボーナスマスの発表を見せる時間（ミリ秒） */
-const ANNOUNCE_MS = 1800;
+/** 次のボーナスマスの発表（design.md 3.10）。画面が動く速さ（盤面の上の長さ / 秒）と、いちばん短い移動の時間、ボーナスマスを映す時間 */
+const ANNOUNCE_SPEED = 2000;
+const ANNOUNCE_MIN_MS = 600;
+const ANNOUNCE_SHOW_MS = 1500;
+/** 発表で画面が動くあいだの拡大の倍率（少し縮小して、道のりを見せる） */
+const ANNOUNCE_ZOOM = 0.6;
 
 /** 記録から、駒の頭の上に出す文字を作る（お金の合計、もらったカード、ボーナス） */
 function floatsOf(entries: LogEntry[], position: number, small: boolean): Omit<PieceFloat, 'key'>[] {
@@ -50,6 +57,8 @@ function floatsOf(entries: LogEntry[], position: number, small: boolean): Omit<P
   let cash = 0;
   for (const e of entries) {
     if (e.key.startsWith('bigEvent.') || e.key.startsWith('news.')) continue;
+    // ボーナスは、ボーナスゲットの演出で見せる（design.md 3.10）
+    if (e.key === 'bonus.get') continue;
     // あなたのギャンブルは、結果の画面で見せる（design.md 3.7）
     if (!small && e.key.startsWith('gamble.')) continue;
     if (e.key === 'bonus.get') {
@@ -126,16 +135,20 @@ export function App() {
   const bonusEntry = humanDone && monthEnded && game && turnStart ? game.log.slice(turnStart.logLen).find((e) => e.key === 'bonus.get') : undefined;
   const celebrating = !!bonusEntry && bonusShown !== flowKey;
 
-  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、盤面をボーナスマスまで動かして
-  // 「次のボーナスマスはここ！」と出す。あなたが取ったときは「ボーナスゲット！」を閉じたらすぐ、
-  // それ以外（ライバルが取った、ゲームの始め）は、ライバルのお知らせのあと、大きなイベント・ニュースの前に出す
+  // 次のボーナスマスの発表（design.md 3.10）。ボーナスマスが変わったら（ゲームの始めも）、画面をボーナスマスまで一定の速さで動かし、
+  // 「次のボーナスマスはここ！」と出して、また一定の速さであなたの駒に戻る。あなたが取ったときはボーナスゲットの演出のすぐあと、
+  // ライバルが取ったときは、そのライバルの演出のすぐあと、それ以外（ゲームの始め）は、ほかの画面がないときに出す
   /** 発表を見せたボーナスマス */
   const [announced, setAnnounced] = useState<number | null>(null);
-  /** 発表を見せている間 */
-  const [announcing, setAnnouncing] = useState(false);
+  /** 発表の段階（go: ボーナスマスへ動く、show: ボーナスマスを映す、back: あなたの駒へ戻る） */
+  const [announcePhase, setAnnouncePhase] = useState<'go' | 'show' | 'back' | null>(null);
+  const announcing = announcePhase !== null;
+  /** このターンで、ボーナスマスを取ったライバル（ライバルの番の演出に使う） */
+  const rivalTook = game && turnStart && monthEnded ? game.rivals.map((r, k) => r.log.slice(turnStart.rivalLogLen[k] ?? r.log.length).some((e) => e.key === 'bonus.get')) : [];
   const inPlay = !!game && (game.phase === 'roll' || game.phase === 'decision' || game.phase === 'yearEnd');
   /** あなたがボーナスマスを取り、「ボーナスゲット！」を閉じたあと（給料と生活費のアクションの前に発表する） */
-  const afterCelebrate = !!bonusEntry && bonusShown === flowKey && inPlay && announced !== game!.bonusSquare;
+  // 同じ月にライバルもボーナスを取ったときは、ライバルの演出のあとに1回だけ発表する
+  const afterCelebrate = !!bonusEntry && bonusShown === flowKey && inPlay && announced !== game!.bonusSquare && !rivalTook.some(Boolean);
 
   // 給料と生活費のアクション。銀行預金の横に「＋42万円 お給料」→「−25万円 生活費」の順に金額を浮かべる
   /** アクションを見せ終わった月 */
@@ -189,10 +202,13 @@ export function App() {
   // ライバルの番（design.md 12.2）。駒を1人ずつすばやく動かして見せる
   /** ライバルの番を見せ終わった月 */
   const [rivalShown, setRivalShown] = useState<string | null>(null);
-  /** 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前） */
-  const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number } | null>(null);
+  /**
+   * 今動かしているライバル（r）と、道のどこまで進んだか（i。-1 なら動く前）。
+   * stage は、ボーナスマスを取ったライバルの演出（cheer: ボーナスゲット、announce: 次のボーナスマスの発表）
+   */
+  const [rivalStep, setRivalStep] = useState<{ key: string; r: number; i: number; stage?: 'cheer' | 'announce' } | null>(null);
   const rivalsMoving = humanDone && monthEnded && !celebrating && !afterCelebrate && !paying && !summary && game!.rivals.length > 0 && rivalShown !== flowKey;
-  const rs = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
+  const rs: { r: number; i: number; stage?: 'cheer' | 'announce' } = rivalStep && rivalStep.key === flowKey ? rivalStep : { r: 0, i: -1 };
   const rivalPositions =
     game?.rivals.map((r, k) => {
       // ライバルの番を見せる前は、ターンの始めの場所に置いておく
@@ -208,14 +224,29 @@ export function App() {
       setRivalShown(flowKey);
       return;
     }
+    // ボーナスゲットの演出の間は、演出が終わるのを待つ（BonusCelebration の onDone で進む）
+    if (rs.stage === 'cheer') return;
+    // 発表が終わったら、次のライバルへ
+    if (rs.stage === 'announce') {
+      if (announced === game.bonusSquare && !announcing) setRivalStep({ key: flowKey, r: rs.r + 1, i: -1 });
+      return;
+    }
     const path = game.rivals[rs.r].lastPath;
-    const next = rs.i + 1 < path.length ? { key: flowKey, r: rs.r, i: rs.i + 1 } : { key: flowKey, r: rs.r + 1, i: -1 };
+    const ended = rs.i + 1 >= path.length;
+    // ボーナスマスを取ったライバルは、止まったところで演出を出す（design.md 3.10）
+    const next = !ended ? { key: flowKey, r: rs.r, i: rs.i + 1 } : rivalTook[rs.r] ? { key: flowKey, r: rs.r, i: rs.i, stage: 'cheer' as const } : { key: flowKey, r: rs.r + 1, i: -1 };
     const id = window.setTimeout(() => {
       setRivalStep(next);
-      if (next.r === rs.r) sfx.step(true);
-    }, rs.i < 0 || next.r !== rs.r ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
+      if (next.r === rs.r && !ended) sfx.step(true);
+    }, rs.i < 0 || ended ? RIVAL_PAUSE_MS : RIVAL_STEP_MS);
     return () => window.clearTimeout(id);
-  }, [rivalsMoving, flowKey, rs.r, rs.i, game]);
+  }, [rivalsMoving, flowKey, rs.r, rs.i, rs.stage, game, announced, announcing]);
+  /** ライバルのボーナスゲットの演出が終わった。同じ月にあとでボーナスを取るライバルがいなければ、次のボーナスマスを発表する */
+  const afterRivalCheer = () => {
+    if (!flowKey) return;
+    const later = rivalTook.some((took, k) => took && k > rs.r);
+    setRivalStep({ key: flowKey, r: later ? rs.r + 1 : rs.r, i: later ? -1 : rs.i, stage: later ? undefined : 'announce' });
+  };
 
   // 駒の頭の上の文字（design.md 10.1）
   // あなた: 新しく増えた記録から、お金の動き、もらったカード、ボーナスを出す。大きなイベントとニュースは、あとの画面で見せるので出さない
@@ -269,25 +300,35 @@ export function App() {
   /** ターンが終わり、ライバルのお知らせも見たあと（大きなイベントとニュースを出す） */
   const afterTurn = !turnStart && alerts.length === 0;
 
-  const wantAnnounce = inPlay && !showHistory && !showFeed && announced !== game!.bonusSquare && (afterCelebrate || afterTurn);
+  const rivalAnnounce = rivalsMoving && rs.stage === 'announce';
+  const wantAnnounce = inPlay && !showHistory && !showFeed && announced !== game!.bonusSquare && (afterCelebrate || afterTurn || rivalAnnounce);
   /** お金が足りず、売る資産を選ぶ画面を出している（design.md 8章） */
   const shortfall = !!game && afterTurn && !wantAnnounce && !game.bigEvent && !game.newsEvent && shortfallPending(game);
+  /** 発表で画面が動く時間（あなたの駒とボーナスマスの間の長さに合わせ、一定の速さにする） */
+  const announceTravelMs = game
+    ? Math.max(ANNOUNCE_MIN_MS, Math.round((Math.hypot(BOARD[game.bonusSquare].x - BOARD[game.player.position].x, BOARD[game.bonusSquare].y - BOARD[game.player.position].y) / ANNOUNCE_SPEED) * 1000))
+    : ANNOUNCE_MIN_MS;
   useEffect(() => {
     if (!game) {
       setAnnounced(null);
       return;
     }
     if (!wantAnnounce) return;
-    setAnnouncing(true);
     const square = game.bonusSquare;
-    const id = window.setTimeout(() => {
-      setAnnounced(square);
-      setAnnouncing(false);
-    }, ANNOUNCE_MS);
+    const travel = announceTravelMs;
+    setAnnouncePhase('go');
+    const ids = [
+      window.setTimeout(() => setAnnouncePhase('show'), travel),
+      window.setTimeout(() => setAnnouncePhase('back'), travel + ANNOUNCE_SHOW_MS),
+      window.setTimeout(() => {
+        setAnnounced(square);
+        setAnnouncePhase(null);
+      }, travel * 2 + ANNOUNCE_SHOW_MS),
+    ];
     // 途中で止まったときも、発表中のままにならないようにする
     return () => {
-      window.clearTimeout(id);
-      setAnnouncing(false);
+      ids.forEach((id) => window.clearTimeout(id));
+      setAnnouncePhase(null);
     };
   }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
@@ -436,7 +477,19 @@ export function App() {
                 look: RIVAL_LOOKS[r.id],
                 family: familyOf(game.seed, r.id, r.player.married, r.player.children, RIVAL_LOOKS[r.id]),
               }))}
-              focus={announcing ? game.bonusSquare : rivalsMoving && rs.r < game.rivals.length ? rivalPositions[rs.r] : undefined}
+              focus={
+                announcePhase === 'go' || announcePhase === 'show'
+                  ? game.bonusSquare
+                  : announcePhase === 'back'
+                    ? game.player.position
+                    : rivalsMoving && rs.r < game.rivals.length
+                      ? rivalPositions[rs.r]
+                      : undefined
+              }
+              zoom={announcePhase === 'go' || announcePhase === 'back' ? ANNOUNCE_ZOOM : undefined}
+              cameraMs={announcePhase === 'go' || announcePhase === 'back' ? announceTravelMs : announcePhase === 'show' ? 500 : undefined}
+              cheer={celebrating ? game.player.position : rivalsMoving && rs.stage === 'cheer' ? rivalPositions[rs.r] : undefined}
+              bonusLeft={!turnStart && !announcing ? bonusDistance(game) : undefined}
               landed={humanDone ? game.player.position : undefined}
               floats={floats}
               forks={readyInTurn && game.phase === 'decision' && game.decision?.kind === 'fork' ? BOARD[game.player.position].next : []}
@@ -448,7 +501,13 @@ export function App() {
                 move(next);
               }}
             />
-            {announcing && (
+            {celebrating && bonusEntry && !showHistory && !showFeed && (
+              <BonusCelebration name={t('rival.you')} amount={bonusEntry.cash ?? 0} rival={false} onDone={() => setBonusShown(flowKey)} />
+            )}
+            {rivalsMoving && rs.stage === 'cheer' && game.rivals[rs.r] && (
+              <BonusCelebration name={rivalName(game.rivals[rs.r].id)} amount={BONUS.amount} rival onDone={afterRivalCheer} />
+            )}
+            {announcePhase === 'show' && (
               <div className="bonus-announce" role="status">
                 <div className="bonus-announce-title">{t('bonus.announce')}</div>
                 <div>{t('bonus.announceDistance', { n: bonusDistance(game) })}</div>
@@ -503,9 +562,6 @@ export function App() {
         {/* お金が足りないときは、大きなイベントとニュースのあとに、売る資産を選ぶ（design.md 8章） */}
         {!busy && shortfall && !showHistory && !showFeed && <ShortfallModal s={game} onChange={setGame} />}
         {!busy && afterTurn && !wantAnnounce && game.newsEvent && !game.bigEvent && !showHistory && !showFeed && <NewsModal s={game} onNext={() => setGame(dismissNews(game))} />}
-        {celebrating && bonusEntry && !showHistory && !showFeed && (
-          <BonusModal amount={bonusEntry.cash ?? 0} onClose={() => setBonusShown(flowKey)} />
-        )}
         {alerts.length > 0 && !busy && !showHistory && !showFeed && (
           <RivalAlertModal lines={alerts} onClose={() => setRivalSeen(game.rivals.map((r) => r.log.length))} />
         )}
