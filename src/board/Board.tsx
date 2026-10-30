@@ -270,6 +270,14 @@ interface Props {
   /** 分かれ道で選べる道（次のマス）。あれば、あなたの駒のマスから矢印を出す（design.md 3.11） */
   forks?: number[];
   onFork?: (to: number) => void;
+  /** 駒を追うときの拡大の倍率（次のボーナスマスの発表で、少し縮小して道のりを見せる。design.md 3.10） */
+  zoom?: number;
+  /** 画面が移動する時間（ミリ秒）。発表では、遠いほど長くして一定の速さで動かす */
+  cameraMs?: number;
+  /** このマスにいる駒が、ボーナスゲットで跳ね続ける */
+  cheer?: number;
+  /** ボーナスマスまで、あと何マスか。あれば、ボーナスマスが画面の外にあるときに、画面のふちに方向の矢印を出す（design.md 3.10） */
+  bonusLeft?: number;
 }
 
 /** 駒の頭の上に浮かべる文字 */
@@ -317,11 +325,11 @@ function BonusTile({ x, y, landed, overview }: { x: number; y: number; landed: b
 }
 
 /** 人の駒（キャラクター）。家族は、うしろに小さく並んで一緒に歩く（design.md 10.1） */
-function Piece({ x, y, look, family = [] }: { x: number; y: number; look: Look; family?: FamilyMember[] }) {
+function Piece({ x, y, look, family = [], cheer = false }: { x: number; y: number; look: Look; family?: FamilyMember[]; /** ボーナスゲットで、ぴょんぴょん跳ね続ける */ cheer?: boolean }) {
   return (
     <g style={{ transform: `translate(${x}px, ${y - 40}px)`, transition: 'transform 0.22s ease-out' }}>
       {/* マスが変わるたびに作り直して、ぴょんと跳ねる動きをやり直す */}
-      <g key={`${x},${y}`} className="piece-hop">
+      <g key={`${x},${y},${cheer}`} className={cheer ? 'piece-cheer' : 'piece-hop'}>
       {/* 遠くの家族から描き、近い家族が手前に重なるようにする。足もとの高さをそろえる */}
       {family
         .map((m, j) => (
@@ -369,7 +377,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork }: Props) {
+export function Board({ position, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork, zoom, cameraMs, cheer, bonusLeft }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 視点を移動の間の映し方（design.md 3.1）
@@ -437,7 +445,30 @@ export function Board({ position, pan = false, bonus, married, look = PLAYER_LOO
     if (pointers.current.size === 0) setDragging(false);
   };
 
-  const scale = free ? camera.scale : FOLLOW_SCALE;
+  const scale = free ? camera.scale : zoom ?? FOLLOW_SCALE;
+  // ボーナスマスの方向の矢印（design.md 3.10）。ボーナスマスが画面の外にあるときだけ、画面のふちに出す
+  let arrow: { x: number; y: number; angle: number; labelX: number; labelY: number } | null = null;
+  if (!free && bonusLeft !== undefined && bonus !== undefined && BOARD[bonus]) {
+    const dx = (BOARD[bonus].x - here.x) * scale;
+    const dy = (BOARD[bonus].y - here.y) * scale;
+    // スマホなど横が切れて映る画面でも見えるように、横は OVERVIEW_WIDTH の幅の中に出す。
+    // 下は、カードの欄とルーレットに隠れないように、少し上までにする
+    const halfW = OVERVIEW_WIDTH / 2 - 70;
+    const up = VIEW.height / 2 - 60;
+    const down = VIEW.height / 2 - 140;
+    if (Math.abs(dx) > halfW || dy < -up || dy > down) {
+      const k = Math.min(halfW / Math.max(1, Math.abs(dx)), (dy < 0 ? up : down) / Math.max(1, Math.abs(dy)));
+      const len = Math.hypot(dx, dy);
+      arrow = {
+        x: VIEW.width / 2 + dx * k,
+        y: VIEW.height / 2 + dy * k,
+        angle: (Math.atan2(dy, dx) * 180) / Math.PI,
+        // 文字は、矢印から画面の内側へ少しずらす
+        labelX: (-dx / len) * 60,
+        labelY: (-dy / len) * 50,
+      };
+    }
+  }
   const tx = free ? camera.tx : VIEW.width / 2 - here.x * scale;
   const ty = free ? camera.ty : VIEW.height / 2 - here.y * scale;
   const road = ROUTE_POINTS.map((p) => `${p.x},${p.y}`).join(' ');
@@ -463,7 +494,7 @@ export function Board({ position, pan = false, bonus, married, look = PLAYER_LOO
           </linearGradient>
         </defs>
         <rect width={VIEW.width} height={VIEW.height} fill="#bfe8c8" />
-        <g style={{ transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: dragging ? 'none' : 'transform 0.3s ease', transformOrigin: '0 0' }}>
+        <g style={{ transform: `translate(${tx}px, ${ty}px) scale(${scale})`, transition: dragging ? 'none' : `transform ${cameraMs ?? 300}ms ease-in-out`, transformOrigin: '0 0' }}>
           <rect width={BOARD_WORLD.width} height={BOARD_WORLD.height} rx="40" fill="#c9eccf" />
           {DECORATIONS.map((d, i) => (
             <Decoration key={i} d={d} />
@@ -519,7 +550,7 @@ export function Board({ position, pan = false, bonus, married, look = PLAYER_LOO
             const sq = BOARD[piece.position];
             const same = all.filter((o) => o.position === piece.position);
             const shift = same.length > 1 ? (same.indexOf(piece) - (same.length - 1) / 2) * 30 : 0;
-            return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} />;
+            return <Piece key={piece.me ? 'me' : k} x={sq.x + shift} y={sq.y} look={piece.look} family={piece.family} cheer={piece.position === cheer} />;
           })}
           {/* 分かれ道の矢印（文字は出さない）。押すと、その道へ進む。色は看板の矢印と同じ */}
           {forks.map((to) => {
@@ -555,6 +586,19 @@ export function Board({ position, pan = false, bonus, married, look = PLAYER_LOO
               );
             })}
         </g>
+        {arrow && (
+          <g transform={`translate(${arrow.x} ${arrow.y})`} className="bonus-arrow" aria-hidden="true">
+            <g transform={`rotate(${arrow.angle})`}>
+              <path d="M-16,-12 L8,-12 L8,-24 L32,0 L8,24 L8,12 L-16,12 Z" fill="url(#bonus-gold)" stroke="#fff" strokeWidth="4" strokeLinejoin="round" />
+            </g>
+            <g transform={`translate(${arrow.labelX} ${arrow.labelY})`}>
+              <rect x="-62" y="-15" width="124" height="30" rx="15" fill="#fff" stroke="#f5a800" strokeWidth="3" />
+              <text y="6" textAnchor="middle" fontSize="16" fontWeight="900" fill="#b36b00">
+                {t('bonus.arrow', { n: bonusLeft ?? 0 })}
+              </text>
+            </g>
+          </g>
+        )}
       </svg>
       {free && (
         <div className="board-zoom">

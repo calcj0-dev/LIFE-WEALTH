@@ -22,6 +22,9 @@ import { ShortfallModal } from './Shortfall';
 import { payShortfall } from '../game/autoplay';
 import { GambleResultModal, gradeOf } from './GambleResult';
 import { RivalDetailModal } from './RivalDetail';
+import { BonusCelebration } from './BonusCelebration';
+import { isImportant } from './Rivals';
+import { PLAYER_LOOKS, SPOUSE_LOOKS } from '../data/characters';
 import { logLabel } from './logLabel';
 
 const noop = () => {};
@@ -190,6 +193,21 @@ describe('画面', () => {
     expect(gradeOf({ id: 'pachinko', bet: 10, back: 5, multiplier: 0.5 })).toBe('some');
     expect(gradeOf({ id: 'horse', bet: 10, back: 0, multiplier: 0 })).toBe('lose');
     expect(logLabel({ year: 1, month: 1, key: 'gamble.horse', cash: 15, params: { bet: 10, back: 25 } })).toBe('競馬に10万円賭けて、25万円戻ってきた');
+  });
+  it('ボーナスゲットの演出は、だれが取っても同じ見た目で、名前と金額を出す。ライバルのボーナスはお知らせに出さない（v0.13.2）', () => {
+    for (const name of ['あなた', 'コツコツさん']) {
+      const html = renderToString(<BonusCelebration name={name} amount={100} rival={name !== 'あなた'} onDone={noop} />);
+      expect(html).toContain(`${name}がボーナスゲット！`);
+      expect(html).toContain('100万円');
+      expect(html).not.toMatch(RAW_KEY);
+    }
+    expect(isImportant({ year: 1, month: 1, key: 'bonus.get', cash: 100 })).toBe(false);
+    expect(isImportant({ year: 1, month: 1, key: 'marriage.marry' })).toBe(true);
+  });
+  it('選べるキャラクターは男性3人、結婚相手は女性の見た目（v0.13.2）', () => {
+    expect(PLAYER_LOOKS).toHaveLength(3);
+    expect(PLAYER_LOOKS.every((l) => !l.lashes)).toBe(true);
+    expect(SPOUSE_LOOKS.every((l) => l.lashes)).toBe(true);
   });
   it('ライバルの資産を見る画面が描ける（段階8）', () => {
     const s = playGame(4, 'employee', 10);

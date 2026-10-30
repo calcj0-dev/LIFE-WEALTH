@@ -106,6 +106,16 @@ function OutfitDetail({ look }: { look: Look }) {
           <circle cx="0" cy="36" r="1.8" />
         </g>
       );
+    case 'polo':
+      // 色のちがうえりと、胸元のボタン
+      return (
+        <g>
+          <path d="M-12,10 L-2,17 L-4,10 Z M12,10 L2,17 L4,10 Z" fill="#fff" />
+          <path d="M0,12 L0,24" stroke="rgba(255,255,255,0.85)" strokeWidth="2" />
+          <circle cx="0" cy="16" r="1.6" fill="#fff" />
+          <circle cx="0" cy="21" r="1.6" fill="#fff" />
+        </g>
+      );
     case 'hoodie':
       // 首のまわりのフード、ひも、おなかのポケット
       return (

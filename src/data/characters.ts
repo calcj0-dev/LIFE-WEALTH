@@ -1,9 +1,9 @@
-// キャラクターの見た目（design.md 10.1）。あなたは4人（男性2人、女性2人。段階8）から選び、ライバル2人は決まった見た目。
-// 4人は、髪型、服の形、色の3つで見分けられるようにする。色は、ライバルの色（緑、紫）やマスの色とまぎれないものにする。
+// キャラクターの見た目（design.md 10.1）。あなたは男性3人（v0.13.2）から選び、ライバル2人は決まった見た目。結婚相手は女性。
+// 3人は、髪型、服の形、色の3つで見分けられるようにする。色は、ライバルの色（緑、紫）やマスの色とまぎれないものにする。
 
 export type HairStyle = 'short' | 'bangs' | 'long' | 'bun' | 'curly' | 'neat' | 'spiky' | 'tuft';
-/** 服の形（カーディガンはボタン、ジャケットはえり、シャツは白いえり、パーカーはフード、ワンピースはすそが広がる、ブラウスはリボン） */
-export type Outfit = 'cardigan' | 'jacket' | 'shirt' | 'hoodie' | 'dress' | 'blouse';
+/** 服の形（カーディガンはボタン、ジャケットはえり、シャツは白いえり、パーカーはフード、ポロシャツは色のちがうえり、ワンピースはすそが広がる、ブラウスはリボン） */
+export type Outfit = 'cardigan' | 'jacket' | 'shirt' | 'hoodie' | 'polo' | 'dress' | 'blouse';
 export type Glasses = 'glasses' | 'sunglasses';
 
 export interface Look {
@@ -19,16 +19,14 @@ export interface Look {
   lashes?: boolean;
 }
 
-/** あなたが選べる4人（男性2人、女性2人。design.md 10.1） */
+/** あなたが選べる3人（男性3人。design.md 10.1） */
 export const PLAYER_LOOKS: Look[] = [
   // 男性1: 短い髪、オレンジのシャツ
   { id: 'sun', color: '#ff7a45', skin: '#ffd9b8', hair: '#5a3b2e', hairStyle: 'short', outfit: 'shirt' },
   // 男性2: 少し長めの前髪、青のパーカー
   { id: 'sky', color: '#4d96ff', skin: '#f1c27d', hair: '#2d2a32', hairStyle: 'bangs', outfit: 'hoodie' },
-  // 女性1: 長い髪、ピンクのワンピース
-  { id: 'berry', color: '#ff5d8f', skin: '#ffe0c4', hair: '#6b3a24', hairStyle: 'long', outfit: 'dress', lashes: true },
-  // 女性2: お団子、黄色のブラウス
-  { id: 'lemon', color: '#f2b400', skin: '#e0ac69', hair: '#3b2a20', hairStyle: 'bun', outfit: 'blouse', lashes: true },
+  // 男性3: くせ毛の短い髪、黄色のポロシャツ
+  { id: 'lemon', color: '#f2b400', skin: '#e0ac69', hair: '#3b2a20', hairStyle: 'curly', outfit: 'polo' },
 ];
 export const DEFAULT_LOOK = PLAYER_LOOKS[0].id;
 
@@ -42,12 +40,12 @@ export const lookById = (id: string | undefined): Look => PLAYER_LOOKS.find((l) 
 
 // ---------------------------------------------------------------- 家族（design.md 10.1）
 
-/** 配偶者の見た目（結婚したときに、この中から決まる） */
+/** 結婚相手（女性）の見た目。結婚したときに、この中から決まる（design.md 10.1。v0.13.2） */
 export const SPOUSE_LOOKS: Look[] = [
-  { id: 'spouseA', color: '#7bc4e8', skin: '#ffd9b8', hair: '#3b2a20', hairStyle: 'long' },
-  { id: 'spouseB', color: '#f4a261', skin: '#e0ac69', hair: '#2d2a32', hairStyle: 'short' },
-  { id: 'spouseC', color: '#e9a6c7', skin: '#f1c27d', hair: '#5a3b2e', hairStyle: 'bun' },
-  { id: 'spouseD', color: '#90be6d', skin: '#c68642', hair: '#1f1a17', hairStyle: 'curly' },
+  { id: 'spouseA', color: '#ff5d8f', skin: '#ffe0c4', hair: '#6b3a24', hairStyle: 'long', outfit: 'dress', lashes: true },
+  { id: 'spouseB', color: '#7bc4e8', skin: '#e0ac69', hair: '#2d2a32', hairStyle: 'bun', outfit: 'blouse', lashes: true },
+  { id: 'spouseC', color: '#f4a261', skin: '#f1c27d', hair: '#3b2a20', hairStyle: 'long', outfit: 'blouse', lashes: true },
+  { id: 'spouseD', color: '#c084fc', skin: '#c68642', hair: '#1f1a17', hairStyle: 'bun', outfit: 'dress', lashes: true },
 ];
 
 /** 子どもの服の色と髪型（生まれた順に決まる） */
