@@ -26,6 +26,7 @@ import { BonusCelebration } from './BonusCelebration';
 import { isImportant } from './Rivals';
 import { PLAYER_LOOKS, SPOUSE_LOOKS } from '../data/characters';
 import { logLabel } from './logLabel';
+import { describeDecision } from './decisionText';
 
 const noop = () => {};
 
@@ -208,6 +209,15 @@ describe('画面', () => {
     expect(PLAYER_LOOKS).toHaveLength(3);
     expect(PLAYER_LOOKS.every((l) => !l.lashes)).toBe(true);
     expect(SPOUSE_LOOKS.every((l) => l.lashes)).toBe(true);
+  });
+  it('選ぶ画面に、比べるための今の状態が出る（転職: 今の職業と年収、家: 今の家賃、株: ふだんの値段と持っている株数）', () => {
+    const g = setSaving(chooseJob(chooseYears(createGame(1), 20), 'employee'), {});
+    const at = (decision: GameState['decision']): GameState => ({ ...g, phase: 'decision', decision, decisionFrom: 'square' });
+    const job = at({ kind: 'event', eventId: 'jobChange', params: { a: 'civil', b: 'engineer' } });
+    expect(describeDecision(job).text).toContain('今は会社員で、年収は約250万円です。');
+    expect(renderToString(<DecisionModal s={job} onChoose={noop} />)).toContain('今のまま会社員を続ける（年収 約250万円）');
+    expect(describeDecision(at({ kind: 'realEstate', offerPrice: 3000 })).text).toContain('今の家賃は、毎月 約');
+    expect(describeDecision(at({ kind: 'stock', assetId: 'it' })).text).toMatch(/1株 \d+万円 → 今だけ \d+万円。今 0株 持っています。/);
   });
   it('ライバルの資産を見る画面が描ける（段階8）', () => {
     const s = playGame(4, 'employee', 10);

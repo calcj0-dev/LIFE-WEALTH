@@ -16,7 +16,7 @@ export function setLanguage(lang: string) {
 }
 
 /** 金額として表示するパラメータ（単位は万円） */
-const MONEY_PARAMS = new Set(['cost', 'salary', 'price', 'bet', 'premium', 'spent', 'returned', 'paid', 'received', 'amount', 'back', 'payment', 'incomeFrom', 'incomeTo', 'expenseFrom', 'expenseTo']);
+const MONEY_PARAMS = new Set(['cost', 'salary', 'price', 'sale', 'bet', 'premium', 'spent', 'returned', 'paid', 'received', 'amount', 'back', 'payment', 'incomeFrom', 'incomeTo', 'expenseFrom', 'expenseTo']);
 
 /** 金額（万円）を言語に合わせた書き方にする */
 export function formatMoney(man: number): string {
