@@ -1,5 +1,5 @@
 import { BOARD } from '../data/board';
-import { SICKNESS } from '../data/events';
+import { EVENTS_BY_ID, SICKNESS } from '../data/events';
 import type { GameState, SquareType } from '../game/types';
 import { t } from '../i18n';
 
@@ -14,6 +14,12 @@ export function describeDecision(s: GameState): { title: string; text: string; s
     case 'event': {
       let text = t(`event.${d.eventId}.text`);
       // 病気は、治療費（保険で払われるか）と、重いかどうかを先に見せる（design.md 5.1）
+      // 給料が上がる出来事は、割合と金額を出す（design.md 5.1）
+      for (const e of EVENTS_BY_ID[d.eventId!]?.effects ?? []) {
+        if (e.t === 'salaryRate' && e.rate > 0) {
+          text += t('event.salaryUp', { rate: Math.round(e.rate * 100), incomeFrom: s.player.salary, incomeTo: s.player.salary * (1 + e.rate) });
+        }
+      }
       if (d.eventId === 'sickness') {
         text += s.player.medicalPremium !== null ? t('event.sickness.covered') : t('event.sickness.pay', { cost: SICKNESS.cost });
         if (d.params?.heavy !== undefined) text += d.params.heavy === 1 ? t('event.sickness.heavy') : t('event.sickness.light');

@@ -20,8 +20,8 @@
     { "id": "homeRepair", "sign": "minus", "size": "medium", "weight": 1, "when": { "homeOwner": true }, "effects": [{ "t": "cash", "amount": -30 }] },
     { "id": "spousePart", "sign": "plus", "size": "medium", "weight": 1, "when": { "spouseWork": "none" }, "effects": [{ "t": "spousePart" }] },
 
-    { "id": "promotion", "sign": "plus", "size": "large", "weight": 1, "when": { "employed": true, "promotable": true }, "effects": [{ "t": "salaryRate", "rate": 0.05 }] },
-    { "id": "raise", "sign": "plus", "size": "large", "weight": 1, "when": { "employed": true, "stableIncome": true }, "effects": [{ "t": "salaryRate", "rate": 0.03 }] },
+    { "id": "promotion", "sign": "plus", "size": "large", "weight": 1, "when": { "employed": true, "promotable": true }, "effects": [{ "t": "salaryRate", "rate": 0.1 }] },
+    { "id": "raise", "sign": "plus", "size": "large", "weight": 1, "when": { "employed": true, "stableIncome": true }, "effects": [{ "t": "salaryRate", "rate": 0.05 }] },
     { "id": "jobChange", "sign": "chance", "size": "large", "weight": 1, "choice": "jobChange" },
     {
       "id": "unemployment",

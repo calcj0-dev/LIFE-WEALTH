@@ -34,7 +34,7 @@ export const SQUARE_COLORS: Record<SquareType, string> = {
 export const ROUTE_COLORS: Record<RouteKind, { arrow: string; road: string; edge: string }> = {
   main: { arrow: '#a8773f', road: '#f8ecd0', edge: '#d9bf8c' },
   petal: { arrow: '#a8773f', road: '#f8ecd0', edge: '#d9bf8c' },
-  back: { arrow: '#4d96ff', road: '#dcebff', edge: '#9cc2f2' },
+  shortcut: { arrow: '#4d96ff', road: '#dcebff', edge: '#9cc2f2' },
   risk: { arrow: '#d6336c', road: '#fbdce7', edge: '#eba3bd' },
   invest: { arrow: '#1fa89c', road: '#d3f2ee', edge: '#8fd6cd' },
 };

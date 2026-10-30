@@ -9,7 +9,7 @@ export function loadGame(): GameState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState;
-    return s && s.saveVersion === 6 ? s : null;
+    return s && s.saveVersion === 7 ? s : null;
   } catch {
     return null;
   }

@@ -34,7 +34,7 @@ export interface Square {
   next: number[];
   /** どの道のマスか。main は真ん中の輪 */
   route: RouteKind;
-  /** 花びらの道（戻り道も）なら、どの花びらか（design.md 3.11） */
+  /** 花びらの道（近道も）なら、どの花びらか（design.md 3.11） */
   petal?: PetalId;
 }
 
@@ -49,8 +49,8 @@ export interface GambleResult {
   multiplier: number;
 }
 
-/** 道の種類（design.md 3.11）。main は真ん中の輪、petal は花びら、back は花びらの中の戻り道、risk はハイリスクの道（縦）、invest は投資の道（横） */
-export type RouteKind = 'main' | 'petal' | 'back' | 'risk' | 'invest';
+/** 道の種類（design.md 3.11）。main は真ん中の輪、petal は花びら、shortcut は花びらの中の近道（青い道）、risk はハイリスクの道（縦）、invest は投資の道（横） */
+export type RouteKind = 'main' | 'petal' | 'shortcut' | 'risk' | 'invest';
 /** 4つの花びら（左上、右上、右下、左下） */
 export type PetalId = 'tl' | 'tr' | 'br' | 'bl';
 
@@ -327,7 +327,7 @@ export interface Rival extends SeatData {
 }
 
 export interface GameState {
-  saveVersion: 6;
+  saveVersion: 7;
   seed: number;
   rngState: number;
   /** 遊ぶ年数（10〜50） */
