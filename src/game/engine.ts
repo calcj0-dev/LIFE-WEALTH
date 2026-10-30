@@ -593,7 +593,8 @@ export function getOptions(s: GameState): DecisionOption[] {
             params: { job: j, salary: Math.round(salaryAtYear(j, s.year) * s.market.wageIndex) },
             enabled: true,
           })),
-          { id: 'skip', key: 'option.jobStay', enabled: true },
+          // 今の職業と年収も出して、比べられるようにする
+          { id: 'skip', key: 'option.jobStay', params: { job: s.player.jobId, salary: Math.round(s.player.salary) }, enabled: true },
         ];
       }
       if (ev.choice === 'sideBusiness') {
@@ -911,6 +912,11 @@ function buyHome(s: GameState, price: number, withLoan: boolean) {
 }
 
 // ---------------------------------------------------------------- 月末
+
+/** 今の家賃（月）。生活費のうち、家を買うとかからなくなる分（家の売り出しの画面で、比べるために出す） */
+export function monthlyRent(s: GameState): number {
+  return (LIVING_COST.homeOwnerDiscount * JOBS[s.player.jobId].livingRate * s.market.livingIndex) / 12;
+}
 
 function livingCost(s: GameState): number {
   const p = s.player;
