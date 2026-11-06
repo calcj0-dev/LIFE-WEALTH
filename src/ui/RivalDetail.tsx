@@ -1,7 +1,7 @@
 // ライバルの資産を見る画面（design.md 12.4。段階8）。見るだけで、何かを変えることはできない。
 // 資産の並びと書き方は、あなたの右側の資産の欄と同じにして、比べやすくする。
 
-import { ASSET_IDS } from '../data/assets';
+import { ASSETS, ASSET_IDS } from '../data/assets';
 import { SEAT_KEYS } from '../game/seats';
 import { assetValue, costOf, realEstateValue } from '../game/finance';
 import { standings } from '../game/standings';
@@ -38,6 +38,9 @@ export function RivalDetailModal({ s, id, onClose }: { s: GameState; id: RivalId
   const rank = standings(s).find((x) => x.who === id)!;
   const owned = ASSET_IDS.filter((a) => assetValue(v, a) >= 0.5);
   const insurance = [p.medicalPremium !== null ? t('panel.insurance.medical') : null, p.home?.fireInsured ? t('panel.insurance.fire') : null].filter(Boolean);
+  /** 資産の名前。株は「IT株 3株」のように短くする（会社名は出さない） */
+  const nameOf = (a: (typeof ASSET_IDS)[number]) =>
+    ASSETS[a].unit === 'share' ? `${t(`assetShort.${a}`)} ${t('trade.sharesCount', { n: Math.round(p.holdings[a] ?? 0) })}` : holdingName(v, a);
   const recent = rivalLines(s)
     .filter((l) => l.id === id)
     .slice(0, 5);
@@ -70,6 +73,7 @@ export function RivalDetailModal({ s, id, onClose }: { s: GameState; id: RivalId
             <div>{p.married ? t(`panel.married.${p.spouse!.work}`) : t('panel.single')}</div>
             {p.children.length > 0 && <div>{t('panel.children', { count: p.children.length })}</div>}
             <div>{p.home ? t('panel.home') : t('panel.rent')}</div>
+            <Row k={t('panel.insurance')} v={insurance.length ? insurance.join('、') : t('panel.insurance.none')} />
           </div>
           <div className="card">
             <h4>{t('panel.assets')}</h4>
@@ -79,13 +83,13 @@ export function RivalDetailModal({ s, id, onClose }: { s: GameState; id: RivalId
               return (
                 <Row
                   key={a}
-                  k={holdingName(v, a)}
+                  k={nameOf(a)}
                   v={
                     <>
                       {formatMoney(assetValue(v, a))}
                       {profit !== 0 && (
                         <span className="rival-detail-profit">
-                          （{t('rivalDetail.profit')} <MoneyDelta v={profit} />）
+                          {t('rivalDetail.profit')} <MoneyDelta v={profit} />
                         </span>
                       )}
                     </>
@@ -96,7 +100,10 @@ export function RivalDetailModal({ s, id, onClose }: { s: GameState; id: RivalId
             {p.home && <Row k={t('asset.realEstate')} v={formatMoney(realEstateValue(v))} />}
             {p.home?.loan && p.home.loan.balance > 0 && <Row k={t('rivalDetail.mortgage')} v={<span className="minus">{formatMoney(p.home.loan.balance)}</span>} />}
             {p.cardLoan > 0 && <Row k={t('hud.debt')} v={<span className="minus">{formatMoney(p.cardLoan)}</span>} />}
-            <Row k={t('panel.insurance')} v={insurance.length ? insurance.join('、') : t('panel.insurance.none')} />
+            <div className="kv rival-detail-total">
+              <span>{t('hud.netWorth')}</span>
+              <span className="v">{formatMoney(rank.worth)}</span>
+            </div>
           </div>
           <div className="card">
             <h4>{t('rivalDetail.recent')}</h4>

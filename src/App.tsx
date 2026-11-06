@@ -26,6 +26,7 @@ import { APP_VERSION } from './version';
 import { RivalAlertModal, isImportant, lookOf, rivalLines, rivalName } from './ui/Rivals';
 import { BonusCelebration } from './ui/BonusCelebration';
 import { BONUS } from './data/rules';
+import { standings } from './game/standings';
 import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
@@ -81,6 +82,8 @@ export function App() {
   const [spinning, setSpinning] = useState(false);
   /** 駒の移動中に表示するマス（移動していないときは null） */
   const [movingPos, setMovingPos] = useState<number | null>(null);
+  /** 進んでいるあいだの、残りのマス数（design.md 10.1） */
+  const [stepsLeft, setStepsLeft] = useState<number | null>(null);
   /** 出たばかりの出目（ルーレットが回っている間も表示する） */
   const [spinValue, setSpinValue] = useState<number | null>(null);
   /** カードで進んだときの出目の説明（例: 👟 3 + 5 = 8マス） */
@@ -116,7 +119,7 @@ export function App() {
   const busy = spinning || movingPos !== null;
   // 大きなイベントやニュースの画面を出している間も、ほかの画面は止める
   /** ターンの始めの様子（今月のまとめで、前と後を比べるため。design.md 2.3） */
-  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[]; rivalLogLen: number[] } | null>(null);
+  const [turnStart, setTurnStart] = useState<{ cash: number; worth: number; logLen: number; year: number; month: number; rivalPos: number[]; rivalLogLen: number[]; rivalWorth: number[] } | null>(null);
   /** ルーレットを回してから、駒が止まって結果が反映されるまでの間 */
   const [turnMoving, setTurnMoving] = useState(false);
   /** あなたの番が終わった（選ぶ出来事が残っていない） */
@@ -333,6 +336,14 @@ export function App() {
   }, [wantAnnounce, game?.bonusSquare]);
   // ターンの途中、大きなイベント、ニュース、今月のまとめ、ライバルのお知らせを出している間は、ほかの画面は止める
   const paused = showHistory || showFeed || !!rivalDetail || !!turnStart || !!game?.bigEvent || !!game?.newsEvent || !!summary || alerts.length > 0 || announcing || wantAnnounce || shortfall;
+  // 順位の欄: ライバルが動く様子を見せ終わるまでは、そのライバルの金額をターンの始めのままにする（design.md 12.4）
+  const shownWorth: Partial<Record<RivalId, number>> = {};
+  if (game && turnStart && rivalShown !== flowKey) {
+    game.rivals.forEach((r, k) => {
+      const shown = monthEnded && rivalsMoving && (k < rs.r || (k === rs.r && !!rs.stage));
+      if (!shown) shownWorth[r.id] = turnStart.rivalWorth[k];
+    });
+  }
   /** ライバルの資産を見る画面を開く。ターンの途中（ライバルの番を見せる前など）は開かない */
   const openRival = turnStart ? undefined : (id: RivalId) => setRivalDetail(id);
   const yearEnd = game?.phase === 'yearEnd';
@@ -357,13 +368,18 @@ export function App() {
 
   /** 駒を1マスずつ動かしてから、新しい状態にする */
   const move = (next: GameState) => {
+    // 分かれ道で止まるときは、そこから先の残りも数に入れる
+    const after = next.decision?.kind === 'fork' ? Number(next.decision.params?.steps ?? 0) : 0;
+    setStepsLeft(next.lastPath.length + after);
     next.lastPath.forEach((pos, i) =>
       later(() => {
         setMovingPos(pos);
+        setStepsLeft(next.lastPath.length - i - 1 + after);
         sfx.step();
       }, STEP_MS * (i + 1)),
     );
     later(() => {
+      setStepsLeft(null);
       setMovingPos(null);
       setGame(next);
       setTurnMoving(false);
@@ -373,7 +389,7 @@ export function App() {
   /** ターンの始めの様子を覚えておく */
   const markTurnStart = (s: GameState) => {
     setTurnMoving(true);
-    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position), rivalLogLen: s.rivals.map((r) => r.log.length) });
+    setTurnStart({ cash: s.player.cash, worth: netWorth(s), logLen: s.log.length, year: s.year, month: s.month, rivalPos: s.rivals.map((r) => r.player.position), rivalLogLen: s.rivals.map((r) => r.log.length), rivalWorth: s.rivals.map((r) => standings(s).find((x) => x.who === r.id)?.worth ?? 0) });
   };
 
   const spin = () => {
@@ -462,7 +478,7 @@ export function App() {
     screen = (
       <div className="game">
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
-        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} />
+        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} shownWorth={shownWorth} />
         <div className="game-body">
           <div className={`board-area${viewMode === 'pan' ? ' overview' : ''}`}>
             <Board
@@ -490,6 +506,16 @@ export function App() {
               cameraMs={announcePhase === 'go' || announcePhase === 'back' ? announceTravelMs : announcePhase === 'show' ? 500 : undefined}
               cheer={celebrating ? game.player.position : rivalsMoving && rs.stage === 'cheer' ? rivalPositions[rs.r] : undefined}
               bonusLeft={!turnStart && !announcing ? bonusDistance(game) : undefined}
+              stepsLeft={[
+                // あなた: 進んでいるあいだと、分かれ道で道を選ぶあいだ
+                ...(stepsLeft !== null && movingPos !== null
+                  ? [{ position: movingPos, n: stepsLeft }]
+                  : game.phase === 'decision' && game.decision?.kind === 'fork' && !busy
+                    ? [{ position: game.player.position, n: Number(game.decision.params?.steps ?? 0) }]
+                    : []),
+                // ライバル: 動いているあいだ
+                ...(rivalsMoving && !rs.stage && rs.i >= 0 && game.rivals[rs.r] ? [{ position: rivalPositions[rs.r], n: game.rivals[rs.r].lastPath.length - rs.i - 1, small: true }] : []),
+              ]}
               landed={humanDone ? game.player.position : undefined}
               floats={floats}
               forks={readyInTurn && game.phase === 'decision' && game.decision?.kind === 'fork' ? BOARD[game.player.position].next : []}

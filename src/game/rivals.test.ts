@@ -5,7 +5,7 @@ import { payShortfall, playGame } from './autoplay';
 import { applyNews } from './market';
 import { NEWS } from '../data/news';
 import { choose, chooseJob, chooseYears, createGame, dismissBigEvent, dismissNews, getOptions, roll, setSaving } from './engine';
-import { standings } from './standings';
+import { standings, withWorth } from './standings';
 import type { GameState } from './types';
 
 function started(seed = 1, years = 20): GameState {
@@ -66,6 +66,13 @@ describe('ライバル（CPU）', () => {
       rivalGot += s.rivals.reduce((a, r) => a + r.log.filter((l) => l.key === 'bonus.get' && l.cash === BONUS.amount).length, 0);
     }
     expect(rivalGot).toBeGreaterThan(0);
+  });
+  it('ライバルが動く様子を見せる前は、順位の欄をターンの始めの金額で並べ直せる', () => {
+    const s = playGame(5, 'employee', 10);
+    const list = withWorth(standings(s), { steady: 99999 });
+    expect(list[0].who).toBe('steady');
+    expect(list[0].rank).toBe(1);
+    expect(list.map((x) => x.rank)).toEqual([1, 2, 3]);
   });
   it('同じシード値なら、ライバルも同じ展開になる', () => {
     const a = playGame(7, 'employee', 10);

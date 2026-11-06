@@ -2645,8 +2645,37 @@ h2 {
   overflow-y: auto;
 }
 .rival-detail-profit {
+  display: block;
   font-size: 12px;
-  margin-left: 4px;
+  font-weight: 400;
+  text-align: right;
+}
+.rival-detail .kv {
+  align-items: flex-start;
+  padding: 3px 0;
+}
+.rival-detail-total {
+  margin-top: 6px;
+  padding-top: 6px !important;
+  border-top: 2px solid #e6d3ad;
+  font-weight: 900;
+}
+/* 残りのマス数（駒の頭の上。design.md 10.1） */
+.steps-left {
+  animation: steps-left-pop 0.22s ease-out;
+}
+@keyframes steps-left-pop {
+  from {
+    transform: scale(1.4);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steps-left {
+    animation: none;
+  }
 }
 
 /* ボーナスゲットの演出（design.md 3.10。v0.13.2）。だれが取っても同じ */

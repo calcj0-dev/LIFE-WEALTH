@@ -2,7 +2,7 @@
 // 大事な場面のお知らせ、ニュースや大きなイベントでの「みんなの資産の動き」。
 
 import { useEffect, useRef, useState } from 'react';
-import { standings, type Who } from '../game/standings';
+import { standings, withWorth, type Who } from '../game/standings';
 import type { GameState, LogEntry, RivalId, SeatData } from '../game/types';
 import { formatMoney, formatSigned, t } from '../i18n';
 import { niceStep } from './AssetChart';
@@ -155,8 +155,18 @@ export const whoName = (w: Who) => (w === 'you' ? t('rival.you') : rivalName(w))
 export const whoColor = (s: GameState, w: Who) => lookOf(s, w).color;
 
 /** 上の欄の順位。3人の順位と純資産を横に並べ、あなたの順位が上がったら短く光る。スマホでは、あなたの順位だけ */
-export function RankStrip({ s, onOpen }: { s: GameState; /** ライバルを押すと、その人の資産を見る画面を開く */ onOpen?: (id: RivalId) => void }) {
-  const list = standings(s);
+export function RankStrip({
+  s,
+  onOpen,
+  shownWorth,
+}: {
+  s: GameState;
+  /** ライバルを押すと、その人の資産を見る画面を開く */
+  onOpen?: (id: RivalId) => void;
+  /** まだ動く様子を見せていないライバルは、この金額で見せる（design.md 12.4） */
+  shownWorth?: Partial<Record<Who, number>>;
+}) {
+  const list = shownWorth ? withWorth(standings(s), shownWorth) : standings(s);
   const myRank = list.find((x) => x.who === 'you')!.rank;
   const prev = useRef(myRank);
   const [flash, setFlash] = useState(0);
