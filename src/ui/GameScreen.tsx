@@ -1,6 +1,7 @@
 import { ASSETS, ASSET_IDS } from '../data/assets';
 import { assetValue, netWorth, realEstateValue } from '../game/finance';
 import type { GameState, RivalId } from '../game/types';
+import type { Who } from '../game/standings';
 import { formatMoney, t } from '../i18n';
 import { AnimatedMoney, type MoneyLevel } from './AnimatedMoney';
 import { RankStrip, RivalFeed, lookOf } from './Rivals';
@@ -15,6 +16,7 @@ export function Hud({
   level,
   date,
   onOpenRival,
+  shownWorth,
 }: {
   s: GameState;
   level?: MoneyLevel;
@@ -22,6 +24,8 @@ export function Hud({
   date?: { year: number; month: number };
   /** ライバルを押すと、その人の資産を見る画面を開く（design.md 12.4） */
   onOpenRival?: (id: RivalId) => void;
+  /** まだ動く様子を見せていないライバルの純資産（順位の欄で、この金額を見せる） */
+  shownWorth?: Partial<Record<Who, number>>;
 }) {
   const p = s.player;
   return (
@@ -34,7 +38,7 @@ export function Hud({
         <span className="label">{t('hud.netWorth')}</span>
         <AnimatedMoney className="value" value={netWorth(s)} level={level} float={false} />
       </div>
-      <RankStrip s={s} onOpen={onOpenRival} />
+      <RankStrip s={s} onOpen={onOpenRival} shownWorth={shownWorth} />
       <div className="hud-item">
         <span className="label">{t('hud.economy')}</span>
         <span className="value">{t(`economy.${s.market.economy}`)}</span>

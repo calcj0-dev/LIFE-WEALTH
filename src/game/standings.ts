@@ -36,3 +36,11 @@ export function standings(s: GameState): Standing[] {
   list.forEach((x, i) => (x.rank = i > 0 && Math.round(x.worth) === Math.round(list[i - 1].worth) ? list[i - 1].rank : i + 1));
   return list;
 }
+
+/** 純資産の一部を置きかえて、順位を付け直す（ライバルが動く様子を見せる前は、前の月の金額で見せるため。design.md 12.4） */
+export function withWorth(list: Standing[], worth: Partial<Record<Who, number>>): Standing[] {
+  const out = list.map((x) => ({ ...x, worth: worth[x.who] ?? x.worth }));
+  out.sort((a, b) => b.worth - a.worth);
+  out.forEach((x, i) => (x.rank = i > 0 && Math.round(x.worth) === Math.round(out[i - 1].worth) ? out[i - 1].rank : i + 1));
+  return out;
+}

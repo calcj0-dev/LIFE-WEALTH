@@ -278,6 +278,8 @@ interface Props {
   cheer?: number;
   /** ボーナスマスまで、あと何マスか。あれば、ボーナスマスが画面の外にあるときに、画面のふちに方向の矢印を出す（design.md 3.10） */
   bonusLeft?: number;
+  /** 進んでいる駒の、残りのマス数（駒の頭の上に出す。design.md 10.1） */
+  stepsLeft?: { position: number; n: number; small?: boolean }[];
 }
 
 /** 駒の頭の上に浮かべる文字 */
@@ -377,7 +379,7 @@ function zoomAt(c: Camera, factor: number, px: number, py: number): Camera {
   return clampCamera({ scale, tx: px - (px - c.tx) * r, ty: py - (py - c.ty) * r });
 }
 
-export function Board({ position, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork, zoom, cameraMs, cheer, bonusLeft }: Props) {
+export function Board({ position, pan = false, bonus, married, look = PLAYER_LOOKS[0], family = [], others = [], focus, landed, floats = [], forks = [], onFork, zoom, cameraMs, cheer, bonusLeft, stepsLeft = [] }: Props) {
   const here = BOARD[focus ?? position];
   const svgRef = useRef<SVGSVGElement>(null);
   // 視点を移動の間の映し方（design.md 3.1）
@@ -567,6 +569,23 @@ export function Board({ position, pan = false, bonus, married, look = PLAYER_LOO
               </g>
             );
           })}
+          {/* 残りのマス数（駒の頭の上）。数字が変わるたびに作り直して、ぽんと跳ねる */}
+          {!overview &&
+            stepsLeft.map((st, k) => {
+              const sq = BOARD[st.position];
+              if (!sq || st.n <= 0) return null;
+              const r = st.small ? 18 : 26;
+              return (
+                <g key={`steps-${k}`} transform={`translate(${sq.x} ${sq.y - (st.small ? 118 : 132)})`}>
+                  <g key={st.n} className="steps-left">
+                    <circle r={r} fill="#fff" stroke="#ff7a45" strokeWidth="5" />
+                    <text y={r * 0.36} textAnchor="middle" fontSize={r * 1.1} fontWeight="900" fill="#ff7a45">
+                      {st.n}
+                    </text>
+                  </g>
+                </g>
+              );
+            })}
           {/* 駒の頭の上の文字。縮小して駒が小さく見えるときは出さない */}
           {!overview &&
             floats.map((f) => {
