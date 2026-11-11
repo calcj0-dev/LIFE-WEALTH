@@ -1,5 +1,5 @@
 import { BOARD } from '../data/board';
-import { EVENTS_BY_ID, SICKNESS } from '../data/events';
+import { EVENTS_BY_ID, SICKNESS, SIDE_BUSINESS } from '../data/events';
 import { monthlyRent, stockSquarePrice } from '../game/engine';
 import type { GameState, SquareType } from '../game/types';
 import { t } from '../i18n';
@@ -13,7 +13,9 @@ export function describeDecision(s: GameState): { title: string; text: string; s
     case 'notice':
       return { title: t(`${d.messageKey}.title`, d.params), text: t(`${d.messageKey}.text`, d.params), squareType };
     case 'event': {
-      let text = t(`event.${d.eventId}.text`);
+      // 副業は、成功する見込みと、増える金額・なくなる元手を出す（design.md 5.1）
+      const income = SIDE_BUSINESS.income * s.market.wageIndex;
+      let text = t(`event.${d.eventId}.text`, d.eventId === 'sideBusiness' ? { cost: SIDE_BUSINESS.cost, income: Math.round(income), monthly: Math.round(income / 12) } : undefined);
       // 病気は、治療費（保険で払われるか）と、重いかどうかを先に見せる（design.md 5.1）
       // 給料が上がる出来事は、割合と金額を出す（design.md 5.1）
       for (const e of EVENTS_BY_ID[d.eventId!]?.effects ?? []) {

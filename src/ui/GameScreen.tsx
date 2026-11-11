@@ -125,6 +125,7 @@ export function SidePanel({
       <div className="card">
         <h4>{t('panel.job')}</h4>
         <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />
+        {p.sideBusinessIncome > 0 && <Row k={t('panel.sideBusiness')} v={formatMoney(p.sideBusinessIncome)} />}
         {p.noIncomeMonths > 0 && <div className="minus">{t('panel.noIncome', { months: p.noIncomeMonths })}</div>}
       </div>
       <div className="card">

@@ -64,6 +64,7 @@ export function RivalDetailModal({ s, id, onClose }: { s: GameState; id: RivalId
           <div className="card">
             <h4>{t('rivalDetail.life')}</h4>
             <Row k={t(`job.${p.jobId}`)} v={formatMoney(p.salary)} />
+            {p.sideBusinessIncome > 0 && <Row k={t('panel.sideBusiness')} v={formatMoney(p.sideBusinessIncome)} />}
             <div className="family-icons">
               <AvatarIcon look={RIVAL_LOOKS[id]} size={26} />
               {familyOf(s.seed, id, p.married, p.children, RIVAL_LOOKS[id]).map((m, k) => (

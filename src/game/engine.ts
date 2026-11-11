@@ -769,12 +769,16 @@ function applyDecision(s: GameState, d: Decision, optionId: string): Decision | 
       } else if (ev.choice === 'sideBusiness') {
         p.sideBusinessTried = true;
         addCash(s, -SIDE_BUSINESS.cost, 'event.sideBusiness.cost');
-        if (nextRandom(s) < SIDE_BUSINESS.successChance) {
-          p.sideBusinessIncome = SIDE_BUSINESS.income * s.market.wageIndex;
+        // ルーレットで決める（design.md 3.8）。結果はルーレットの画面で見せる
+        const face = rollDie(s);
+        const income = SIDE_BUSINESS.income * s.market.wageIndex;
+        if (SIDE_BUSINESS.faces.includes(face)) {
+          p.sideBusinessIncome = income;
           log(s, 'event.sideBusiness.success', { notice: true });
-        } else {
-          log(s, 'event.sideBusiness.fail', { notice: true });
+          return { kind: 'notice', messageKey: 'sideBusiness.success', params: { face, income: Math.round(income), monthly: Math.round(income / 12) }, fromSquare: true };
         }
+        log(s, 'event.sideBusiness.fail', { notice: true });
+        return { kind: 'notice', messageKey: 'sideBusiness.fail', params: { face, cost: SIDE_BUSINESS.cost }, fromSquare: true };
       } else {
         for (const e of ev.effects ?? []) applyEffect(s, e, `event.${ev.id}`);
       }
