@@ -118,7 +118,8 @@ export const SICKNESS = {
 
 export const SIDE_BUSINESS = {
   cost: 100,
-  successChance: 0.2,
+  /** ルーレットでこの目が出たら成功（3回に1回。design.md 3.8） */
+  faces: [5, 6],
   /** 成功したときの収入（年） */
   income: 30,
 };

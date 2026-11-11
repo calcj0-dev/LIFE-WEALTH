@@ -15,7 +15,7 @@ import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
 import { JOBS, JOB_IDS, checkJobs } from '../data/jobs';
 import { NEWS, checkNews } from '../data/news';
 import { BIRTH, MARRIAGE, STOCK_SQUARE, YEAR_OPTIONS } from '../data/rules';
-import { has } from '../i18n';
+import { has, t } from '../i18n';
 import { payShortfall, playGame } from './autoplay';
 import {
   canSellHome,
@@ -615,6 +615,24 @@ describe('段階3.7の細かいところ', () => {
       if (r.back !== r.bet) expect(entry?.params).toEqual({ bet: 10, back: r.back });
       expect(dismissGambleResult(s).gambleResult).toBeNull();
     }
+  });
+  it('副業は、ルーレットで5・6が出たら成功する（3回に1回くらい）。結果はルーレットの画面で見せる', () => {
+    let ok = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const base = started(seed);
+      const at: GameState = { ...base, phase: 'decision', decision: { kind: 'event', eventId: 'sideBusiness' }, decisionFrom: 'square', player: { ...base.player, cash: 200 } };
+      const s = choose(at, 'try');
+      const face = Number(s.decision?.params?.face);
+      expect(s.decision?.kind).toBe('notice');
+      const success = face >= 5;
+      expect(s.decision?.messageKey).toBe(success ? 'sideBusiness.success' : 'sideBusiness.fail');
+      expect(s.player.sideBusinessIncome > 0).toBe(success);
+      expect(s.player.cash).toBeCloseTo(100, 6);
+      if (success) expect(t(`${s.decision!.messageKey}.text`, s.decision!.params)).toMatch(/毎年 約\d+万円（毎月 約\d+万円）/);
+      if (success) ok++;
+    }
+    expect(ok / 300).toBeGreaterThan(0.25);
+    expect(ok / 300).toBeLessThan(0.42);
   });
   it('1万円もないときは、ギャンブルの種類も選べない', () => {
     const opts = getOptions(onGamble(started(), 0));

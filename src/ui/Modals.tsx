@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ASSET_IDS } from '../data/assets';
 import { BIRTH, HIGH_SCHOOL_FACES, MARRIAGE, SPOUSE_WORK_FACES, UNIVERSITY_FACES } from '../data/rules';
+import { SIDE_BUSINESS } from '../data/events';
 import { Roulette, SPIN_DURATION_MS } from '../board/Roulette';
 import { SQUARE_COLORS } from '../board/Board';
 import { getOptions } from '../game/engine';
@@ -93,7 +94,7 @@ export function NewsModal({ s, onNext }: { s: GameState; onNext: () => void }) {
 // ---------------------------------------------------------------- ルーレットで決まる出来事（design.md 3.8）
 
 /** ルーレットの種類。何を決めるか、なぜ大事か、どの目で何になるかを、言語ファイルから出す */
-type Topic = 'marriage' | 'spouseWork' | 'birth' | 'highSchool' | 'university';
+type Topic = 'marriage' | 'spouseWork' | 'birth' | 'highSchool' | 'university' | 'sideBusiness';
 
 /** 出目から、結果の種類を決める */
 function outcomeOf(topic: Topic, face: number): string {
@@ -102,6 +103,8 @@ function outcomeOf(topic: Topic, face: number): string {
       return MARRIAGE.faces.includes(face) ? 'yes' : 'no';
     case 'birth':
       return BIRTH.faces.includes(face) ? 'yes' : 'no';
+    case 'sideBusiness':
+      return SIDE_BUSINESS.faces.includes(face) ? 'yes' : 'no';
     case 'spouseWork':
       return SPOUSE_WORK_FACES.full.includes(face) ? 'full' : 'none';
     case 'highSchool':
@@ -116,6 +119,7 @@ function topicsOf(messageKey: string): Topic[] {
   if (messageKey.startsWith('marriage.yes')) return ['marriage', 'spouseWork'];
   if (messageKey.startsWith('marriage.')) return ['marriage'];
   if (messageKey.startsWith('birth.')) return ['birth'];
+  if (messageKey.startsWith('sideBusiness.')) return ['sideBusiness'];
   if (messageKey.startsWith('school.highSchool')) return ['highSchool'];
   if (messageKey.startsWith('school.university')) return ['university'];
   return [];
