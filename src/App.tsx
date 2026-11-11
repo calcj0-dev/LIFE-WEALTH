@@ -94,6 +94,11 @@ export function App() {
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
+  /**
+   * ルーレットで決まる出来事（結婚、出産、副業）の結果を見せ終わるまで、上の欄・右側の欄・駒は、回す前の様子で見せる。
+   * ゲームの計算は回す前に終わっているので、そのままだと、ルーレットが止まる前に結果が分かってしまう
+   */
+  const [heldView, setHeldView] = useState<GameState | null>(null);
   /** 資産を見ているライバル（design.md 12.4） */
   const [rivalDetail, setRivalDetail] = useState<RivalId | null>(null);
   /** 年末の決算で「取引タイムへ」を押した年（design.md 2.1） */
@@ -357,6 +362,8 @@ export function App() {
 
   const setGame = (s: GameState | null) => {
     setGameState(s);
+    // ルーレットの結果の画面を閉じたら（ほかの画面に進んだら）、今の様子で見せる
+    if (!s || s.decision?.kind !== 'notice') setHeldView(null);
     saveGame(s && s.phase !== 'finished' ? s : null);
     if (!s || s.phase === 'finished') setSaved(null);
   };
@@ -478,16 +485,16 @@ export function App() {
     screen = (
       <div className="game">
         {/* ターンの途中は、上の欄の月を、ターンの月のままにする（design.md 2.2） */}
-        <Hud s={game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} shownWorth={shownWorth} />
+        <Hud s={heldView ?? game} level={moneyLevel} date={turnStart ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenRival={openRival} shownWorth={shownWorth} />
         <div className="game-body">
           <div className={`board-area${viewMode === 'pan' ? ' overview' : ''}`}>
             <Board
               position={movingPos ?? game.player.position}
               pan={viewMode === 'pan'}
               bonus={game.bonusSquare}
-              married={game.player.married}
+              married={(heldView ?? game).player.married}
               look={lookOf(game, 'you')}
-              family={familyOf(game.seed, 'you', game.player.married, game.player.children, lookOf(game, 'you'))}
+              family={familyOf(game.seed, 'you', (heldView ?? game).player.married, (heldView ?? game).player.children, lookOf(game, 'you'))}
               others={game.rivals.map((r, k) => ({
                 position: rivalPositions[k],
                 look: RIVAL_LOOKS[r.id],
@@ -567,7 +574,7 @@ export function App() {
             />
           </div>
           <SidePanel
-            s={game}
+            s={heldView ?? game}
             level={moneyLevel}
             cashShown={cashShown}
             hideRivalMonth={turnStart && rivalShown !== flowKey ? { year: turnStart.year, month: turnStart.month } : undefined} onOpenHistory={() => setShowHistory(true)} onOpenFeed={() => setShowFeed(true)} onOpenRival={openRival} />
@@ -593,7 +600,17 @@ export function App() {
         )}
         {readyInTurn && game.phase === 'decision' && game.decision?.kind !== 'fork' && alerts.length === 0 && (
           // 決定が変わるたびに作り直す（ルーレットを、決定ごとに最初から回すため）
-          <DecisionModal key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`} s={game} onChoose={(id) => setGame(choose(game, id))} />
+          <DecisionModal
+            key={`${game.year}-${game.month}-${game.log.length}-${game.decision?.kind}`}
+            s={game}
+            onChoose={(id) => {
+              const d = game.decision!;
+              const roulette = d.kind === 'marriage' || d.kind === 'birth' || (d.kind === 'event' && d.eventId === 'sideBusiness' && id === 'try');
+              const next = choose(game, id);
+              setHeldView(roulette && next.decision?.kind === 'notice' ? game : null);
+              setGame(next);
+            }}
+          />
         )}
         {/* 年末のニュースと決算は、別々の画面で、どちらも OK を押すまで出しておく（design.md 2.2） */}
         {ready && settleStep && <YearEndModal s={game} onTrade={() => setTradeYear(game.year)} onNext={() => setGame(nextYear(game))} />}
