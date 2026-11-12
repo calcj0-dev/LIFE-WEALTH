@@ -1,7 +1,7 @@
 {
   "name": "life-and-wealth",
   "private": true,
-  "version": "0.15.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "simulate": "vite-node scripts/simulate.ts",
     "calibrate": "vite-node scripts/calibrate.ts",
-    "screenshots": "vite-node scripts/screenshots.ts"
+    "screenshots": "vite-node scripts/screenshots.ts",
+    "og-image": "vite-node scripts/og-image.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
