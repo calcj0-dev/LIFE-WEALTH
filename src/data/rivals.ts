@@ -29,12 +29,14 @@ export interface Personality {
   jobChangeMin: number;
   /** 副業のチャンスで、挑戦する確率 */
   sideBusinessChance: number;
+  /** 毎月、おすすめの金額（手取りの1割）で投資信託を積み立てるか（v0.15.0） */
+  monthlySaving: boolean;
 }
 
 export const RIVAL_IDS: RivalId[] = ['steady', 'bold'];
 
 export const PERSONALITIES: Record<RivalId, Personality> = {
-  // コツコツさん（堅実タイプ）: 銀行預金が中心で、投資は少しだけ。うまい話には乗らない
+  // コツコツさん（堅実タイプ）: 毎月コツコツ積み立て、年末の投資は少しだけ。うまい話には乗らない
   steady: {
     reserveMonths: 12,
     investRate: 0.2,
@@ -50,11 +52,12 @@ export const PERSONALITIES: Record<RivalId, Personality> = {
     gambleChance: 0,
     jobChangeMin: 1.2,
     sideBusinessChance: 0,
+    monthlySaving: true,
   },
   // イケイケさん（攻めタイプ）: 流行りの株に飛びつき、下がると慌てて売る。うまい話やギャンブルにも乗る
   bold: {
-    reserveMonths: 3,
-    investRate: 0.6,
+    reserveMonths: 2,
+    investRate: 0.9,
     buy: [{ asset: 'hotStock', share: 1 }],
     panicSell: -0.2,
     medical: false,
@@ -64,5 +67,6 @@ export const PERSONALITIES: Record<RivalId, Personality> = {
     gambleChance: 0.4,
     jobChangeMin: 1,
     sideBusinessChance: 0.5,
+    monthlySaving: false,
   },
 };

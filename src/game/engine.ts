@@ -211,12 +211,14 @@ export function chooseJob(state: GameState, jobId: JobId): GameState {
   if (!JOBS[jobId]) throw new Error(`unknown job: ${jobId}`);
   const s = clone(state);
   setStartJob(s, jobId);
-  // ライバルの職業も、ルーレットで決まる（design.md 12.1）
+  // ライバルも、あなたと同じ職業で始める（スタートを平等にするため。design.md 12.1。v0.15.0）
   s.rivals.forEach((r, i) => {
     const personality = PERSONALITIES[r.id];
     asSeat(s, i, () => {
-      setStartJob(s, JOB_IDS[randomInt(s, 0, JOB_IDS.length - 1)]);
+      setStartJob(s, jobId);
       if (personality.medical) s.player.medicalPremium = medicalPremiumAt(s.year);
+      // コツコツさんは、毎月、おすすめの金額で投資信託を積み立てる
+      if (personality.monthlySaving) s.player.saving = { ...zeroHoldings(), fund: recommendedSaving(s) };
     });
   });
   s.phase = 'setupSaving';

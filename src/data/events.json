@@ -10,9 +10,9 @@
     { "id": "trafficFine", "sign": "minus", "size": "small", "weight": 1, "effects": [{ "t": "cash", "amount": -1 }] },
     { "id": "lesson", "sign": "minus", "size": "small", "weight": 1, "when": { "hasChildren": true }, "effects": [{ "t": "cash", "amount": -2 }] },
 
-    { "id": "bonus", "sign": "plus", "size": "medium", "weight": 1, "when": { "employed": true }, "effects": [{ "t": "cash", "amount": 20 }] },
-    { "id": "gig", "sign": "plus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": 10 }] },
-    { "id": "refund", "sign": "plus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": 10 }] },
+    { "id": "bonus", "sign": "plus", "size": "medium", "weight": 1, "when": { "employed": true }, "effects": [{ "t": "cash", "amount": 10 }] },
+    { "id": "gig", "sign": "plus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": 5 }] },
+    { "id": "refund", "sign": "plus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": 5 }] },
     { "id": "appliance", "sign": "minus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": -10 }] },
     { "id": "carRepair", "sign": "minus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": -20 }] },
     { "id": "travel", "sign": "minus", "size": "medium", "weight": 1, "effects": [{ "t": "cash", "amount": -15 }] },
