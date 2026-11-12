@@ -58,6 +58,8 @@ export function Result({ s, onAgain }: { s: GameState; onAgain: () => void }) {
         </div>
       </div>
       <button onClick={onAgain}>{t('result.again')}</button>
+      {/* 免責の1行（design.md 10.3） */}
+      <p className="disclaimer-line">{t('disclaimer.short')}</p>
     </div>
   );
 }

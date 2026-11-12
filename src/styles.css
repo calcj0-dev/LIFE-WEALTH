@@ -2813,3 +2813,30 @@ h2 {
     font-size: 28px;
   }
 }
+
+/* 免責の表示（design.md 10.3） */
+.disclaimer-line {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  text-align: center;
+}
+.about {
+  max-width: 640px;
+  text-align: left;
+}
+.about h3 {
+  margin: 14px 0 4px;
+  font-size: 16px;
+}
+.about ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.about-sources {
+  font-size: 13px;
+}
+.about-source-key {
+  font-weight: 700;
+}

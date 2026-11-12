@@ -31,6 +31,7 @@ import { bonusDistance } from './game/engine';
 import { RIVAL_LOOKS, familyOf } from './data/characters';
 import { AvatarSelect } from './ui/AvatarSelect';
 import { TitleScene } from './ui/TitleScene';
+import { AboutModal } from './ui/About';
 import { MuteButton } from './ui/MuteButton';
 import { sfx } from './ui/sound';
 
@@ -94,6 +95,8 @@ export function App() {
   const [pickingLook, setPickingLook] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showFeed, setShowFeed] = useState(false);
+  /** 「このゲームについて」の画面を開いている（design.md 10.3） */
+  const [showAbout, setShowAbout] = useState(false);
   /**
    * ルーレットで決まる出来事（結婚、出産、副業）の結果を見せ終わるまで、上の欄・右側の欄・駒は、回す前の様子で見せる。
    * ゲームの計算は回す前に終わっているので、そのままだと、ルーレットが止まる前に結果が分かってしまう
@@ -468,6 +471,14 @@ export function App() {
             </button>
           )}
         </div>
+        {/* 免責の1行と、「このゲームについて」（design.md 10.3） */}
+        <p className="disclaimer-line">
+          {t('disclaimer.short')}{' '}
+          <button className="link-button" onClick={() => setShowAbout(true)}>
+            {t('about.open')}
+          </button>
+        </p>
+        {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
       </div>
     );
   } else if (game.phase === 'setupYears') {

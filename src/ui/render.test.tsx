@@ -23,6 +23,7 @@ import { payShortfall } from '../game/autoplay';
 import { GambleResultModal, gradeOf } from './GambleResult';
 import { RivalDetailModal } from './RivalDetail';
 import { BonusCelebration } from './BonusCelebration';
+import { AboutModal } from './About';
 import { isImportant } from './Rivals';
 import { PLAYER_LOOKS, SPOUSE_LOOKS } from '../data/characters';
 import { logLabel } from './logLabel';
@@ -31,7 +32,7 @@ import { describeDecision } from './decisionText';
 const noop = () => {};
 
 /** 画面に、文字の番号（例: event.travel.title）がそのまま出ていないか */
-const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent|gambleResult|rivalDetail|route|rival)(\.[a-zA-Z]+)+</;
+const RAW_KEY = />(event|option|square|marriage|birth|school|news|settle|label|auto|job|gamble|realEstate|shortfall|feed|worth|stock|trade|saving|insurance|loan|setup|budget|panel|card|cards|bonus|discard|talk|bigEvent|gambleResult|rivalDetail|route|rival|about|disclaimer)(\.[a-zA-Z]+)+</;
 
 describe('段階3.7の画面', () => {
   it('家計の合計は、画面に出す行を足した数と必ず合う', () => {
@@ -80,8 +81,12 @@ describe('お金の光り方', () => {
 });
 
 describe('画面', () => {
-  it('タイトル画面にバージョンが出る', () => {
+  it('タイトル画面にバージョンと、免責の1行が出る。「このゲームについて」に免責の全文と出典が出る', () => {
     const html = renderToString(<App />);
+    expect(html).toContain('このゲームは投資の勧誘や助言ではありません。');
+    const about = renderToString(<AboutModal onClose={noop} />);
+    for (const text of ['ご注意', 'すべて架空です', '数値の出典', '国税庁']) expect(about).toContain(text);
+    expect(about).not.toMatch(RAW_KEY);
     expect(html).toContain('LIFE');
     expect(html).toMatch(/v\d+\.\d+\.\d+/);
   });
