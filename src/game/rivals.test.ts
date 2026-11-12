@@ -13,11 +13,13 @@ function started(seed = 1, years = 20): GameState {
 }
 
 describe('ライバル（CPU）', () => {
-  it('コツコツさんとイケイケさんの2人がいて、職業はルーレットで決まり、コツコツさんは医療保険に入る', () => {
+  it('コツコツさんとイケイケさんの2人がいて、あなたと同じ職業で始め、コツコツさんは医療保険に入り、毎月積み立てる', () => {
     const s = started();
     expect(s.rivals.map((r) => r.id)).toEqual(['steady', 'bold']);
     for (const r of s.rivals) expect(r.player.salary).toBeGreaterThan(0);
     expect(s.rivals[0].player.medicalPremium).not.toBeNull();
+    for (const r of s.rivals) expect(r.player.jobId).toBe(s.player.jobId);
+    expect(s.rivals[0].player.saving.fund).toBeGreaterThan(0);
     expect(s.rivals[1].player.medicalPremium).toBeNull();
   });
   it('rivals: false なら、ライバルなしの1人で遊べる', () => {
@@ -89,7 +91,7 @@ describe('ライバル（CPU）', () => {
   });
   it('ライバルがボーナスマスを取ったら、次のボーナスマスは決まった20か所の、別の場所に移る', () => {
     let moved = 0;
-    for (let seed = 1; seed <= 10; seed++) {
+    for (let seed = 1; seed <= 30; seed++) {
       let s = started(seed, 10);
       for (let turn = 0; turn < 120 && s.phase !== 'finished'; turn++) {
         const before = s.bonusSquare;

@@ -5,7 +5,7 @@
       "id": "crash",
       "everyYears": 7,
       "effects": [
-        { "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": -0.5, "max": -0.3 },
+        { "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": -0.25, "max": -0.15 },
         { "t": "market", "assets": ["gold"], "min": 0.05, "max": 0.1 },
         { "t": "market", "assets": ["bond"], "min": 0.02, "max": 0.03 }
       ]
@@ -13,7 +13,7 @@
     {
       "id": "surge",
       "everyYears": 7,
-      "effects": [{ "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": 0.2, "max": 0.4 }]
+      "effects": [{ "t": "market", "assets": ["fund", "it", "food", "energy", "bank"], "min": 0.1, "max": 0.25 }]
     },
     {
       "id": "inflationShock",

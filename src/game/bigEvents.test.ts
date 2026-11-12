@@ -31,21 +31,21 @@ describe('大きなイベント', () => {
     expect(perYear).toBeGreaterThan(0.4);
     expect(perYear).toBeLessThan(0.6);
   });
-  it('大暴落: 株と投資信託が30〜50%下がり、ゴールドは上がる', () => {
+  it('大暴落: 株と投資信託が15〜25%下がり、ゴールドは上がる（v0.15.0 で30〜50%からせまくした）', () => {
     const before = withFund(started(), 100);
     const s = triggerBigEvent(before, 'crash');
     for (const id of ['fund', 'it', 'food', 'energy', 'bank']) {
-      expect(s.bigEvent!.rates[id]).toBeGreaterThanOrEqual(-0.5);
-      expect(s.bigEvent!.rates[id]).toBeLessThanOrEqual(-0.3);
+      expect(s.bigEvent!.rates[id]).toBeGreaterThanOrEqual(-0.25);
+      expect(s.bigEvent!.rates[id]).toBeLessThanOrEqual(-0.15);
     }
     expect(s.bigEvent!.rates.gold).toBeGreaterThan(0);
     expect(s.bigEvent!.moved).toBeCloseTo(100 * (s.market.prices.fund - before.market.prices.fund), 6);
-    expect(s.bigEvent!.moved).toBeLessThan(-29);
+    expect(s.bigEvent!.moved).toBeLessThan(-14);
   });
-  it('大急騰: 株と投資信託が20〜40%上がる', () => {
+  it('大急騰: 株と投資信託が10〜25%上がる（v0.15.0 で20〜40%からせまくした）', () => {
     const s = triggerBigEvent(withFund(started(), 100), 'surge');
-    expect(s.bigEvent!.rates.fund).toBeGreaterThanOrEqual(0.2);
-    expect(s.bigEvent!.moved).toBeGreaterThan(19);
+    expect(s.bigEvent!.rates.fund).toBeGreaterThanOrEqual(0.1);
+    expect(s.bigEvent!.moved).toBeGreaterThan(9);
   });
   it('物価の急上昇: 生活費がずっと10%高くなる', () => {
     const before = started();

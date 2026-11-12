@@ -35,7 +35,7 @@
       "id": "fund",
       "kind": "fund",
       "meanReturn": 0.06,
-      "volatility": 0.18,
+      "volatility": 0.08,
       "incomeYield": 0,
       "accumulate": true,
       "drift": {
@@ -50,7 +50,7 @@
       "id": "it",
       "kind": "stock",
       "meanReturn": 0.07,
-      "volatility": 0.35,
+      "volatility": 0.2,
       "incomeYield": 0.01,
       "accumulate": false,
       "drift": {
@@ -65,7 +65,7 @@
       "id": "food",
       "kind": "stock",
       "meanReturn": 0.04,
-      "volatility": 0.15,
+      "volatility": 0.12,
       "incomeYield": 0.02,
       "accumulate": false,
       "drift": {
@@ -80,7 +80,7 @@
       "id": "energy",
       "kind": "stock",
       "meanReturn": 0.04,
-      "volatility": 0.25,
+      "volatility": 0.18,
       "incomeYield": 0.03,
       "accumulate": false,
       "drift": {
@@ -95,7 +95,7 @@
       "id": "bank",
       "kind": "stock",
       "meanReturn": 0.04,
-      "volatility": 0.25,
+      "volatility": 0.18,
       "incomeYield": 0.03,
       "accumulate": false,
       "drift": {

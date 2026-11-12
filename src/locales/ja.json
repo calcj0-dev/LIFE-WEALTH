@@ -14,6 +14,7 @@
   "setup.jobRoulette.spin": "ルーレットを回す",
   "setup.jobRoulette.result": "あなたは「{jobName}」になりました！",
   "setup.jobRoulette.next": "この人生で始める",
+  "setup.jobRoulette.rivals": "ライバルの2人も、同じ「{jobName}」で始めます。",
   "budget.title": "スタート時の家計（1ヶ月）",
   "budget.note": "マスの出来事によって、実際の金額は変わります。",
   "budget.saving": "このほかに、積み立てで毎月 {amount} 買います（積み立てのあと残る見込み {rest}）",

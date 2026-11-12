@@ -75,6 +75,7 @@ export function JobRoulette({ s, onDone }: { s: GameState; onDone: (next: GameSt
       {next && !spinning && (
         <>
           <div className="muted">{t(`job.${job}.desc`)}</div>
+          {next.rivals.length > 0 && <div className="muted">{t('setup.jobRoulette.rivals', { job: next.player.jobId })}</div>}
           <BudgetCard s={next} title={t('budget.title')} />
           <button onClick={() => onDone(next)}>{t('setup.jobRoulette.next')}</button>
         </>

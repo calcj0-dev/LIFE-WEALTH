@@ -8,7 +8,7 @@ import { BOARD, BONUS_SPOTS, PETAL_STOCK, SQUARE_COUNTS } from '../data/board';
 
 /** 最初の結婚・出産マス */
 /** 結婚・出産マスのうち、1つ手前からも、その先6マスも、分かれ道のない一本道のもの（テストで止まりやすくするため） */
-const plainRoad = (i: number) => [i - 1, i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6].every((k) => BOARD[k] && BOARD[k].next.length === 1 && BOARD[k].next[0] === k + 1);
+const plainRoad = (i: number) => [i - 1, i, i + 1, i + 2, i + 3].every((k) => BOARD[k] && BOARD[k].next.length === 1 && BOARD[k].next[0] === k + 1);
 const FAMILY_INDEX = BOARD.findIndex((sq, i) => sq.type === 'family' && plainRoad(i));
 import { EVENTS, EVENTS_BY_ID, checkEvents } from '../data/events';
 import { GAMBLES, GAMBLE_IDS } from '../data/gamble';
@@ -161,7 +161,8 @@ describe('盤面', () => {
   });
   it('花びらの株のマスでは、その花びらの株が出る', () => {
     for (const petal of ['tl', 'tr', 'br', 'bl'] as const) {
-      const sq = BOARD.find((x) => x.type === 'stock' && x.petal === petal)!;
+      // 1つ手前が分かれ道でない、花びらの株のマス
+      const sq = BOARD.find((x) => x.type === 'stock' && x.petal === petal && BOARD.some((b) => b.next.length === 1 && b.next[0] === x.id))!;
       const before = BOARD.find((x) => x.next.length === 1 && x.next[0] === sq.id)!;
       const base = started();
       const s = roll({ ...base, bonusSquare: BONUS_SPOTS.find((id) => id !== sq.id)!, player: { ...base.player, position: before.id, hand: ['exact'] } }, { index: 0, exact: 1 });
@@ -420,7 +421,7 @@ describe('結婚と出産', () => {
   });
   it('マスに合う出来事がないときは、同じ色の1つ小さい出来事にする', () => {
     // YouTuber は昇進も昇給もなく、11年目からは親からの援助もないので、プラス（大）の出来事がない
-    const index = BOARD.findIndex((sq) => sq.type === 'plusLarge');
+    const index = BOARD.findIndex((sq, i) => sq.type === 'plusLarge' && plainRoad(i));
     const base = started(3, 20, 'youtuber');
     const s = landOn({ ...base, year: 11 }, index);
     expect(s.decision?.kind).toBe('event');
@@ -429,7 +430,7 @@ describe('結婚と出産', () => {
     expect(ev.size).not.toBe('large');
   });
   it('小さな出来事のマスでも、出来事の画面を出してから起こす', () => {
-    const index = BOARD.findIndex((sq) => sq.type === 'minusSmall');
+    const index = BOARD.findIndex((sq, i) => sq.type === 'minusSmall' && plainRoad(i));
     const s = landOn(started(), index);
     expect(s.decision?.kind).toBe('event');
     const after = choose(s, 'ok');

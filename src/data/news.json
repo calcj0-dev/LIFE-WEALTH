@@ -37,7 +37,7 @@
       "economy": "recession",
       "important": true,
       "shocks": {
-        "fund": -0.3,
+        "fund": -0.2,
         "gold": 0.1,
         "bond": 0.02,
         "realEstate": -0.1,
